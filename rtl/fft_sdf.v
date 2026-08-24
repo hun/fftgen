@@ -302,6 +302,7 @@ module fft_stage #(
     // next-value temps (blocking, consumed by NBAs below)
     reg signed [PW-1:0] nxt_sum_re, nxt_sum_im;
     reg signed [PW-1:0] nxt_pr_re, nxt_pr_im;
+    reg signed [PW-1:0] m1r, m2r, m3r;
 
     always @(posedge clk) begin
         if (rst) begin
@@ -326,18 +327,19 @@ module fft_stage #(
                 out_im     <= nxt_sum_im[WIDTH-1:0];
 
                 // diff contract: OLDER - NEWER
-                // NOTE: direct 4-product form; bit-identical to the
-                // 3-product Karatsuba identity the DSP datapath will use
-                // (exact integer arithmetic before the shared rounding
-                // shift). Structural 3-DSP mapping lands in P5.
-                nxt_pr_re = round_shift(
-                    (w_d_re - w_in_re)*w_t_re
-                        - (w_d_im - w_in_im)*w_t_im,
-                    TD_PLUS_SHIFT);
-                nxt_pr_im = round_shift(
-                    (w_d_re - w_in_re)*w_t_im
-                        + (w_d_im - w_in_im)*w_t_re,
-                    TD_PLUS_SHIFT);
+                // Karatsuba 3-product form (PLAN.md 2.6):
+                //   m1 = dr*tr, m2 = di*ti, m3 = (dr+di)*(tr+ti)
+                //   re = m1 - m2,  im = m3 - m1 - m2
+                // three PARALLEL multiplies + fabric adder tree -- avoids
+                // the 4-deep DSP ALU cascade the fused 4-product form
+                // synthesized into (spike S2). Exact integer arithmetic:
+                // bit-identical to the direct form by construction.
+                m1r = (w_d_re - w_in_re) * w_t_re;
+                m2r = (w_d_im - w_in_im) * w_t_im;
+                m3r = ((w_d_re - w_in_re) + (w_d_im - w_in_im))
+                      * (w_t_re + w_t_im);
+                nxt_pr_re = round_shift(m1r - m2r, TD_PLUS_SHIFT);
+                nxt_pr_im = round_shift(m3r - m1r - m2r, TD_PLUS_SHIFT);
                 mem_re[ptr] <= nxt_pr_re[WIDTH-1:0];
                 mem_im[ptr] <= nxt_pr_im[WIDTH-1:0];
             end

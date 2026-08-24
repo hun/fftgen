@@ -178,3 +178,11 @@ Two dominant contributors, in order:
   Karatsuba 3-DSP with native pipeline registers; delay lines to BRAM with
   registered read when `mem_policy` says so; per-stage twiddle ROMs.
   Expect ~2x clock from the DSP restructure alone; measured, not assumed.
+
+**S2 follow-up (Karatsuba restructure):** replacing the fused 4-product
+complex multiply with the explicit 3-product Karatsuba form (parallel
+multipliers + fabric adders, exact-arithmetic bit-identical) improved WNS
+at N=256/2.0ns from -5.67 ns to -5.37 ns and cut DSPs 96 -> 80. The
+critical path is now a 3-deep DSP ALU cascade (re/im combine + round_shift)
+plus the async LUTRAM read; further closure needs datapath pipelining
+(native DSP regs, registered ROM/delay reads) -- P5 work.
