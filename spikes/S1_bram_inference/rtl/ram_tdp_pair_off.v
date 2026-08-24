@@ -1,0 +1,46 @@
+// S1 coding (c-off): the PROPER paired delay line, collision-free.
+//
+// Two independent delay lines share one true-dual-port memory: line X on
+// port A, line Y on port B. Each port does read-old/write-new at its own
+// address (single-port semantics -- fine for BRAM/LUTRAM).
+//
+// COLLISION RULE (PLAN.md 2.7): port A's write address must NEVER equal
+// port B's read address in the same cycle. Both pointers free-run with the
+// same period, so a constant reset offset delta != 0 keeps them apart
+// forever. Line Y resets to ptr = DELTA instead of 0.
+module ram_tdp_pair_off #(
+    parameter integer DEPTH  = 1024,
+    parameter integer WIDTH  = 32,
+    parameter integer DELTA  = 1     // nonzero pointer offset of line Y
+) (
+    input  wire             clk,
+    input  wire             ce,
+    input  wire [WIDTH-1:0] din_x,
+    input  wire [WIDTH-1:0] din_y,
+    output reg  [WIDTH-1:0] dout_x,
+    output reg  [WIDTH-1:0] dout_y
+);
+    (* ram_style = "block" *)
+    reg [WIDTH-1:0] mem [0:DEPTH-1];
+
+    localparam AW = $clog2(DEPTH);
+
+    reg [AW-1:0] ptr_x;
+    reg [AW-1:0] ptr_y = DELTA[AW-1:0];   // reset offset -> no collision
+
+    always @(posedge clk) begin
+        if (ce) begin
+            dout_x <= mem[ptr_x];
+            mem[ptr_x] <= din_x;
+            ptr_x <= ptr_x + {{(AW-1){1'b0}}, 1'b1};
+        end
+    end
+
+    always @(posedge clk) begin
+        if (ce) begin
+            dout_y <= mem[ptr_y];
+            mem[ptr_y] <= din_y;
+            ptr_y <= ptr_y + {{(AW-1){1'b0}}, 1'b1};
+        end
+    end
+endmodule

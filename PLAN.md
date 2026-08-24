@@ -287,6 +287,38 @@ Consequences:
   discarded, and the fixed-latency contract restarts (same drain-and-refill
   behaviour the golden model already mirrors).
 
+**Collision rule (hard requirement).** Per UG573 ("Block RAM and UltraRAM
+Differences"): URAM supports read OR write per port per cycle, is a superset
+of SDP but not TDP, has NO user-definable read-first/write-first/no-change
+modes, and address collision is not possible -- it is double-pumped
+single-port memory: port A accesses in the first half-cycle, port B in the
+second, fixed order. Consequences:
+
+- A same-cycle read + write pair MUST split across the two ports; the fixed
+  A-first order forces read -> port A, write -> port B for read-old
+  semantics. This is what synthesis emits when mapping read-old/write-new
+  codings onto URAM.
+- A URAM-backed delay line consumes BOTH ports of its memory: pairing two
+  lines in one URAM is structurally impossible (unlike BRAM).
+- Because there is no semantics knob, whatever the pumping order delivers IS
+  the behavior. The golden-model contract pins exact read-old values, so the
+  RTL must not depend on port assignment or pumping order at all: keep read
+  and write addresses structurally disjoint.
+
+Design shapes (both proven by spike S1, see `doc/mem_cutoffs.md`):
+
+- **Paired BRAM/LUTRAM lines**: two lines share one true-dual-port array,
+  one line per port (per-port read-old/write-new is fine on BRAM). A
+  constant nonzero reset offset between the pointers (`ptr_y` resets to δ≠0)
+  keeps cross-port addresses apart forever — zero hardware cost
+  (`tdp_pair_off`: exactly 1 tile, both families).
+- **URAM-backed lines**: split-pointer SDP shape, ONE line per memory:
+  port B reads at `rptr = wptr − D (mod M)` with memory size `M = 2·D`, so
+  power-of-two lags can never alias to zero (`sdp_deep`: 2× URAM288 at
+  8192x72). `ram_style="ultra"` alone also maps same-address codings onto
+  URAM (S1 reference points `rw1_ultra`/`tdp_pair_ultra`) — correct only
+  while the inferred port ordering holds; not emitted by this generator.
+
 **Output-register policy** (applies to every RAM in the design — twiddle
 ROMs and delay lines alike):
 

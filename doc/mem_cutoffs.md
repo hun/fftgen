@@ -46,8 +46,12 @@ UltraScale+ `xcku3p-ffva676-1-e`:
 | sdp      | 1024x32 | 0 | 1 | 0 |
 | rw1      | 1024x32 | 0 | 1 | 0 |
 | tdp_pair | 1024x32 | 0 | **1** | 0 |
-| tdp_pair | 8192x72 | 0 | 16 | 0 |
-| sdp_deep | 8192x72 | 0 | 0 | **2** |
+| tdp_pair | 8192x72 (`block` hint) | 0 | 16 | 0 |
+| sdp_deep | 8192x72 (`ultra`) | 0 | 0 | **2** |
+| rw1_ultra | 8192x72 (`ultra`) | 0 | 0 | **2** |
+| tdp_pair_ultra | 8192x72 (`ultra`) | 0 | 0 | **2** |
+| tdp_pair_off | 1024x32 (`block`) | 0 | **1** (both parts) | 0 |
+| tdp_pair_off | 8192x72 (`block`) | 0 | 16 | 0 |
 
 Raw reports: `spikes/S1_bram_inference/build/<coding>_<geom>_<part>/util.txt`.
 
@@ -57,18 +61,48 @@ Raw reports: `spikes/S1_bram_inference/build/<coding>_<geom>_<part>/util.txt`.
    at zero LUTRAM cost, both families.
 2. **Pairing works by pure inference**: `tdp_pair` = exactly ONE RAMB tile
    carrying TWO delay lines. No XPM, no primitives — decision 7.12 holds.
+   The collision-free variant `tdp_pair_off` (constant pointer offset
+   between the two lines, see below) also infers as exactly one tile —
+   the offset costs nothing.
 3. **Small depths stay block when hinted** (64x32 → RAMB18): the
    `ram_style="block"` hint overrides the LUTRAM crossover. Consequence for
    `mem_policy`: the hint must be applied *conditionally* by the generator —
    small stage lines should get `distributed` (or no attribute), only
    deeper ones get `block`.
-4. **Same-address R/W never becomes URAM** (8192x72 → 16×BRAM). URAM
-   requires the split-pointer SDP shape: `sdp_deep` → 2×URAM288.
-   Architectural consequence: deep delay lines have two clean inference
-   variants — same-address (pairs into BRAM, one pointer) vs split-pointer
-   (unlocks URAM, costs the second port so no pairing). `mem_policy` can
-   therefore offer: mid depth → paired BRAM; very large N → split-pointer
-   URAM; both without leaving inference-only RTL.
+4. **`ram_style="ultra"` alone is sufficient to map onto URAM** — even the
+   same-address codings land in URAM288 (`rw1_ultra`, `tdp_pair_ultra` →
+   2 blocks at 8192x72). Without the hint the same codings go to BRAM, so
+   the earlier claim "same-address never becomes URAM" was a hint artifact,
+   not an architectural limit.
+5. **Semantics, not collisions, are the real constraint.** Per UG573
+   (UltraScale Architecture Memory Resources, "Block RAM and UltraRAM
+   Differences"): UltraRAM supports **read OR write per port per cycle**, is
+   a superset of SDP but **not TDP**, has **no user-definable
+   read-first/write-first/no-change modes**, and "address collision is not
+   possible" -- the double-pumped single-port structure accesses port A in
+   the first half-cycle and port B in the second, in that fixed order.
+   Synthesis maps read-old/write-new codings accordingly (read -> port A,
+   write -> port B).
+
+   Because there is no mode knob, whatever the fixed pumping order delivers
+   IS the memory's semantics. The golden-model contract pins exact read-old
+   values, so the design must not depend on port assignment or pumping
+   order at all -- hence the **collision rule** (PLAN.md 2.7): keep read and
+   write addresses structurally disjoint.
+
+   - paired BRAM lines: constant nonzero pointer offset between lines
+     (`ptr_y` resets to delta != 0) -- cross-port addresses can never meet;
+     proven 1 tile (`tdp_pair_off`, both families).
+   - URAM-backed lines: split-pointer SDP shape, one line per memory,
+     read address structurally != write address (memory inflated to 2D so
+     power-of-two lags never alias to zero); proven 2x URAM288
+     (`sdp_deep`). Pairing in one URAM is impossible anyway (no TDP mode).
+     Further UG573 constraints honored by construction: single clock only
+     (matches this core), static cascade only, fixed 4Kx72 width with
+     byte-write enables handled outside the array.
+
+   The ultra-hinted-but-same-address codings remain in the spike only as
+   documented reference points; the generator will not emit them.
 
 ### Caveats
 

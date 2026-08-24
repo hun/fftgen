@@ -12,6 +12,9 @@ case "$coding" in
     rw1)      rtl="$HERE/rtl/ram_rw1.v";      top=ram_rw1 ;;
     tdp_pair) rtl="$HERE/rtl/ram_tdp_pair.v"; top=ram_tdp_pair ;;
     sdp_deep) rtl="$HERE/rtl/ram_sdp_deep.v"; top=ram_sdp_deep ;;
+    rw1_ultra) rtl="$HERE/rtl/ram_rw1_ultra.v"; top=ram_rw1_ultra ;;
+    tdp_pair_ultra) rtl="$HERE/rtl/ram_tdp_pair_ultra.v"; top=ram_tdp_pair_ultra ;;
+    tdp_pair_off) rtl="$HERE/rtl/ram_tdp_pair_off.v"; top=ram_tdp_pair_off ;;
     *) echo "unknown coding $coding" >&2; exit 2 ;;
 esac
 
