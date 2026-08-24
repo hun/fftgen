@@ -173,7 +173,10 @@ class _SDFStage:
     # pipeline register layers (mirrors the pipelined RTL stage):
     #   R2 read-data regs  -> R3 butterfly  -> R4 multiply (MREG)
     #   -> R5 combine -> R6 shift+out
-    NLAYERS = 5   # register hops from R2 capture to R6 output
+    NLAYERS = 6   # register hops from R2 capture to R7 output
+                  # (R3 DSP operand regs map onto AREG/BREG/DREG, R4 diff
+                  # onto pre-adder ADREG, R5 products onto MREG, R6 combine
+                  # onto the C-port ALU + PREG)
 
     def __init__(self, s: int, N: int, sigma: int, td: int,
                  stage_twiddles: Sequence[Complex], dit: bool = False):
@@ -197,16 +200,18 @@ class _SDFStage:
         self.d_reg = (0, 0)                    # R2: memory read data
         self.a_reg = (0, 0)                    # R2: input sample
         self.tw_reg = (0, 0)                   # R2: twiddle
-        self.bfly_sum = (0, 0)                 # R3: butterfly sum path
-        self.bfly_diff = (0, 0)                # R3: butterfly diff path
+        self.x_reg = (0, 0)                    # R3: d side operand (DSP D/A)
+        self.y_reg = (0, 0)                    # R3: a side operand (DSP B)
+        self.tw_a = (0, 0)                     # R3: twiddle first hop
+        self.tw_b = (0, 0)                     # R4: twiddle second hop
+        self.bfly_sum = (0, 0)                 # R4: butterfly sum path
+        self.bfly_diff = (0, 0)                # R4: butterfly diff (=ADREG)
         self.mreg = (0, 0)                     # R4: multiply output
         self.comb_sum = (0, 0)                 # R5: combine (sum path)
         self.comb_prod = (0, 0)                # R5: combine (product path)
         self.out_reg = (0, 0)                  # R6: stage output
         self.pipe_comp = [False] * self.NLAYERS  # phase flags riding the pipe
         self.sum_dly = (0, 0)                  # R4: sum-path delay register
-        self.tw_dly1 = (0, 0)                  # R3: twiddle travels with data
-        self.tw_dly2 = (0, 0)                  # R4: twiddle reaches the multiply
         self.a_dly = (0, 0)                    # R4: a reaches the multiply (DIT)
         self.d_dly = (0, 0)                    # R3: d first hop
         self.d_dly2 = (0, 0)                   # R4: d reaches the combine (DIT)
@@ -226,12 +231,12 @@ class _SDFStage:
         d_val = self.ram[r]
         cur = self.in_compute
         flags = [cur] + self.pipe_comp[:-1]
-        f_r6, f_r5, f_r4, f_r3 = flags[4], flags[3], flags[2], flags[1]
+        f_r7, f_r6c, f_r5m, f_r4b = flags[5], flags[4], flags[3], flags[2]
 
-        # R6: shift + out; product write-back to the product FIFO
+        # R7: shift + out; product write-back to the product FIFO
         sh_sum = self.sigma if not self.dit else self.td + self.sigma
         sh_prod = self.td + self.sigma
-        if f_r6:
+        if f_r7:
             out_val = (round_shift(self.comb_sum[0], sh_sum),
                        round_shift(self.comb_sum[1], sh_sum))
             prod_val = (round_shift(self.comb_prod[0], sh_prod),
@@ -241,8 +246,8 @@ class _SDFStage:
             out_val = self.pfifo[pr]           # product output (D later)
         self.out_reg = out_val
 
-        # R5: combine (COMPUTE) or passthrough
-        if f_r5:
+        # R6: combine (COMPUTE) or passthrough -- C-port ALU + PREG
+        if f_r6c:
             if not self.dit:
                 self.comb_prod = self.mreg
                 self.comb_sum = self.sum_dly
@@ -256,10 +261,12 @@ class _SDFStage:
             self.comb_prod = self.d_dly2
             self.comb_sum = self.d_dly2
 
-        # R4: multiply (COMPUTE) or passthrough; delay regs advance
-        if f_r4:
-            m = ((self.bfly_diff, self.tw_dly1) if not self.dit
-                 else (self.a_dly, self.tw_dly1))
+        # R5: multiply (COMPUTE) or passthrough; delay regs advance.
+        # The products land in MREG; the twiddle arrives via its second
+        # delay hop so it meets the ADREG output here.
+        if f_r5m:
+            m = ((self.bfly_diff, self.tw_b) if not self.dit
+                 else (self.a_dly, self.tw_b))
             m1 = (m[0][0] * m[1][0], m[0][1] * m[1][1])
             m3 = ((m[0][0] + m[0][1]) * (m[1][0] + m[1][1]),)
             self.mreg = (m1[0] - m1[1], m3[0] - m1[0] - m1[1])
@@ -268,23 +275,31 @@ class _SDFStage:
         self.sum_dly = self.bfly_sum
         self.d_dly2 = self.d_dly
 
-        # R3: butterfly (COMPUTE) or passthrough; twiddle first hop
-        if f_r3:
+        # R4: butterfly from the DSP operand registers -- maps onto the
+        # pre-adder (diff) with its output register (ADREG); the sum is
+        # computed alongside in fabric
+        if f_r4b:
             if not self.dit:
-                self.bfly_diff = (self.d_reg[0] - self.a_reg[0],
-                                  self.d_reg[1] - self.a_reg[1])
-                self.bfly_sum = (self.d_reg[0] + self.a_reg[0],
-                                 self.d_reg[1] + self.a_reg[1])
+                self.bfly_diff = (self.x_reg[0] - self.y_reg[0],
+                                  self.x_reg[1] - self.y_reg[1])
+                self.bfly_sum = (self.x_reg[0] + self.y_reg[0],
+                                 self.x_reg[1] + self.y_reg[1])
             else:
-                self.bfly_diff = self.d_reg
-                self.bfly_sum = self.a_reg
+                self.bfly_diff = self.x_reg
+                self.bfly_sum = self.y_reg
         else:
-            self.bfly_diff = self.d_reg
-            self.bfly_sum = self.d_reg
-        self.tw_dly1 = self.tw_reg
+            self.bfly_diff = self.x_reg
+            self.bfly_sum = self.x_reg
+        self.tw_b = self.tw_a                  # twiddle second hop
         self.d_dly = self.bfly_diff
         if self.dit:
             self.a_dly = self.bfly_sum         # a rides to the multiply
+
+        # R3: DSP operand registers (ungated passthrough; candidates for
+        # AREG/BREG/DREG absorption by inference)
+        self.x_reg = self.d_reg
+        self.y_reg = self.a_reg
+        self.tw_a = self.tw_reg                # twiddle first hop
 
         # R2: first-half RAM write (PASS only) + read capture
         if not cur:

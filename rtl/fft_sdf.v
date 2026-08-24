@@ -28,10 +28,11 @@ module fft_sdf #(
     // internal growth headroom, generator-derived:
     // SAMPLE_WIDTH + max(0, num_stages - total_shift) + 1
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
-    // datapath pipeline layers per stage (golden model NLAYERS=5)
-    parameter integer PIPE_DEPTH     = 5,
+    // datapath pipeline layers per stage (golden model NLAYERS=6)
+    parameter integer PIPE_DEPTH     = 6,
     // per-stage post-warm reset preloads, packed: for stage g (LSB first)
-    //   {wptr(16), pwp(16), raddr(16), pipe(4), phase_i(8), compute(1)}
+    //   {wptr(16), pwp(16), raddr(16), pipe(5), phase_i(8), compute(1)}
+    // = 62 bits per stage
     // supplied by the generator via a macro (the -G parser caps at 32 bits)
     parameter [511:0] PRELOAD_PACK   = `FFTGEN_PRELOAD_PACK
 )(
@@ -129,13 +130,13 @@ module fft_sdf #(
             localparam integer PRELOAD_I = WARM % DEPTH;
             localparam        PRELOAD_C = (WARM >= DEPTH) ? 1 : 0;
             // slice this stage's preload from the pack (61 bits each)
-            localparam [511:0] PRE_SLICE = PRELOAD_PACK >> (61 * g);
+            localparam [511:0] PRE_SLICE = PRELOAD_PACK >> (62 * g);
             localparam [15:0] WPTR_PRE = PRE_SLICE[15:0];
             localparam [15:0] PWP_PRE  = PRE_SLICE[31:16];
             localparam [15:0] RADDR_PRE= PRE_SLICE[47:32];
-            localparam [3:0]  PIPE_PRE = PRE_SLICE[51:48];
-            localparam [7:0]  PRE_I    = PRE_SLICE[59:52];
-            localparam        PRE_C    = PRE_SLICE[60];
+            localparam [4:0]  PIPE_PRE = PRE_SLICE[52:48];
+            localparam [7:0]  PRE_I    = PRE_SLICE[60:53];
+            localparam        PRE_C    = PRE_SLICE[61];
 
             wire signed [TWIDDLE_WIDTH*2-1:0] rom_word;
             wire [AROM_W-1:0]                 rom_addr_w;
@@ -267,7 +268,7 @@ module fft_stage #(
     parameter [15:0]  WPTR_PRE       = 16'h0, // post-warm pointer state
     parameter [15:0]  PWP_PRE        = 16'h0,
     parameter [15:0]  RADDR_PRE      = 16'h0,
-    parameter [3:0]   PIPE_PRE       = 4'h0,
+    parameter [4:0]   PIPE_PRE       = 5'h0,
     parameter integer TOPOLOGY       = 0     // 0 = DIF, 1 = DIT
 )(
     input  wire             clk,
@@ -307,15 +308,19 @@ module fft_stage #(
     // FSM
     reg          in_compute /*verilator public_flat*/;                  // 0 = PASS/FILL, 1 = COMPUTE
     reg [AW-1:0] phase_i /*verilator public_flat*/;                     // pair index within phase
-    reg [3:0]    pipe_comp /*verilator public_flat*/;                   // phase flags riding the pipe
+    reg [4:0]    pipe_comp /*verilator public_flat*/;                   // phase flags riding the pipe
 
     // R2: read capture
     reg signed [WIDTH-1:0] d_reg_re /*verilator public_flat*/, d_reg_im;
     reg signed [WIDTH-1:0] a_reg_re /*verilator public_flat*/, a_reg_im;
     reg signed [TWIDDLE_WIDTH-1:0] tw_reg_re, tw_reg_im;
-    // R3: butterfly
+    // R3: DSP operand registers (AREG/BREG/DREG candidates)
+    reg signed [WIDTH-1:0] x_reg_re /*verilator public_flat*/, x_reg_im;
+    reg signed [WIDTH-1:0] y_reg_re /*verilator public_flat*/, y_reg_im;
+    reg signed [TWIDDLE_WIDTH-1:0] tw_a_re, tw_a_im;
+    reg signed [TWIDDLE_WIDTH-1:0] tw_b_re, tw_b_im;
+    // R4: butterfly (pre-adder + ADREG)
     reg signed [WIDTH-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im, bfly_s_re, bfly_s_im;
-    reg signed [TWIDDLE_WIDTH-1:0] tw_d1_re, tw_d1_im;
     reg signed [WIDTH-1:0] d_dly_re, d_dly_im;
     reg signed [WIDTH-1:0] a_dly_re, a_dly_im;    // DIT
     // R4: multiply
@@ -357,14 +362,14 @@ module fft_stage #(
             wptr        <= WPTR_PRE[RAMW-1:0];
             pwp         <= PWP_PRE[RAMW-1:0];
             raddr_r     <= RADDR_PRE[RAMW-1:0];
-            pipe_comp   <= PIPE_PRE[3:0];
+            pipe_comp   <= PIPE_PRE[4:0];
             in_compute  <= (PRELOAD_C != 0);
             phase_i     <= PRELOAD_I[AW-1:0];
             out_re      <= {WIDTH{1'b0}};
             out_im      <= {WIDTH{1'b0}};
         end else if (ce) begin
-            // R6: shift + out; product FIFO write
-            if (pipe_comp[3]) begin
+            // R7: shift + out; product FIFO write
+            if (pipe_comp[4]) begin
                 nxt_out_s = round_shift(comb_s_re, SHIFT_SUM);
                 nxt_out_p = round_shift(comb_s_im, SHIFT_SUM);
                 out_re <= nxt_out_s[WIDTH-1:0];
@@ -378,8 +383,8 @@ module fft_stage #(
                 out_im <= pfifo_im[pr];
             end
 
-            // R5: combine (or passthrough)
-            if (pipe_comp[2]) begin
+            // R6: combine (or passthrough) -- C-port ALU + PREG
+            if (pipe_comp[3]) begin
                 if (TOPOLOGY == 0) begin
                     comb_p_re <= mreg_re;
                     comb_p_im <= mreg_im;
@@ -401,8 +406,8 @@ module fft_stage #(
                 comb_p_im <= {{(PW-WIDTH){d_dly2_im[WIDTH-1]}}, d_dly2_im};
             end
 
-            // R4: Karatsuba multiply (or passthrough)
-            if (pipe_comp[1]) begin
+            // R5: Karatsuba multiply (or passthrough) -- MREG
+            if (pipe_comp[2]) begin
                 if (TOPOLOGY == 0) begin
                     se_a_re = {{(PW-WIDTH){bfly_d_re[WIDTH-1]}}, bfly_d_re};
                     se_a_im = {{(PW-WIDTH){bfly_d_im[WIDTH-1]}}, bfly_d_im};
@@ -410,8 +415,8 @@ module fft_stage #(
                     se_a_re = {{(PW-WIDTH){a_dly_re[WIDTH-1]}}, a_dly_re};
                     se_a_im = {{(PW-WIDTH){a_dly_im[WIDTH-1]}}, a_dly_im};
                 end
-                se_t_re = {{(PW-TWIDDLE_WIDTH){tw_d1_re[TWIDDLE_WIDTH-1]}}, tw_d1_re};
-                se_t_im = {{(PW-TWIDDLE_WIDTH){tw_d1_im[TWIDDLE_WIDTH-1]}}, tw_d1_im};
+                se_t_re = {{(PW-TWIDDLE_WIDTH){tw_b_re[TWIDDLE_WIDTH-1]}}, tw_b_re};
+                se_t_im = {{(PW-TWIDDLE_WIDTH){tw_b_im[TWIDDLE_WIDTH-1]}}, tw_b_im};
                 m1r = se_a_re * se_t_re;
                 m2r = se_a_im * se_t_im;
                 m3r = (se_a_re + se_a_im) * (se_t_re + se_t_im);
@@ -426,40 +431,49 @@ module fft_stage #(
             d_dly2_re  <= d_dly_re;
             d_dly2_im  <= d_dly_im;
 
-            // R3: butterfly (or passthrough); twiddle/d/a delay regs.
+            // R4: butterfly from the DSP operand registers -- the diff is
+            // the pre-adder (A-D/B) with ADREG absorbing this register.
             // NB: golden model lets a_dly/d_dly capture the NEWLY computed
-            // butterfly values (their assignment follows the R3 update),
-            // while sum_dly/d_dly2/tw_d1 hold the previous ones.
-            if (pipe_comp[0]) begin
+            // butterfly values (their assignment follows the R4 update),
+            // while sum_dly/d_dly2/tw_b hold the previous ones.
+            if (pipe_comp[1]) begin
                 if (TOPOLOGY == 0) begin
-                    nxt_bf_d_re = d_reg_re - a_reg_re;
-                    nxt_bf_d_im = d_reg_im - a_reg_im;
-                    nxt_bf_s_re = d_reg_re + a_reg_re;
-                    nxt_bf_s_im = d_reg_im + a_reg_im;
+                    nxt_bf_d_re = x_reg_re - y_reg_re;
+                    nxt_bf_d_im = x_reg_im - y_reg_im;
+                    nxt_bf_s_re = x_reg_re + y_reg_re;
+                    nxt_bf_s_im = x_reg_im + y_reg_im;
                 end else begin
-                    nxt_bf_d_re = d_reg_re;     // d rides to the combine
-                    nxt_bf_d_im = d_reg_im;
-                    nxt_bf_s_re = a_reg_re;     // a rides to the multiply
-                    nxt_bf_s_im = a_reg_im;
+                    nxt_bf_d_re = x_reg_re;     // d rides to the combine
+                    nxt_bf_d_im = x_reg_im;
+                    nxt_bf_s_re = y_reg_re;     // a rides to the multiply
+                    nxt_bf_s_im = y_reg_im;
                 end
             end else begin
-                nxt_bf_d_re = d_reg_re;
-                nxt_bf_d_im = d_reg_im;
-                nxt_bf_s_re = d_reg_re;
-                nxt_bf_s_im = d_reg_im;
+                nxt_bf_d_re = x_reg_re;
+                nxt_bf_d_im = x_reg_im;
+                nxt_bf_s_re = x_reg_re;
+                nxt_bf_s_im = x_reg_im;
             end
             bfly_d_re <= nxt_bf_d_re;
             bfly_d_im <= nxt_bf_d_im;
             bfly_s_re <= nxt_bf_s_re;
             bfly_s_im <= nxt_bf_s_im;
-            tw_d1_re <= tw_reg_re;
-            tw_d1_im <= tw_reg_im;
+            tw_b_re <= tw_a_re;
+            tw_b_im <= tw_a_im;
             d_dly_re <= nxt_bf_d_re;   // golden: d_dly = new bfly_diff
             d_dly_im <= nxt_bf_d_im;
             if (TOPOLOGY == 1) begin
                 a_dly_re <= nxt_bf_s_re;  // golden: a_dly = new bfly_sum
                 a_dly_im <= nxt_bf_s_im;
             end
+
+            // R3: DSP operand registers (ungated passthrough)
+            x_reg_re <= d_reg_re;
+            x_reg_im <= d_reg_im;
+            y_reg_re <= a_reg_re;
+            y_reg_im <= a_reg_im;
+            tw_a_re  <= tw_reg_re;
+            tw_a_im  <= tw_reg_im;
 
             // R2: first-half RAM write (PASS only) + read capture
             if (!in_compute) begin
@@ -479,7 +493,7 @@ module fft_stage #(
                         - DEPTH[RAMW-1:0]);     // next cycle's read addr
             wptr <= wptr + {{(RAMW-1){1'b0}}, 1'b1};
             pwp  <= pwp + {{(RAMW-1){1'b0}}, 1'b1};
-            pipe_comp <= {pipe_comp[2:0], in_compute};
+            pipe_comp <= {pipe_comp[3:0], in_compute};
             phase_i <= phase_i + {{(AW-1){1'b0}}, 1'b1};
             if (phase_i == DEPTH[AW-1:0] - 1'b1) begin
                 phase_i    <= {AW{1'b0}};

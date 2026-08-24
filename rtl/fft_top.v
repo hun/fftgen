@@ -19,7 +19,7 @@ module fft_top #(
     parameter integer REORDER_OUT    = 0,   // 1 = bit-reverse the output
     parameter TWIDDLE_FILE           = "fft_twiddles.mem",
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
-    parameter integer PIPE_DEPTH     = 5
+    parameter integer PIPE_DEPTH     = 6
 )(
     input  wire                        clk,
     input  wire                        ce,
