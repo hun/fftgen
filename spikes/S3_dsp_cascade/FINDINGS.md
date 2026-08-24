@@ -61,3 +61,19 @@ at 2.0 ns:
 Remaining critical path is entirely intra-DSP hard fabric (sender PREG
 -> PCIN -> receiver ALU -> PREG, 1.85 ns logic, zero LUTs) -- missing
 by 20 ps before place/route optimization.
+
+## Place & route confirmation (N=64, xcku5p-ffva676-1-e, 2.0 ns)
+
+opt_design -> place_design -> phys_opt_design -> route_design on the
+OOC synth checkpoint:
+
+    WNS   : +0.090 ns  (MET)
+    TNS   : 0.000      (0 / 7625 endpoints failing)
+    WHWS  : +0.427 ns  (hold clean)
+    Route : 4394/4394 routable nets fully routed
+
+Post-synth WNS (-0.020) was pessimistic; phys_opt closed the slack.
+Critical path after P&R: fabric carry chain from the R3 DSP operand
+registers into a lane DSP's B-input register (1.48 ns).
+
+500 MHz closure CONFIRMED. Utilization: <1% LUT/FF/DSP on KU5P.
