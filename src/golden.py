@@ -351,6 +351,7 @@ class SDFGoldenModel:
         # derived exhaustively for small N, verified for large N. In RTL
         # this is a constant counter/phase preload at reset.
         self.stage_presets = []
+        self.stage_preloads = []   # full post-warm state for the RTL
         cum = 0
         for s, st in enumerate(self.stages):
             warm = (-(cum + _SDFStage.NLAYERS * s)) % (2 * st.D)
@@ -358,6 +359,15 @@ class SDFGoldenModel:
             for _ in range(warm):
                 st.step(0, 0)
             cum += st.D
+            # RTL reset preload = the exact post-warm state
+            self.stage_preloads.append({
+                "wptr": st.wptr,
+                "pwp": st.pwp,
+                "raddr": (st.wptr - st.D) % (2 * st.D),
+                "pipe": list(st.pipe_comp),
+                "phase_i": st.i,
+                "compute": st.in_compute,
+            })
         self._cycles = 0          # enabled cycles since reset
         self.frac_out = cfg.sample_decimal
         # frame-marker sideband rides the pipeline: one entry per enabled

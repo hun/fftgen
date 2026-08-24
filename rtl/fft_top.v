@@ -18,7 +18,8 @@ module fft_top #(
     parameter integer TOPOLOGY       = 0,   // 0 = DIF, 1 = DIT
     parameter integer REORDER_OUT    = 0,   // 1 = bit-reverse the output
     parameter TWIDDLE_FILE           = "fft_twiddles.mem",
-    parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5
+    parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
+    parameter integer PIPE_DEPTH     = 5
 )(
     input  wire                        clk,
     input  wire                        ce,
@@ -56,7 +57,8 @@ module fft_top #(
                 .SCALING_PACK   (SCALING_PACK),
                 .TOPOLOGY       (TOPOLOGY),
                 .TWIDDLE_FILE   (TWIDDLE_FILE),
-                .INTERN_WIDTH   (INTERN_WIDTH)
+                .INTERN_WIDTH   (INTERN_WIDTH),
+                .PIPE_DEPTH     (PIPE_DEPTH)
             ) u_core (
                 .clk            (clk),
                 .ce             (ce),
@@ -103,7 +105,8 @@ module fft_top #(
                 .SCALING_PACK   (SCALING_PACK),
                 .TOPOLOGY       (TOPOLOGY),
                 .TWIDDLE_FILE   (TWIDDLE_FILE),
-                .INTERN_WIDTH   (INTERN_WIDTH)
+                .INTERN_WIDTH   (INTERN_WIDTH),
+                .PIPE_DEPTH     (PIPE_DEPTH)
             ) u_core (
                 .clk            (clk),
                 .ce             (ce),

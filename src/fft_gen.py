@@ -120,7 +120,32 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     # natural output order (bitreversed for DIF, native for DIT)
     core_out = "bitreversed" if not cfg.is_dit else "native"
     reorder_out = (cfg.output_order != core_out)
+    # per-stage post-warm reset preloads (packed for the RTL generate).
+    # Stage timing is independent of I/O ordering: build the model with the
+    # core's natural orders so order-conversion configs don't trip its guard.
+    import dataclasses
+    from golden import SDFGoldenModel
+    if cfg.is_dit:
+        nat_in, nat_out = "bitreversed", "native"
+    else:
+        nat_in, nat_out = "native", "bitreversed"
+    _gm = SDFGoldenModel(
+        dataclasses.replace(cfg, input_order=nat_in, output_order=nat_out),
+        dit=cfg.is_dit)
+    pl_pack = 0
+    for i, pl in enumerate(_gm.stage_preloads):
+        stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
+                | ((pl["raddr"] & 0xFFFF) << 32) \
+                | ((int("".join("1" if b else "0" for b in reversed(pl["pipe"][:4])), 2) & 0xF) << 48) \
+                | ((pl["phase_i"] & 0xFF) << 52) | ((1 if pl["compute"] else 0) << 60)
+        pl_pack |= stage << (61 * i)
+    # per-stage preloads travel via a generated header (the -G parser
+    # caps parameter values at 32 bits)
+    with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
+        f.write("`define FFTGEN_PRELOAD_PACK 512'h%0128x\n" % pl_pack)
     gargs = [
+        "+define+FFTGEN_PRELOADS",
+        "+incdir+.",
         f"-GNUM_POINTS={cfg.num_points}",
         f"-GSAMPLE_WIDTH={cfg.sample_width}",
         f"-GSAMPLE_DECIMAL={cfg.sample_decimal}",

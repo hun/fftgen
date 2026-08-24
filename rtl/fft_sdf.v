@@ -1,16 +1,11 @@
-// fftgen -- streaming radix-2 DIF SDF FFT core (R = 1)
-//
-// Generated-core template; the Python generator binds all parameters and
-// supplies the twiddle ROM contents (fft_twiddles.mem). Bit-exact contract:
-// src/golden.py SDFGoldenModel (see PLAN.md appendix A).
-//
-// Interface: AXI4-Stream-encoded minus tready (PLAN.md 2.8) -- free-running
-// pipeline gated by ce && s_axis_tvalid, frame sidebands ride at fixed
-// latency. No resets on datapath registers; control state uses synchronous
-// reset only (PLAN.md 2.9).
-
-`default_nettype none
-
+// per-stage post-warm reset preloads are supplied by the generator as a
+// macro in fft_preloads.vh (-G cannot carry >32-bit parameter values)
+`ifdef FFTGEN_PRELOADS
+`include "fft_preloads.vh"
+`endif
+`ifndef FFTGEN_PRELOAD_PACK
+`define FFTGEN_PRELOAD_PACK 512'b0
+`endif
 module fft_sdf #(
     // N, power of two, >= 2
     parameter integer NUM_POINTS     = 16,
@@ -32,7 +27,13 @@ module fft_sdf #(
     parameter TWIDDLE_FILE           = "fft_twiddles.mem",
     // internal growth headroom, generator-derived:
     // SAMPLE_WIDTH + max(0, num_stages - total_shift) + 1
-    parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5
+    parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
+    // datapath pipeline layers per stage (golden model NLAYERS=5)
+    parameter integer PIPE_DEPTH     = 5,
+    // per-stage post-warm reset preloads, packed: for stage g (LSB first)
+    //   {wptr(16), pwp(16), raddr(16), pipe(4), phase_i(8), compute(1)}
+    // supplied by the generator via a macro (the -G parser caps at 32 bits)
+    parameter [511:0] PRELOAD_PACK   = `FFTGEN_PRELOAD_PACK
 )(
     input  wire                      clk,
     input  wire                      ce,
@@ -53,7 +54,7 @@ module fft_sdf #(
 
     localparam integer N       = NUM_POINTS;
     localparam integer NSTAGES = $clog2(N);
-    localparam integer LATENCY = N + NSTAGES;
+    localparam integer LATENCY = N + PIPE_DEPTH * NSTAGES;
     localparam integer CNT_W   = $clog2(LATENCY + 1);
     localparam integer AROM_W  = $clog2(N);
 
@@ -74,6 +75,8 @@ module fft_sdf #(
                 cnt <= cnt + {{(CNT_W-1){1'b0}}, 1'b1};
             // latch once the pipeline is full; hold thereafter (stable
             // under freeze)
+            // the final output register (m_re_r) adds one cycle, so the
+            // valid latch fires at LATENCY-1 and is visible with the data
             if (cnt == LATENCY[CNT_W-1:0] - 1'b1)
                 out_valid_r <= 1'b1;
         end
@@ -110,7 +113,6 @@ module fft_sdf #(
     // ------------------------------------------------------------------
     wire signed [INTERN_WIDTH-1:0] st_out_re [0:NSTAGES-1];
     wire signed [INTERN_WIDTH-1:0] st_out_im [0:NSTAGES-1];
-
     genvar g;
     generate
         for (g = 0; g < NSTAGES; g = g + 1) begin : stages
@@ -120,12 +122,20 @@ module fft_sdf #(
             // sum of delay depths of stages t < g (ROM base)
             localparam integer SUM_D     = (TOPOLOGY == 1) ? ((1 << g) - 1)
                                                            : (N - (N >> g));
-            // FSM alignment preload (appendix A):
-            //   warm_s = -(SUM_D + s) mod 2*D_s
+            // FSM alignment preload (appendix A, pipelined):
+            //   warm_s = -(SUM_D + PIPE_DEPTH*s) mod 2*D_s
             localparam integer WARM      =
-                (((2*DEPTH) - ((SUM_D + g) % (2*DEPTH))) % (2*DEPTH));
+                (((2*DEPTH) - ((SUM_D + PIPE_DEPTH*g) % (2*DEPTH))) % (2*DEPTH));
             localparam integer PRELOAD_I = WARM % DEPTH;
             localparam        PRELOAD_C = (WARM >= DEPTH) ? 1 : 0;
+            // slice this stage's preload from the pack (61 bits each)
+            localparam [511:0] PRE_SLICE = PRELOAD_PACK >> (61 * g);
+            localparam [15:0] WPTR_PRE = PRE_SLICE[15:0];
+            localparam [15:0] PWP_PRE  = PRE_SLICE[31:16];
+            localparam [15:0] RADDR_PRE= PRE_SLICE[47:32];
+            localparam [3:0]  PIPE_PRE = PRE_SLICE[51:48];
+            localparam [7:0]  PRE_I    = PRE_SLICE[59:52];
+            localparam        PRE_C    = PRE_SLICE[60];
 
             wire signed [TWIDDLE_WIDTH*2-1:0] rom_word;
             wire [AROM_W-1:0]                 rom_addr_w;
@@ -139,8 +149,12 @@ module fft_sdf #(
                 .K_STRIDE       (1 << g),
                 .ROM_BASE       (SUM_D),
                 .NPTS           (N),
-                .PRELOAD_I      (PRELOAD_I),
-                .PRELOAD_C      (PRELOAD_C),
+                .PRELOAD_I      (PRE_I),
+                .PRELOAD_C      (PRE_C),
+                .WPTR_PRE       (WPTR_PRE),
+                .PWP_PRE        (PWP_PRE),
+                .RADDR_PRE      (RADDR_PRE),
+                .PIPE_PRE       (PIPE_PRE),
                 .TOPOLOGY       (TOPOLOGY)
             ) u_stage (
                 .clk      (clk),
@@ -225,21 +239,35 @@ module fft_sdf #(
 
 endmodule
 
+// fftgen -- one radix-2 SDF stage, PIPELINED datapath (500 MHz target)
+//
+// Mirrors the golden model's K=5-layer pipeline (src/golden.py):
+//   R2 read capture -> R3 butterfly -> R4 Karatsuba multiply
+//   -> R5 combine -> R6 shift+out
+// with two collision-free structures (PLAN.md 2.7):
+//   - first-half delay RAM (2D slots, read lags write by D)
+//   - product FIFO (2D slots, output D cycles after completion)
+// The phase flag rides the pipeline (pipe_comp): COMPUTE cycles compute,
+// PASS cycles pass the delayed-path values through.
 
-// ----------------------------------------------------------------------
-// one radix-2 DIF SDF stage: delay line + butterfly + complex multiply
-// ----------------------------------------------------------------------
+`default_nettype none
+
+
 module fft_stage #(
     parameter integer DEPTH          = 4,
     parameter integer WIDTH          = 16,   // internal sample width
     parameter integer SHIFT          = 1,    // per-stage scaling shift 0..2
     parameter integer TWIDDLE_WIDTH  = 18,
     parameter integer TWIDDLE_DECIMAL= 17,
-    parameter integer K_STRIDE       = 1,    // twiddle exponent stride (2^s)
+    parameter integer K_STRIDE       = 1,    // (unused; generator pre-permutes)
     parameter integer ROM_BASE       = 0,
     parameter integer NPTS           = 16,
-    parameter integer PRELOAD_I      = 0,    // FSM alignment preload
+    parameter [7:0]  PRELOAD_I      = 8'h0,  // FSM alignment preload
     parameter         PRELOAD_C      = 0,    // start in COMPUTE phase
+    parameter [15:0]  WPTR_PRE       = 16'h0, // post-warm pointer state
+    parameter [15:0]  PWP_PRE        = 16'h0,
+    parameter [15:0]  RADDR_PRE      = 16'h0,
+    parameter [3:0]   PIPE_PRE       = 4'h0,
     parameter integer TOPOLOGY       = 0     // 0 = DIF, 1 = DIT
 )(
     input  wire             clk,
@@ -255,47 +283,58 @@ module fft_stage #(
 );
 
     localparam AW = (DEPTH > 1) ? $clog2(DEPTH) : 1;
-    localparam AROM_W = $clog2(NPTS);
-    localparam [AW-1:0] DEPTH_M1 = DEPTH[AW-1:0] - 1'b1;
-    localparam [AW-1:0] DEPTH_MASK = DEPTH[AW-1:0] - 1'b1;
+    localparam RAMW = $clog2(2 * DEPTH);       // 2D slots
     localparam integer TD_PLUS_SHIFT = TWIDDLE_DECIMAL + SHIFT;
-    // product width: (d-a) is WIDTH+1 bits, (cr+ci) is TW+1 bits, plus slack
+    localparam integer SHIFT_SUM = (TOPOLOGY == 1) ? TD_PLUS_SHIFT : SHIFT;
     localparam integer PW = WIDTH + TWIDDLE_WIDTH + 4;
 
+    // first-half delay RAM (2D slots, sync read, read lags write by D)
     (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] mem_re [0:DEPTH-1];
+    reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
     (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] mem_im [0:DEPTH-1];
+    reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
+    // product FIFO (2D slots, output D cycles after write)
+    (* ram_style = "distributed" *)
+    reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
+    (* ram_style = "distributed" *)
+    reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
 
-    reg [AW-1:0] ptr;
-    reg          in_compute;   // FSM phase: 0 = PASS/FILL, 1 = COMPUTE
-    reg [AW-1:0] phase_i;      // pair index within phase
+    reg [RAMW-1:0] wptr /*verilator public_flat*/;                      // first-half write pointer
+    reg [RAMW-1:0] pwp /*verilator public_flat*/;                       // product FIFO write pointer
+    reg [RAMW-1:0] raddr_r /*verilator public_flat*/;                   // registered RAM read address
+    wire [RAMW-1:0] pr = pwp - DEPTH[RAMW-1:0]; // product FIFO read ptr (lag D)
 
-    wire signed [WIDTH-1:0] d_re = mem_re[ptr];
-    wire signed [WIDTH-1:0] d_im = mem_im[ptr];
+    // FSM
+    reg          in_compute /*verilator public_flat*/;                  // 0 = PASS/FILL, 1 = COMPUTE
+    reg [AW-1:0] phase_i /*verilator public_flat*/;                     // pair index within phase
+    reg [3:0]    pipe_comp /*verilator public_flat*/;                   // phase flags riding the pipe
 
-    // twiddle decode {re, im}
+    // R2: read capture
+    reg signed [WIDTH-1:0] d_reg_re /*verilator public_flat*/, d_reg_im;
+    reg signed [WIDTH-1:0] a_reg_re /*verilator public_flat*/, a_reg_im;
+    reg signed [TWIDDLE_WIDTH-1:0] tw_reg_re, tw_reg_im;
+    // R3: butterfly
+    reg signed [WIDTH-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im, bfly_s_re, bfly_s_im;
+    reg signed [TWIDDLE_WIDTH-1:0] tw_d1_re, tw_d1_im;
+    reg signed [WIDTH-1:0] d_dly_re, d_dly_im;
+    reg signed [WIDTH-1:0] a_dly_re, a_dly_im;    // DIT
+    // R4: multiply
+    reg signed [PW-1:0] mreg_re /*verilator public_flat*/, mreg_im;
+    reg signed [WIDTH-1:0] sum_dly_re, sum_dly_im;
+    reg signed [WIDTH-1:0] d_dly2_re, d_dly2_im;
+    // R5: combine
+    reg signed [PW-1:0] comb_s_re /*verilator public_flat*/, comb_s_im;
+    reg signed [PW-1:0] comb_p_re /*verilator public_flat*/, comb_p_im;
+    // R6: output (out_re/out_im are the output ports)
+
+    // twiddle decode + address (combinational, from the current pair index)
     wire signed [TWIDDLE_WIDTH-1:0] t_re = rom_data[TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
     wire signed [TWIDDLE_WIDTH-1:0] t_im = rom_data[TWIDDLE_WIDTH-1:0];
+    wire [AW-1:0] pair_i = phase_i & (DEPTH[AW-1:0] - 1'b1);
+    assign rom_addr = ROM_BASE[$clog2(NPTS)-1:0]
+                      + {{($clog2(NPTS)-AW){1'b0}}, pair_i};
 
-    // absolute twiddle address for current pair
-    // pair index i = phase_i masked to the phase length (for DEPTH==1 this
-    // stays 0 -- the phase counter cycles but the pair index must not).
-    // ROM entries are PRE-PERMUTED by the generator (T[(i<<s)%N]), so the
-    // address is contiguous: BASE + pair_i.
-    wire [AW-1:0] pair_i = phase_i & DEPTH_MASK;
-    assign rom_addr = ROM_BASE[AROM_W-1:0]
-                      + {{(AROM_W-AW){1'b0}}, pair_i};
-
-    // sign-extended working copies
-    wire signed [PW-1:0] w_in_re = {{(PW-WIDTH){in_re[WIDTH-1]}}, in_re};
-    wire signed [PW-1:0] w_in_im = {{(PW-WIDTH){in_im[WIDTH-1]}}, in_im};
-    wire signed [PW-1:0] w_d_re  = {{(PW-WIDTH){d_re[WIDTH-1]}},  d_re};
-    wire signed [PW-1:0] w_d_im  = {{(PW-WIDTH){d_im[WIDTH-1]}},  d_im};
-    wire signed [PW-1:0] w_t_re  = {{(PW-TWIDDLE_WIDTH){t_re[TWIDDLE_WIDTH-1]}}, t_re};
-    wire signed [PW-1:0] w_t_im  = {{(PW-TWIDDLE_WIDTH){t_im[TWIDDLE_WIDTH-1]}}, t_im};
-
-    // round-half-up arithmetic right shift (quant.round_shift)
+    // round-half-up arithmetic right shift
     function signed [PW-1:0] round_shift;
         input signed [PW-1:0] v;
         input integer         sh;
@@ -307,76 +346,142 @@ module fft_stage #(
         end
     endfunction
 
-    // next-value temps (blocking, consumed by NBAs below)
-    reg signed [PW-1:0] nxt_sum_re, nxt_sum_im;
-    reg signed [PW-1:0] nxt_pr_re, nxt_pr_im;
+    // next-value temps
+    reg signed [WIDTH-1:0] nxt_bf_d_re, nxt_bf_d_im, nxt_bf_s_re, nxt_bf_s_im;
+    reg signed [PW-1:0] nxt_out_s, nxt_out_p;
     reg signed [PW-1:0] m1r, m2r, m3r;
+    reg signed [PW-1:0] se_a_re, se_a_im, se_d_re, se_d_im, se_t_re, se_t_im;
 
     always @(posedge clk) begin
         if (rst) begin
-            // FSM alignment preload (generator-derived constants);
-            // delay-line contents intentionally NOT reset (PLAN.md 2.9 --
-            // initialization invariance makes them irrelevant).
-            ptr        <= {AW{1'b0}};
-            phase_i    <= PRELOAD_I[AW-1:0];
-            in_compute <= (PRELOAD_C != 0);
+            wptr        <= WPTR_PRE[RAMW-1:0];
+            pwp         <= PWP_PRE[RAMW-1:0];
+            raddr_r     <= RADDR_PRE[RAMW-1:0];
+            pipe_comp   <= PIPE_PRE[3:0];
+            in_compute  <= (PRELOAD_C != 0);
+            phase_i     <= PRELOAD_I[AW-1:0];
+            out_re      <= {WIDTH{1'b0}};
+            out_im      <= {WIDTH{1'b0}};
         end else if (ce) begin
-            if (!in_compute) begin
-                // PASS/FILL: emit stored product, write raw input
-                out_re      <= d_re;
-                out_im      <= d_im;
-                mem_re[ptr] <= in_re;
-                mem_im[ptr] <= in_im;
+            // R6: shift + out; product FIFO write
+            if (pipe_comp[3]) begin
+                nxt_out_s = round_shift(comb_s_re, SHIFT_SUM);
+                nxt_out_p = round_shift(comb_s_im, SHIFT_SUM);
+                out_re <= nxt_out_s[WIDTH-1:0];
+                out_im <= nxt_out_p[WIDTH-1:0];
+                nxt_out_p = round_shift(comb_p_re, TD_PLUS_SHIFT);
+                nxt_out_s = round_shift(comb_p_im, TD_PLUS_SHIFT);
+                pfifo_re[pwp] <= nxt_out_p[WIDTH-1:0];
+                pfifo_im[pwp] <= nxt_out_s[WIDTH-1:0];
             end else begin
-                // COMPUTE: pair input a (newer) with delayed d (older);
-                // the sum path (stage output) is topology-specific and set
-                // inside the branches below
-                if (TOPOLOGY == 0) begin
-                    // DIF: butterfly first, twiddle on the diff path.
-                    // Karatsuba 3-product form (PLAN.md 2.6), three
-                    // PARALLEL multiplies + fabric adder tree -- avoids the
-                    // DSP ALU cascade (spike S2). Exact arithmetic.
-                    m1r = (w_d_re - w_in_re) * w_t_re;
-                    m2r = (w_d_im - w_in_im) * w_t_im;
-                    m3r = ((w_d_re - w_in_re) + (w_d_im - w_in_im))
-                          * (w_t_re + w_t_im);
-                    nxt_pr_re = round_shift(m1r - m2r, TD_PLUS_SHIFT);
-                    nxt_pr_im = round_shift(m3r - m1r - m2r, TD_PLUS_SHIFT);
-                    // sum path (stage output): butterfly sum, sigma shift
-                    nxt_sum_re = round_shift(w_in_re + w_d_re, SHIFT);
-                    nxt_sum_im = round_shift(w_in_im + w_d_im, SHIFT);
-                    out_re <= nxt_sum_re[WIDTH-1:0];
-                    out_im <= nxt_sum_im[WIDTH-1:0];
-                end else begin
-                    // DIT: twiddle multiplies the NEWER input first, then
-                    // combine at 2^td scale, ONE fused rounding shift.
-                    m1r = w_in_re * w_t_re;
-                    m2r = w_in_im * w_t_im;
-                    m3r = (w_in_re + w_in_im) * (w_t_re + w_t_im);
-                    nxt_sum_re = round_shift(
-                        ((w_d_re << TWIDDLE_DECIMAL) + (m1r - m2r)),
-                        TD_PLUS_SHIFT);
-                    nxt_sum_im = round_shift(
-                        ((w_d_im << TWIDDLE_DECIMAL) + (m3r - m1r - m2r)),
-                        TD_PLUS_SHIFT);
-                    nxt_pr_re = round_shift(
-                        ((w_d_re << TWIDDLE_DECIMAL) - (m1r - m2r)),
-                        TD_PLUS_SHIFT);
-                    nxt_pr_im = round_shift(
-                        ((w_d_im << TWIDDLE_DECIMAL) - (m3r - m1r - m2r)),
-                        TD_PLUS_SHIFT);
-                    out_re <= nxt_sum_re[WIDTH-1:0];
-                    out_im <= nxt_sum_im[WIDTH-1:0];
-                end
-                mem_re[ptr] <= nxt_pr_re[WIDTH-1:0];
-                mem_im[ptr] <= nxt_pr_im[WIDTH-1:0];
+                out_re <= pfifo_re[pr];
+                out_im <= pfifo_im[pr];
             end
 
-            // FSM advance
-            if (DEPTH > 1)
-                ptr <= ptr + {{(AW-1){1'b0}}, 1'b1};
+            // R5: combine (or passthrough)
+            if (pipe_comp[2]) begin
+                if (TOPOLOGY == 0) begin
+                    comb_p_re <= mreg_re;
+                    comb_p_im <= mreg_im;
+                    comb_s_re <= {{(PW-WIDTH){sum_dly_re[WIDTH-1]}}, sum_dly_re};
+                    comb_s_im <= {{(PW-WIDTH){sum_dly_im[WIDTH-1]}}, sum_dly_im};
+                end else begin
+                    // DIT: (d << td) +- t at 2^td scale
+                    se_d_re = {{(PW-WIDTH){d_dly2_re[WIDTH-1]}}, d_dly2_re};
+                    se_d_im = {{(PW-WIDTH){d_dly2_im[WIDTH-1]}}, d_dly2_im};
+                    comb_s_re <= (se_d_re <<< TWIDDLE_DECIMAL) + mreg_re;
+                    comb_s_im <= (se_d_im <<< TWIDDLE_DECIMAL) + mreg_im;
+                    comb_p_re <= (se_d_re <<< TWIDDLE_DECIMAL) - mreg_re;
+                    comb_p_im <= (se_d_im <<< TWIDDLE_DECIMAL) - mreg_im;
+                end
+            end else begin
+                comb_s_re <= {{(PW-WIDTH){d_dly2_re[WIDTH-1]}}, d_dly2_re};
+                comb_s_im <= {{(PW-WIDTH){d_dly2_im[WIDTH-1]}}, d_dly2_im};
+                comb_p_re <= {{(PW-WIDTH){d_dly2_re[WIDTH-1]}}, d_dly2_re};
+                comb_p_im <= {{(PW-WIDTH){d_dly2_im[WIDTH-1]}}, d_dly2_im};
+            end
+
+            // R4: Karatsuba multiply (or passthrough)
+            if (pipe_comp[1]) begin
+                if (TOPOLOGY == 0) begin
+                    se_a_re = {{(PW-WIDTH){bfly_d_re[WIDTH-1]}}, bfly_d_re};
+                    se_a_im = {{(PW-WIDTH){bfly_d_im[WIDTH-1]}}, bfly_d_im};
+                end else begin
+                    se_a_re = {{(PW-WIDTH){a_dly_re[WIDTH-1]}}, a_dly_re};
+                    se_a_im = {{(PW-WIDTH){a_dly_im[WIDTH-1]}}, a_dly_im};
+                end
+                se_t_re = {{(PW-TWIDDLE_WIDTH){tw_d1_re[TWIDDLE_WIDTH-1]}}, tw_d1_re};
+                se_t_im = {{(PW-TWIDDLE_WIDTH){tw_d1_im[TWIDDLE_WIDTH-1]}}, tw_d1_im};
+                m1r = se_a_re * se_t_re;
+                m2r = se_a_im * se_t_im;
+                m3r = (se_a_re + se_a_im) * (se_t_re + se_t_im);
+                mreg_re <= m1r - m2r;
+                mreg_im <= m3r - m1r - m2r;
+            end else begin
+                mreg_re <= {{(PW-WIDTH){d_dly2_re[WIDTH-1]}}, d_dly2_re};
+                mreg_im <= {{(PW-WIDTH){d_dly2_im[WIDTH-1]}}, d_dly2_im};
+            end
+            sum_dly_re <= bfly_s_re;
+            sum_dly_im <= bfly_s_im;
+            d_dly2_re  <= d_dly_re;
+            d_dly2_im  <= d_dly_im;
+
+            // R3: butterfly (or passthrough); twiddle/d/a delay regs.
+            // NB: golden model lets a_dly/d_dly capture the NEWLY computed
+            // butterfly values (their assignment follows the R3 update),
+            // while sum_dly/d_dly2/tw_d1 hold the previous ones.
+            if (pipe_comp[0]) begin
+                if (TOPOLOGY == 0) begin
+                    nxt_bf_d_re = d_reg_re - a_reg_re;
+                    nxt_bf_d_im = d_reg_im - a_reg_im;
+                    nxt_bf_s_re = d_reg_re + a_reg_re;
+                    nxt_bf_s_im = d_reg_im + a_reg_im;
+                end else begin
+                    nxt_bf_d_re = d_reg_re;     // d rides to the combine
+                    nxt_bf_d_im = d_reg_im;
+                    nxt_bf_s_re = a_reg_re;     // a rides to the multiply
+                    nxt_bf_s_im = a_reg_im;
+                end
+            end else begin
+                nxt_bf_d_re = d_reg_re;
+                nxt_bf_d_im = d_reg_im;
+                nxt_bf_s_re = d_reg_re;
+                nxt_bf_s_im = d_reg_im;
+            end
+            bfly_d_re <= nxt_bf_d_re;
+            bfly_d_im <= nxt_bf_d_im;
+            bfly_s_re <= nxt_bf_s_re;
+            bfly_s_im <= nxt_bf_s_im;
+            tw_d1_re <= tw_reg_re;
+            tw_d1_im <= tw_reg_im;
+            d_dly_re <= nxt_bf_d_re;   // golden: d_dly = new bfly_diff
+            d_dly_im <= nxt_bf_d_im;
+            if (TOPOLOGY == 1) begin
+                a_dly_re <= nxt_bf_s_re;  // golden: a_dly = new bfly_sum
+                a_dly_im <= nxt_bf_s_im;
+            end
+
+            // R2: first-half RAM write (PASS only) + read capture
+            if (!in_compute) begin
+                ram_re[wptr] <= in_re;          // PASS: first half
+                ram_im[wptr] <= in_im;
+            end
+            d_reg_re <= ram_re[raddr_r];        // sync read (addr reg'd)
+            d_reg_im <= ram_im[raddr_r];
+            a_reg_re <= in_re;
+            a_reg_im <= in_im;
+            tw_reg_re <= t_re;
+            tw_reg_im <= t_im;
+
+            // FSM advance (subtract FULL depth: DEPTH[AW-1:0] would
+            // truncate a power-of-two depth to zero)
+            raddr_r <= (wptr + {{(RAMW-1){1'b0}}, 1'b1}
+                        - DEPTH[RAMW-1:0]);     // next cycle's read addr
+            wptr <= wptr + {{(RAMW-1){1'b0}}, 1'b1};
+            pwp  <= pwp + {{(RAMW-1){1'b0}}, 1'b1};
+            pipe_comp <= {pipe_comp[2:0], in_compute};
             phase_i <= phase_i + {{(AW-1){1'b0}}, 1'b1};
-            if (phase_i == DEPTH_M1) begin
+            if (phase_i == DEPTH[AW-1:0] - 1'b1) begin
                 phase_i    <= {AW{1'b0}};
                 in_compute <= ~in_compute;
             end
