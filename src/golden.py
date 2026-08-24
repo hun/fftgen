@@ -176,12 +176,16 @@ class _SDFStage:
         self.sigma = sigma
         self.td = td
         self.T = list(stage_twiddles)          # length D, index by pair i
-        self.buf = deque([(0, 0)] * self.D)         # the delay line: D entries
+        self.buf = deque([(0, 0)] * self.D)    # the delay line: D entries
         self.in_compute = False                # reset state = PASS/FILL
         self.i = 0                             # pair index within phase
+        self.out_reg = (0, 0)                  # stage output register (RTL)
 
     def step(self, ar: int, ai: int) -> Complex:
-        """Advance one enabled cycle; returns this cycle's output."""
+        """Advance one enabled cycle; returns the REGISTERED output, i.e.
+        the value computed during the previous enabled cycle -- exactly like
+        the RTL's per-stage pipeline register."""
+        result = self.out_reg
         if self.in_compute:
             d_re, d_im = self.buf.popleft()
             sum_re = round_shift(ar + d_re, self.sigma)
@@ -200,15 +204,16 @@ class _SDFStage:
             if self.i == self.D:
                 self.in_compute = False
                 self.i = 0
-            return sum_re, sum_im
+            self.out_reg = (sum_re, sum_im)
         else:
-            out = self.buf.popleft()           # stored product (or garbage)
+            new_out = self.buf.popleft()       # stored product (or garbage)
             self.buf.append((ar, ai))          # fill raw
             self.i += 1
             if self.i == self.D:
                 self.in_compute = True
                 self.i = 0
-            return out
+            self.out_reg = new_out
+        return result
 
 
 class SDFGoldenModel:
@@ -237,7 +242,23 @@ class SDFGoldenModel:
                       [tw[(i << s) % N] for i in range(N >> (s + 1))])
             for s in range(cfg.num_stages)
         ]
-        self.latency = N      # derived + verified: see appendix A / tests
+        # Combinational schedule latency is N (appendix A); the RTL adds
+        # one pipeline register per stage, so the declared core latency
+        # is N + num_stages. Verified empirically per config.
+        self.latency = N + cfg.num_stages
+        # Registered stages need FSM presets so every stage's pairing
+        # window aligns with its (register-delayed) input stream:
+        #   warm_s = -(sum(D_t, t<s) + s) mod 2*D_s
+        # derived exhaustively for small N, verified for large N. In RTL
+        # this is a constant counter/phase preload at reset.
+        self.stage_presets = []
+        cum = 0
+        for s, st in enumerate(self.stages):
+            warm = (-(cum + s)) % (2 * st.D)
+            self.stage_presets.append(warm)
+            for _ in range(warm):
+                st.step(0, 0)
+            cum += st.D
         self._cycles = 0          # enabled cycles since reset
         self.frac_out = cfg.sample_decimal
         # frame-marker sideband rides the pipeline: one entry per enabled
@@ -245,11 +266,14 @@ class SDFGoldenModel:
         self._sb = deque()
 
     def reset(self):
-        for st in self.stages:
+        for st, warm in zip(self.stages, self.stage_presets):
             st.buf.clear()
             st.buf.extend([((0, 0))] * st.D)
             st.in_compute = False
             st.i = 0
+            st.out_reg = (0, 0)
+            for _ in range(warm):
+                st.step(0, 0)
         self._cycles = 0
         self._sb = deque()
 
