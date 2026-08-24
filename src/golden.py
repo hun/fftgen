@@ -176,7 +176,7 @@ class _SDFStage:
         self.sigma = sigma
         self.td = td
         self.T = list(stage_twiddles)          # length D, index by pair i
-        self.buf = deque([0] * self.D)         # the delay line: D entries
+        self.buf = deque([(0, 0)] * self.D)         # the delay line: D entries
         self.in_compute = False                # reset state = PASS/FILL
         self.i = 0                             # pair index within phase
 
@@ -186,7 +186,9 @@ class _SDFStage:
             d_re, d_im = self.buf.popleft()
             sum_re = round_shift(ar + d_re, self.sigma)
             sum_im = round_shift(ai + d_im, self.sigma)
-            dr, di = ar - d_re, ai - d_im
+            # diff contract = OLDER - NEWER (matches batch reference
+            # x[i1] - x[i2]); the delayed sample d is the older one.
+            dr, di = d_re - ar, d_im - ai
             cr, ci = self.T[self.i]
             pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
             sh = self.td + self.sigma          # combined normalization+scaling
@@ -242,7 +244,7 @@ class SDFGoldenModel:
     def reset(self):
         for st in self.stages:
             st.buf.clear()
-            st.buf.extend([0] * st.D)
+            st.buf.extend([(0, 0)] * st.D)
             st.in_compute = False
             st.i = 0
         self._cycles = 0
@@ -285,7 +287,10 @@ class SDFGoldenModel:
                     outs.append((re, im))
             else:
                 self.tick(False)
-        for _ in range(self.latency + 1):
+        # outputs span enabled-ticks [L, L+T-1] for T inputs: the first
+        # output emerges on the same tick as input number L, so only L-1
+        # trailing enabled cycles are needed to drain.
+        for _ in range(self.latency - 1):
             v, re, im = self.tick(True, 0, 0)
             if v:
                 outs.append((re, im))
