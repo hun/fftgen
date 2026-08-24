@@ -173,10 +173,12 @@ class _SDFStage:
     # pipeline register layers (mirrors the pipelined RTL stage):
     #   R2 read-data regs  -> R3 butterfly  -> R4 multiply (MREG)
     #   -> R5 combine -> R6 shift+out
-    NLAYERS = 6   # register hops from R2 capture to R7 output
-                  # (R3 DSP operand regs map onto AREG/BREG/DREG, R4 diff
-                  # onto pre-adder ADREG, R5 products onto MREG, R6 combine
-                  # onto the C-port ALU + PREG)
+    NLAYERS = 7   # register hops from R2 capture to R8 output
+                  # (R3 DSP operand regs ~ AREG/BREG/DREG, R4 butterfly =
+                  # pre-adder + ADREG, R6a/R6b = the complex multiply as a
+                  # two-DSP cascade: sender products in PREG, receiver
+                  # accumulate via PCIN one cycle later, R7 combine on the
+                  # C-port ALU + PREG)
 
     def __init__(self, s: int, N: int, sigma: int, td: int,
                  stage_twiddles: Sequence[Complex], dit: bool = False):
@@ -206,7 +208,13 @@ class _SDFStage:
         self.tw_b = (0, 0)                     # R4: twiddle second hop
         self.bfly_sum = (0, 0)                 # R4: butterfly sum path
         self.bfly_diff = (0, 0)                # R4: butterfly diff (=ADREG)
-        self.mreg = (0, 0)                     # R4: multiply output
+        self.lane_re = (0, 0)                  # R6a: first products (PREG)
+        self.lane_im = (0, 0)
+        self.mul_a_re = 0                      # R6a: delayed A operand
+        self.mul_a_im = 0                      #       (receiver DSP regs)
+        self.mul_t_re = 0                      # R6a: delayed twiddle
+        self.mul_t_im = 0
+        self.mreg = (0, 0)                     # R6b: cascade accumulate
         self.comb_sum = (0, 0)                 # R5: combine (sum path)
         self.comb_prod = (0, 0)                # R5: combine (product path)
         self.out_reg = (0, 0)                  # R6: stage output
@@ -215,6 +223,9 @@ class _SDFStage:
         self.a_dly = (0, 0)                    # R4: a reaches the multiply (DIT)
         self.d_dly = (0, 0)                    # R3: d first hop
         self.d_dly2 = (0, 0)                   # R4: d reaches the combine (DIT)
+        self.d_dly3 = (0, 0)                   # R5: d third hop (cascade depth)
+        self.sum_dly2 = (0, 0)                 # sum-path second/third taps
+        self.sum_dly3 = (0, 0)
         self._ctor = (s, N, sigma, td, list(stage_twiddles), dit)
 
     def step(self, ar: int, ai: int) -> Complex:
@@ -231,12 +242,13 @@ class _SDFStage:
         d_val = self.ram[r]
         cur = self.in_compute
         flags = [cur] + self.pipe_comp[:-1]
-        f_r7, f_r6c, f_r5m, f_r4b = flags[5], flags[4], flags[3], flags[2]
+        f_out, f_comb, f_m2, f_m1, f_bfly = (flags[6], flags[5],
+                                             flags[4], flags[3], flags[2])
 
         # R7: shift + out; product write-back to the product FIFO
         sh_sum = self.sigma if not self.dit else self.td + self.sigma
         sh_prod = self.td + self.sigma
-        if f_r7:
+        if f_out:
             out_val = (round_shift(self.comb_sum[0], sh_sum),
                        round_shift(self.comb_sum[1], sh_sum))
             prod_val = (round_shift(self.comb_prod[0], sh_prod),
@@ -246,39 +258,56 @@ class _SDFStage:
             out_val = self.pfifo[pr]           # product output (D later)
         self.out_reg = out_val
 
-        # R6: combine (COMPUTE) or passthrough -- C-port ALU + PREG
-        if f_r6c:
+        # R7: combine (COMPUTE) or passthrough -- C-port ALU + PREG
+        if f_comb:
             if not self.dit:
                 self.comb_prod = self.mreg
-                self.comb_sum = self.sum_dly
+                self.comb_sum = self.sum_dly2
             else:
                 tr, ti = self.mreg
-                self.comb_sum = ((self.d_dly2[0] << self.td) + tr,
-                                 (self.d_dly2[1] << self.td) + ti)
-                self.comb_prod = ((self.d_dly2[0] << self.td) - tr,
-                                  (self.d_dly2[1] << self.td) - ti)
+                # d_dly captures the NEW butterfly diff, so its tap that
+                # aligns with the cascade-delayed MREG is one deeper than
+                # the sum path's
+                self.comb_sum = ((self.d_dly3[0] << self.td) + tr,
+                                 (self.d_dly3[1] << self.td) + ti)
+                self.comb_prod = ((self.d_dly3[0] << self.td) - tr,
+                                  (self.d_dly3[1] << self.td) - ti)
         else:
             self.comb_prod = self.d_dly2
             self.comb_sum = self.d_dly2
 
-        # R5: multiply (COMPUTE) or passthrough; delay regs advance.
-        # The products land in MREG; the twiddle arrives via its second
-        # delay hop so it meets the ADREG output here.
-        if f_r5m:
-            m = ((self.bfly_diff, self.tw_b) if not self.dit
-                 else (self.a_dly, self.tw_b))
-            m1 = (m[0][0] * m[1][0], m[0][1] * m[1][1])
-            m3 = ((m[0][0] + m[0][1]) * (m[1][0] + m[1][1]),)
-            self.mreg = (m1[0] - m1[1], m3[0] - m1[0] - m1[1])
+        # R6b: cascade accumulate -- the receiver DSP's ALU forms
+        # PCIN -/+ its own product; results land in MREG (its PREG).
+        # Idle values are never consumed by the combine during PASS.
+        if f_m2:
+            self.mreg = (
+                (self.lane_re[0]
+                 - self.mul_a_im * self.mul_t_im,
+                 self.lane_im[0]
+                 + self.mul_a_im * self.mul_t_re))
         else:
-            self.mreg = self.d_dly2
-        self.sum_dly = self.bfly_sum
-        self.d_dly2 = self.d_dly
+            self.mreg = (0, 0)
+
+        # R6a: sender DSPs -- first products into PREG, and the receiver
+        # operand registers capture this cycle's operands
+        if f_m1:
+            ar_, ai_ = (self.bfly_diff if not self.dit else self.a_dly)
+            self.lane_re = (ar_ * self.tw_b[0],)
+            self.lane_im = (ar_ * self.tw_b[1],)
+            self.mul_a_re, self.mul_a_im = ar_, ai_
+            self.mul_t_re, self.mul_t_im = self.tw_b
+        else:
+            self.lane_re = (0,)
+            self.lane_im = (0,)
+        self.sum_dly2 = self.sum_dly
+        self.sum_dly = self.bfly_sum     # old value: butterfly runs later
+        self.d_dly3 = self.d_dly2
+        self.d_dly2 = self.d_dly         # old value
 
         # R4: butterfly from the DSP operand registers -- maps onto the
         # pre-adder (diff) with its output register (ADREG); the sum is
         # computed alongside in fabric
-        if f_r4b:
+        if f_bfly:
             if not self.dit:
                 self.bfly_diff = (self.x_reg[0] - self.y_reg[0],
                                   self.x_reg[1] - self.y_reg[1])

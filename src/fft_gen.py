@@ -135,13 +135,13 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     pl_pack = 0
     for i, pl in enumerate(_gm.stage_preloads):
         pipe_bits = int("".join("1" if b else "0"
-                                for b in reversed(pl["pipe"][:5])), 2) & 0x1F
+                                for b in reversed(pl["pipe"][:6])), 2) & 0x3F
         stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
                 | ((pl["raddr"] & 0xFFFF) << 32) \
                 | (pipe_bits << 48) \
-                | ((pl["phase_i"] & 0xFF) << 53) \
-                | ((1 if pl["compute"] else 0) << 61)
-        pl_pack |= stage << (62 * i)
+                | ((pl["phase_i"] & 0xFF) << 54) \
+                | ((1 if pl["compute"] else 0) << 62)
+        pl_pack |= stage << (63 * i)
     # per-stage preloads travel via a generated header (the -G parser
     # caps parameter values at 32 bits)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:

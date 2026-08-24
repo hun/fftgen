@@ -127,7 +127,8 @@ class TestStreamLatencyAndFraming(unittest.TestCase):
             rng = random.Random(N)
             frame = random_frame(N, 16, rng)
             first_valid = None
-            for i, smp in enumerate(frame * 4):
+            n_feed = frame * (((m.latency + N - 1) // N) + 2)
+            for i, smp in enumerate(n_feed):
                 v, *_ = m.tick(True, smp[0], smp[1])
                 if v and first_valid is None:
                     first_valid = i + 1     # 1-based tick index
