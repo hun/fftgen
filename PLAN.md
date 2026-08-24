@@ -529,11 +529,12 @@ RTL must reproduce.
 **Stage structure (stage s = 0..n-1, D_s = N/2^(s+1)):** alternating phases
 of D_s enabled cycles each, period N:
 
-- `COMPUTE` (D_s cycles): read delayed raw sample `d`, pair with input `a`;
-  emit `round_shift(a + d, sigma_s)` on the sum path; write
-  `round_shift(cmul(a - d, T[k]), td + sigma_s)` (single combined rounding
-  shift) back into the delay line. Pair index `i` runs 0..D_s-1,
-  twiddle `k = i * 2^s`.
+- `COMPUTE` (D_s cycles): read delayed raw sample `d` (the OLDER sample),
+  pair with input `a` (NEWER); emit `round_shift(a + d, sigma_s)` on the sum
+  path; write `round_shift(cmul(d - a, T[k]), td + sigma_s)` -- **diff
+  contract: OLDER minus NEWER**, matching the batch reference -- back into
+  the delay line (one combined rounding shift). Pair index `i` runs
+  0..D_s-1, twiddle `k = i * 2^s`.
 - `PASS/FILL` (D_s cycles): emit stored products from the line, write raw
   inputs in. (This is exactly one read + one write per cycle = the two BRAM
   ports of PLAN.md 2.7.)
@@ -541,8 +542,16 @@ of D_s enabled cycles each, period N:
 Reset state: all stages start in `PASS/FILL`. Warmup garbage is flushed by
 `out_valid = enabled_cycle >= L`.
 
-**Latency:** first valid output after `L = N - 1` enabled cycles (sum of
-D_s). The RTL adds one register per stage (declared constant, +n).
+**Every stage multiplies** (uniform datapath). An earlier draft of this
+appendix claimed stage 0 needs no multiplier -- that holds only for the
+radix-2^2 folding, NOT for the plain radix-2 schedule implemented here;
+caught by the batch cross-check (negated odd slots).
+
+**Latency:** first valid output after exactly `L = N` enabled cycles
+(sum of D_s plus one phase-alignment cycle of the last stage -- verified
+declared-vs-empirical per config). Outputs for a T-sample stream span
+ticks [N, N+T-1]; draining needs N-1 trailing enabled cycles. The RTL adds
+further declared register stages on top.
 
 **Bit-reversed output:** verified N=4 by hand: stream order equals the batch
 DIF output permutation (bit-reversal).
@@ -552,11 +561,12 @@ DIF output permutation (bit-reversal).
 - multiply path: exact Karatsuba products, then ONE combined
   `round_shift(., twiddle_decimal + sigma_s)` (twiddle Q-format
   normalization fused with stage scaling -- this is the post-DSP48P shift)
-- stage 0 structurally has no multiplier (`k = 0` for all pairs); stages
-  s >= 1 multiply unconditionally, including their `k = 0` entries
-  (uniform-datapath decision, documented bias)
-- fractional bits evolve as `f_s = sample_decimal - sum(sigma[:s])`; final
-  output rescale + saturate via `quantize_output`
+- all stages multiply unconditionally (uniform datapath decision); the
+  radix-2^2 folding that removes trivial multiplies must be re-proven
+  numerically equivalent before any RTL uses it
+- datapath stays Q(sample_decimal) end-to-end; with the conservative
+  schedule the reported spectrum is X_true/N (amplitude-preserving)
+- final output rescale + saturate via `quantize_output`
 
 **Equivalence assumption for radix-2^2:** the R2^2 folding changes only
 WHICH cycles carry general multipliers, never the recursion or the rounding
