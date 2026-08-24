@@ -41,14 +41,14 @@ class FFTConfig:
     scaling: object = "auto"
 
     def __post_init__(self):
-        self._validate()
-
         if self.output_width is None:
             self.output_width = self.sample_width
         if self.output_decimal is None:
             self.output_decimal = self.sample_decimal
         if self.twiddle_decimal is None:
             self.twiddle_decimal = self.twiddle_width - 1
+
+        self._validate()
 
         if not isinstance(self.scaling, str) or self.scaling != "auto":
             shifts = tuple(self.scaling)

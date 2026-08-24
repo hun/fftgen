@@ -1,0 +1,153 @@
+"""Verilator artifact generation + bit-exact verification for the FFT core.
+
+Follows the firgen pattern: generate stimulus/expected from the golden
+model, compile the RTL with Verilator (-G parameter overrides), run, and
+diff actual vs expected.
+
+P2 scope: R=1, native->bitreversed (DIF), forward/inverse, markers,
+freeze masks.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+from typing import List, Optional, Sequence, Tuple
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+
+from config import FFTConfig
+from golden import SDFGoldenModel
+from stimuli import freeze_mask, random_frame
+
+
+def _hex(v: int, width: int) -> str:
+    return format(v & ((1 << width) - 1), "0%dx" % ((width + 3) // 4))
+
+
+def _hex_wide(v: int) -> str:
+    return format(v & 0xFFFFFFFFFFFFFFFF, "016x")
+
+
+def write_twiddle_mem(cfg: FFTConfig, path: str) -> None:
+    """Twiddle ROM contents: N words, {re, im} packed MSB:LSB, stage s at
+    [BASE_s .. BASE_s + D_s - 1] (the generator layout fft_sdf.v expects)."""
+    from twiddles import canonical_twiddles
+    N = cfg.num_points
+    tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal,
+                            cfg.inverse)
+    words = []
+    for s in range(cfg.num_stages):
+        D = N >> (s + 1)
+        for i in range(D):
+            re, im = tw[(i << s) % N]
+            packed = ((re & ((1 << cfg.twiddle_width) - 1)) << cfg.twiddle_width) \
+                     | (im & ((1 << cfg.twiddle_width) - 1))
+            words.append(packed)
+    while len(words) < N:
+        words.append(0)
+    with open(path, "w") as f:
+        for w in words:
+            f.write(_hex(w, cfg.twiddle_width * 2) + "\n")
+
+
+def _markers(N: int, num_frames: int) -> List[Tuple[int, int]]:
+    out = []
+    for _ in range(num_frames):
+        for j in range(N):
+            out.append((1 if j == 0 else 0, 1 if j == N - 1 else 0))
+    return out
+
+
+def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
+             seed: int = 1, freeze: Optional[str] = None,
+             quiet: bool = True) -> dict:
+    """Write artifacts + build + run + compare. Returns {'rc', 'outdir', ...}."""
+    os.makedirs(outdir, exist_ok=True)
+    N = cfg.num_points
+    rng = __import__("random").Random(seed)
+    frames = [random_frame(N, cfg.sample_width, rng) for _ in range(num_frames)]
+    samples = [s for fr in frames for s in fr]
+
+    # golden expected
+    m = SDFGoldenModel(cfg)
+    markers = _markers(N, num_frames)
+    expected = m.process_stream(samples, markers=markers)
+
+    # stimulus + mask
+    with open(os.path.join(outdir, "stimulus.txt"), "w") as f:
+        for (re, im), (u, l) in zip(samples, markers):
+            f.write(f"{_hex(re, cfg.sample_width)} {_hex(im, cfg.sample_width)} "
+                    f"{u} {l}\n")
+    if freeze is not None:
+        mask = freeze_mask(len(samples) * 8, seed=seed, style=freeze)
+        with open(os.path.join(outdir, "mask.txt"), "w") as f:
+            for e in mask:
+                f.write("1\n" if e else "0\n")
+    with open(os.path.join(outdir, "expected.txt"), "w") as f:
+        for re, im, u, l in expected:
+            f.write(f"{re} {im} {u} {l}\n")
+
+    # RTL + twiddle ROM
+    shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                             "rtl", "fft_sdf.v"), outdir)
+    write_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles.mem"))
+
+    # build with verilator
+    tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                      "tb", "tb_fft_sdf.cpp")
+    intern = cfg.sample_width + max(0, cfg.num_stages - sum(cfg.shifts)) + 1
+    # SCALING_PACK: 2 bits per stage
+    pack = 0
+    for s, sh in enumerate(cfg.shifts):
+        pack |= (sh & 3) << (2 * s)
+    gargs = [
+        f"-GNUM_POINTS={cfg.num_points}",
+        f"-GSAMPLE_WIDTH={cfg.sample_width}",
+        f"-GSAMPLE_DECIMAL={cfg.sample_decimal}",
+        f"-GOUTPUT_WIDTH={cfg.output_width}",
+        f"-GOUTPUT_DECIMAL={cfg.output_decimal}",
+        f"-GTWIDDLE_WIDTH={cfg.twiddle_width}",
+        f"-GTWIDDLE_DECIMAL={cfg.twiddle_decimal}",
+        f"-GSCALING_PACK=32'h{pack:08x}",
+        f"-GINTERN_WIDTH={intern}",
+    ]
+    cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+           "--top-module", "fft_sdf", "-Wno-fatal",
+           "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                      f"-DTB_OUTPUT_WIDTH={cfg.output_width}",
+           *gargs,
+           "fft_sdf.v", tb]
+    r = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True)
+    if r.returncode != 0:
+        return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
+
+    r = subprocess.run([os.path.join("obj_dir", "Vfft_sdf")],
+                       cwd=outdir, capture_output=True, text=True)
+    if r.returncode != 0:
+        return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
+
+    # compare
+    with open(os.path.join(outdir, "expected.txt")) as f:
+        exp = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
+    with open(os.path.join(outdir, "actual.txt")) as f:
+        act = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
+    ok = (len(exp) == len(act)) and all(a == b for a, b in zip(exp, act))
+    first_bad = next(((i, a, b) for i, (a, b) in enumerate(zip(act, exp))
+                      if a != b), None)
+    return {"rc": 0 if ok else 1,
+            "outdir": outdir,
+            "n_expected": len(exp),
+            "n_actual": len(act),
+            "first_bad": first_bad,
+            "log": ""}
+
+
+def verify_verilator(cfg: FFTConfig, outdir: str, **kw) -> dict:
+    return generate(cfg, outdir, **kw)
+
+
+if __name__ == "__main__":
+    cfg = FFTConfig(num_points=8)
+    res = generate(cfg, "build/p2_demo")
+    print(res)
