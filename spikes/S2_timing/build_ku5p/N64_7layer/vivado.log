@@ -1,0 +1,826 @@
+INFO: [Common 17-3922] A valid Vivado Design Suite BASIC license has been detected. Your current license is active and will expire on 21-jul-2027.
+
+****** Vivado v2026.1 (64-bit)
+  **** SW Build 6511674 on Tue Jun 16 11:01:26 MDT 2026
+  **** IP Build 6504888 on Tue Jun 09 09:05:25 MDT 2026
+  **** SharedData Build 6501428 on Mon Jun 08 17:34:18 MDT 2026
+  **** Start of session at: Mon Aug 24 22:14:25 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source tcl/synth_ku5p.tcl
+# set part    [lindex $argv 0]
+# set npts    [lindex $argv 1]
+# set pack    [lindex $argv 2]
+# set intern  [lindex $argv 3]
+# set outdir  [lindex $argv 4]
+# file mkdir $outdir
+# create_project -in_memory -part $part
+# add_files -fileset sources_1 /home/hannes/Projects/fftgen/rtl/fft_sdf.v
+# set_property top fft_sdf [current_fileset]
+# synth_design -top fft_sdf \
+#     -generic NUM_POINTS=$npts -generic SAMPLE_WIDTH=16 -generic TWIDDLE_WIDTH=18 \
+#     -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \
+#     -generic TOPOLOGY=0
+Command: synth_design -top fft_sdf -generic NUM_POINTS=64 -generic SAMPLE_WIDTH=16 -generic TWIDDLE_WIDTH=18 -generic SCALING_PACK=85 -generic INTERN_WIDTH=17 -generic TOPOLOGY=0
+Starting synth_design
+Using part: xcku5p-ffva676-1-e
+Attempting to get a license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 87699
+---------------------------------------------------------------------------------
+Starting Synthesize : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2207.496 ; gain = 496.227 ; free physical = 79323 ; free virtual = 86752
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-6901] identifier 'tw_rom' is used before its declaration [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:178]
+INFO: [Synth 8-6157] synthesizing module 'fft_sdf' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:9]
+	Parameter NUM_POINTS bound to: 64 - type: integer 
+	Parameter SAMPLE_WIDTH bound to: 16 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter SCALING_PACK bound to: 85 - type: integer 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+	Parameter INTERN_WIDTH bound to: 17 - type: integer 
+INFO: [Synth 8-6157] synthesizing module 'fft_stage' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 32 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 1 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 1 - type: integer 
+	Parameter ROM_BASE bound to: 0 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-6157] synthesizing module 'fft_stage__parameterized0' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 16 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 1 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 2 - type: integer 
+	Parameter ROM_BASE bound to: 32 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage__parameterized0' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-6157] synthesizing module 'fft_stage__parameterized1' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 8 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 1 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 4 - type: integer 
+	Parameter ROM_BASE bound to: 48 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage__parameterized1' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-6157] synthesizing module 'fft_stage__parameterized2' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 4 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 1 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 8 - type: integer 
+	Parameter ROM_BASE bound to: 56 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage__parameterized2' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-6157] synthesizing module 'fft_stage__parameterized3' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 2 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 0 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 16 - type: integer 
+	Parameter ROM_BASE bound to: 60 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+WARNING: [Synth 8-693] zero replication count - replication ignored [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:527]
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage__parameterized3' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-6157] synthesizing module 'fft_stage__parameterized4' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+	Parameter DEPTH bound to: 1 - type: integer 
+	Parameter WIDTH bound to: 17 - type: integer 
+	Parameter SHIFT bound to: 0 - type: integer 
+	Parameter TWIDDLE_WIDTH bound to: 18 - type: integer 
+	Parameter TWIDDLE_DECIMAL bound to: 17 - type: integer 
+	Parameter K_STRIDE bound to: 32 - type: integer 
+	Parameter ROM_BASE bound to: 62 - type: integer 
+	Parameter NPTS bound to: 64 - type: integer 
+	Parameter PRELOAD_I bound to: 8'b00000000 
+	Parameter PRELOAD_C bound to: 1'b0 
+	Parameter WPTR_PRE bound to: 16'b0000000000000000 
+	Parameter PWP_PRE bound to: 16'b0000000000000000 
+	Parameter RADDR_PRE bound to: 16'b0000000000000000 
+	Parameter PIPE_PRE bound to: 6'b000000 
+	Parameter TOPOLOGY bound to: 0 - type: integer 
+WARNING: [Synth 8-693] zero replication count - replication ignored [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:522]
+WARNING: [Synth 8-693] zero replication count - replication ignored [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:524]
+WARNING: [Synth 8-693] zero replication count - replication ignored [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:525]
+WARNING: [Synth 8-693] zero replication count - replication ignored [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:527]
+INFO: [Synth 8-6155] done synthesizing module 'fft_stage__parameterized4' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:257]
+INFO: [Synth 8-3876] $readmem data file 'fft_twiddles.mem' is read successfully [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:189]
+INFO: [Synth 8-6155] done synthesizing module 'fft_sdf' (0#1) [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:9]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_s_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-6014] Unused sequential element nxt_out_p_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+WARNING: [Synth 8-6014] Unused sequential element mul_a_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:441]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:471]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_d_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:472]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_re_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:473]
+WARNING: [Synth 8-6014] Unused sequential element nxt_bf_s_im_reg was removed.  [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:474]
+---------------------------------------------------------------------------------
+Finished Synthesize : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2313.465 ; gain = 602.195 ; free physical = 79197 ; free virtual = 86627
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2331.277 ; gain = 620.008 ; free physical = 79217 ; free virtual = 86647
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xcku5p-ffva676-1-e
+INFO: [Device 21-403] Loading part xcku5p-ffva676-1-e
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2337.215 ; gain = 625.945 ; free physical = 79218 ; free virtual = 86647
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 2353.230 ; gain = 641.961 ; free physical = 79176 ; free virtual = 86607
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input   39 Bit       Adders := 20    
+	   3 Input   17 Bit       Adders := 12    
+	   2 Input   17 Bit       Adders := 12    
+	   2 Input    7 Bit       Adders := 1     
+	   2 Input    6 Bit       Adders := 3     
+	   2 Input    5 Bit       Adders := 4     
+	   2 Input    4 Bit       Adders := 4     
+	   2 Input    3 Bit       Adders := 5     
+	   2 Input    2 Bit       Adders := 5     
+	   2 Input    1 Bit       Adders := 5     
++---Registers : 
+	               37 Bit    Registers := 12    
+	               18 Bit    Registers := 24    
+	               17 Bit    Registers := 150   
+	               16 Bit    Registers := 2     
+	                7 Bit    Registers := 1     
+	                6 Bit    Registers := 7     
+	                5 Bit    Registers := 2     
+	                4 Bit    Registers := 2     
+	                3 Bit    Registers := 1     
+	                2 Bit    Registers := 1     
+	                1 Bit    Registers := 221   
++---Muxes : 
+	   2 Input   37 Bit        Muxes := 12    
+	   2 Input   18 Bit        Muxes := 12    
+	   2 Input   17 Bit        Muxes := 36    
+	   2 Input    5 Bit        Muxes := 1     
+	   2 Input    4 Bit        Muxes := 1     
+	   2 Input    3 Bit        Muxes := 1     
+	   2 Input    2 Bit        Muxes := 1     
+	   2 Input    1 Bit        Muxes := 6     
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1824 (col length:96)
+BRAMs: 960 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '35' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '34' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '34' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_s_re_reg' and it is trimmed from '18' to '17' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_s_im_reg' and it is trimmed from '18' to '17' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_im_reg' and it is trimmed from '37' to '34' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:390]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_p_re_reg' and it is trimmed from '37' to '34' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:389]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_s_re_reg' and it is trimmed from '18' to '17' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:385]
+WARNING: [Synth 8-3936] Found unconnected internal register 'comb_s_im_reg' and it is trimmed from '18' to '17' bits. [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:386]
+DSP Report: Generating DSP lane_hi_re_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_a_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: register lane_hi_re_reg is absorbed into DSP lane_hi_re_reg.
+DSP Report: operator lane_hi_re0 is absorbed into DSP lane_hi_re_reg.
+DSP Report: Generating DSP mreg_re_reg, operation Mode is: (PCIN-A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mul_t_im_reg is absorbed into DSP mreg_re_reg.
+DSP Report: register mreg_re_reg is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re0 is absorbed into DSP mreg_re_reg.
+DSP Report: operator mreg_re1 is absorbed into DSP mreg_re_reg.
+DSP Report: Generating DSP lane_hi_im_reg, operation Mode is: (A''*B2)'.
+DSP Report: register bfly_d_re_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_a_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register tw_b_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: register lane_hi_im_reg is absorbed into DSP lane_hi_im_reg.
+DSP Report: operator lane_hi_im0 is absorbed into DSP lane_hi_im_reg.
+DSP Report: Generating DSP mreg_im_reg, operation Mode is: (PCIN+A''*B'')'.
+DSP Report: register bfly_d_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register tw_b_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_a_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mul_t_re_reg is absorbed into DSP mreg_im_reg.
+DSP Report: register mreg_im_reg is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im0 is absorbed into DSP mreg_im_reg.
+DSP Report: operator mreg_im1 is absorbed into DSP mreg_im_reg.
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 3214.043 ; gain = 1502.773 ; free physical = 78323 ; free virtual = 85758
+---------------------------------------------------------------------------------
+ Sort Area is  lane_hi_re_reg_0 : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_0 : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_5 : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_5 : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_7 : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_7 : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_9 : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_9 : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_b : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_b : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_d : 0 0 : 2455 5179 : Used 1 time 0
+ Sort Area is  lane_hi_re_reg_d : 0 1 : 2724 5179 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_3 : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_3 : 0 1 : 2582 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_6 : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_6 : 0 1 : 2582 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_8 : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_8 : 0 1 : 2582 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_a : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_a : 0 1 : 2582 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_c : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_c : 0 1 : 2582 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_e : 0 0 : 2455 5037 : Used 1 time 0
+ Sort Area is  lane_hi_im_reg_e : 0 1 : 2582 5037 : Used 1 time 0
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+ROM: Preliminary Mapping Report
++------------+------------+---------------+----------------+
+|Module Name | RTL Object | Depth x Width | Implemented As | 
++------------+------------+---------------+----------------+
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | tw_rom     | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
+|fft_sdf     | p_0_out    | 64x36         | LUT            | 
++------------+------------+---------------+----------------+
+
+
+Distributed RAM: Preliminary Mapping Report (see note below)
++--------------------+--------------+----------------+----------------------+---------------+
+|Module Name         | RTL Object   | Inference      | Size (Depth x Width) | Primitives    | 
++--------------------+--------------+----------------+----------------------+---------------+
+|\stages[0].u_stage  | pfifo_re_reg | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | pfifo_im_reg | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | ram_re_reg   | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | ram_im_reg   | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[1].u_stage  | pfifo_re_reg | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | pfifo_im_reg | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | ram_re_reg   | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | ram_im_reg   | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[3].u_stage  | pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
++--------------------+--------------+----------------+----------------------+---------------+
+
+Note: The table above is a preliminary report that shows the Distributed RAMs at the current stage of the synthesis flow. Some Distributed RAMs may be reimplemented as non Distributed RAM primitives later in the synthesis flow. Multiple instantiated RAMs are reported only once.
+
+DSP: Preliminary Mapping Report (see note below. The ' indicates corresponding REG is set)
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping     | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
+|fft_stage   | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+Note: The table above is a preliminary report that shows the DSPs inferred at the current stage of the synthesis flow. Some DSP may be reimplemented as non DSP primitives later in the synthesis flow. Multiple instantiated DSPs are reported only once.
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 3214.043 ; gain = 1502.773 ; free physical = 78323 ; free virtual = 85758
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+Distributed RAM: Final Mapping Report
++--------------------+--------------+----------------+----------------------+---------------+
+|Module Name         | RTL Object   | Inference      | Size (Depth x Width) | Primitives    | 
++--------------------+--------------+----------------+----------------------+---------------+
+|\stages[0].u_stage  | pfifo_re_reg | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | pfifo_im_reg | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | ram_re_reg   | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[0].u_stage  | ram_im_reg   | User Attribute | 64 x 17              | RAM64M8 x 3   | 
+|\stages[1].u_stage  | pfifo_re_reg | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | pfifo_im_reg | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | ram_re_reg   | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[1].u_stage  | ram_im_reg   | User Attribute | 32 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[2].u_stage  | ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|\stages[3].u_stage  | pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[3].u_stage  | ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[4].u_stage  | ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|\stages[5].u_stage  | ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
++--------------------+--------------+----------------+----------------------+---------------+
+
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 3214.043 ; gain = 1502.773 ; free physical = 78323 ; free virtual = 85758
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78243 ; free virtual = 85678
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78243 ; free virtual = 85678
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78243 ; free virtual = 85678
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78243 ; free virtual = 85678
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78235 ; free virtual = 85669
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78235 ; free virtual = 85669
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+Static Shift Register Report:
++------------+-------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
+|Module Name | RTL Name                            | Length | Width | Reset Signal | Pull out first Reg | Pull out last Reg | SRL16E | SRLC32E | 
++------------+-------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
+|fft_sdf     | stages[0].u_stage/d_dly3_re_reg[16] | 3      | 204   | NO           | NO                 | YES               | 204    | 0       | 
+|fft_sdf     | mk_user_reg[105]                    | 106    | 1     | NO           | YES                | YES               | 0      | 4       | 
+|fft_sdf     | mk_last_reg[105]                    | 106    | 1     | NO           | YES                | YES               | 0      | 4       | 
++------------+-------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
+
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+DSP Final Report (the ' indicates corresponding REG is set)
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping       | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|fft_stage   | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 16     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 16     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 15     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 15     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 14     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 14     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 13     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_stage   | (PCIN+A''*B'')'   | 13     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+
+Report BlackBoxes: 
++-+--------------+----------+
+| |BlackBox name |Instances |
++-+--------------+----------+
++-+--------------+----------+
+
+Report Cell Usage: 
++------+----------------+------+
+|      |Cell            |Count |
++------+----------------+------+
+|1     |BUFG            |     1|
+|2     |CARRY8          |   136|
+|3     |DSP_ALU         |    24|
+|4     |DSP_A_B_DATA    |    24|
+|5     |DSP_C_DATA      |    24|
+|6     |DSP_MULTIPLIER  |    24|
+|7     |DSP_M_DATA      |    24|
+|8     |DSP_OUTPUT      |    24|
+|9     |DSP_PREADD      |    24|
+|10    |DSP_PREADD_DATA |    24|
+|11    |LUT1            |    38|
+|12    |LUT2            |    88|
+|13    |LUT3            |  1088|
+|14    |LUT4            |    42|
+|15    |LUT5            |    42|
+|16    |LUT6            |     5|
+|17    |RAM32M16        |    30|
+|18    |RAM64M8         |    10|
+|19    |SRL16E          |   204|
+|20    |SRLC32E         |     8|
+|21    |FDRE            |  2344|
+|22    |FDSE            |   268|
+|23    |IBUF            |    38|
+|24    |OBUF            |    35|
++------+----------------+------+
+
+Report Instance Areas: 
++------+----------------------+----------------------------------------------+------+
+|      |Instance              |Module                                        |Cells |
++------+----------------------+----------------------------------------------+------+
+|1     |top                   |                                              |  4569|
+|2     |  \stages[0].u_stage  |fft_stage                                     |   793|
+|3     |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__11  |     8|
+|4     |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel__11     |     8|
+|5     |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__1   |     8|
+|6     |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__2      |     8|
+|7     |  \stages[1].u_stage  |fft_stage__parameterized0                     |   784|
+|8     |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__5   |     8|
+|9     |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel__7      |     8|
+|10    |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__8   |     8|
+|11    |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__5      |     8|
+|12    |  \stages[2].u_stage  |fft_stage__parameterized1                     |   760|
+|13    |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__10  |     8|
+|14    |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel         |     8|
+|15    |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__6   |     8|
+|16    |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__1      |     8|
+|17    |  \stages[3].u_stage  |fft_stage__parameterized2                     |   712|
+|18    |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__7   |     8|
+|19    |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel__9      |     8|
+|20    |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__2   |     8|
+|21    |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__8      |     8|
+|22    |  \stages[4].u_stage  |fft_stage__parameterized3                     |   674|
+|23    |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__4   |     8|
+|24    |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel__3      |     8|
+|25    |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__3   |     8|
+|26    |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__6      |     8|
+|27    |  \stages[5].u_stage  |fft_stage__parameterized4                     |   708|
+|28    |    lane_hi_re_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel__9   |     8|
+|29    |    mreg_re_reg       |\stages[2].u_stage/mreg_re_reg_funnel__4      |     8|
+|30    |    lane_hi_im_reg    |\stages[5].u_stage/lane_hi_im_reg_funnel      |     8|
+|31    |    mreg_im_reg       |\stages[2].u_stage/mreg_re_reg_funnel__10     |     8|
++------+----------------------+----------------------------------------------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78235 ; free virtual = 85669
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 64 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3308.855 ; gain = 1597.586 ; free physical = 78235 ; free virtual = 85669
+Synthesis Optimization Complete : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3311.824 ; gain = 1597.586 ; free physical = 78235 ; free virtual = 85669
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.02 . Memory (MB): peak = 3324.699 ; gain = 0.000 ; free physical = 78360 ; free virtual = 85794
+INFO: [Netlist 29-17] Analyzing 239 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3455.156 ; gain = 0.000 ; free physical = 78281 ; free virtual = 85716
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 103 instances were transformed.
+  BUFG => BUFGCE: 1 instance 
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 24 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 38 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 30 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 10 instances
+
+Synth Design complete | Checksum: fa54063e
+INFO: [Common 17-83] Releasing license: Vivado_Synthesis
+28 Infos, 64 Warnings, 0 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:18 ; elapsed = 00:00:16 . Memory (MB): peak = 3458.125 ; gain = 1746.855 ; free physical = 78281 ; free virtual = 85716
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 2811.118; main = 2811.118; forked = 337.582
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 4254.105; main = 3458.129; forked = 1040.059
+# create_clock -period 2.0 -name clk [get_ports clk]
+# report_utilization -file [file join $outdir util.txt]
+# report_timing_summary -delay_type max -max_paths 10 -file [file join $outdir timing.txt]
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -1, Temperature grade: E, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+report_timing_summary: Time (s): cpu = 00:00:16 ; elapsed = 00:00:13 . Memory (MB): peak = 4369.090 ; gain = 910.965 ; free physical = 77527 ; free virtual = 84961
+# write_checkpoint -force [file join $outdir synth.dcp]
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.01 . Memory (MB): peak = 4401.105 ; gain = 0.000 ; free physical = 77527 ; free virtual = 84961
+INFO: [Common 17-1381] The checkpoint '/home/hannes/Projects/fftgen/spikes/S2_timing/build_ku5p/N64_7layer/synth.dcp' has been generated.
+INFO: [Common 17-206] Exiting Vivado at Mon Aug 24 22:15:02 2026...

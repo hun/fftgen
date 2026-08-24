@@ -48,3 +48,16 @@ change between accumulate steps falls back to C-port routing.
 
 Files: rtl/dsp_cascade.vhd, rtl/dsp_cascade_v.v, tcl/synth_probe.tcl,
 tcl/synth_v.tcl (probe), tcl/trace_pins.tcl (pin tracer).
+
+## Applied to fftgen (NLAYERS=7)
+
+Replaced Karatsuba with two 2-DSP cascade lanes at raw operand widths
+(re = dre*cre - dim*cim, im = dre*cim + dim*cre). N=64 KU5P OOC synth
+at 2.0 ns:
+
+    DSPs : 40 -> 24  (6 stages x 4, each product = exactly one DSP)
+    WNS  : -3.85 -> -0.020 ns
+
+Remaining critical path is entirely intra-DSP hard fabric (sender PREG
+-> PCIN -> receiver ALU -> PREG, 1.85 ns logic, zero LUTs) -- missing
+by 20 ps before place/route optimization.
