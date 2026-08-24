@@ -57,6 +57,26 @@ class TestRTLBitExact(unittest.TestCase):
     def test_multi_frame(self):
         self._check(FFTConfig(num_points=16), num_frames=4)
 
+    def test_all_order_corners(self):
+        for io, oo in (("native", "bitreversed"), ("bitreversed", "native"),
+                       ("native", "native"), ("bitreversed", "bitreversed")):
+            with self.subTest(io=io, oo=oo):
+                for N in (4, 16):
+                    self._check(FFTConfig(num_points=N, input_order=io,
+                                          output_order=oo))
+
+    def test_dit_inverse_and_freeze(self):
+        self._check(FFTConfig(num_points=16, inverse=True,
+                              input_order="bitreversed",
+                              output_order="native"))
+        self._check(FFTConfig(num_points=16, input_order="bitreversed",
+                              output_order="native"), freeze="pseudo")
+        self._check(FFTConfig(num_points=16, input_order="native",
+                              output_order="native"), freeze="bursty")
+        self._check(FFTConfig(num_points=8, input_order="bitreversed",
+                              output_order="native", sample_width=8,
+                              twiddle_width=8))
+
 
 if __name__ == "__main__":
     unittest.main()

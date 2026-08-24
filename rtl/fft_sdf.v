@@ -23,9 +23,12 @@ module fft_sdf #(
     parameter integer TWIDDLE_DECIMAL = TWIDDLE_WIDTH - 1,
     // per-stage right-shift schedule, 2 bits per stage, stage 0 in LSBs
     parameter integer SCALING_PACK   = 32'h01010101,
+    // 0 = DIF (native->bitreversed), 1 = DIT (bitreversed->native);
+    // the twiddle table contents and stage geometry follow (see below)
+    parameter integer TOPOLOGY       = 0,
     // twiddle table file: NUM_POINTS words, {re, im} signed MSB:LSB;
     // stage s occupies entries [BASE_s .. BASE_s + D_s - 1],
-    // BASE_s = sum(D_t, t < s), D_s = NUM_POINTS >> (s+1)
+    // BASE_s = sum(D_t, t < s); D_s = N>>(s+1) (DIF) or 2^s (DIT)
     parameter TWIDDLE_FILE           = "fft_twiddles.mem",
     // internal growth headroom, generator-derived:
     // SAMPLE_WIDTH + max(0, num_stages - total_shift) + 1
@@ -111,9 +114,12 @@ module fft_sdf #(
     genvar g;
     generate
         for (g = 0; g < NSTAGES; g = g + 1) begin : stages
-            localparam integer DEPTH     = N >> (g + 1);
+            localparam integer DEPTH     = (TOPOLOGY == 1) ? (1 << g)
+                                                           : (N >> (g + 1));
             localparam integer SHIFT     = (SCALING_PACK >> (2*g)) & 3;
-            localparam integer SUM_D     = N - (N >> g);   // sum(D_t, t<g)
+            // sum of delay depths of stages t < g (ROM base)
+            localparam integer SUM_D     = (TOPOLOGY == 1) ? ((1 << g) - 1)
+                                                           : (N - (N >> g));
             // FSM alignment preload (appendix A):
             //   warm_s = -(SUM_D + s) mod 2*D_s
             localparam integer WARM      =
@@ -134,7 +140,8 @@ module fft_sdf #(
                 .ROM_BASE       (SUM_D),
                 .NPTS           (N),
                 .PRELOAD_I      (PRELOAD_I),
-                .PRELOAD_C      (PRELOAD_C)
+                .PRELOAD_C      (PRELOAD_C),
+                .TOPOLOGY       (TOPOLOGY)
             ) u_stage (
                 .clk      (clk),
                 .ce       (run),
@@ -232,7 +239,8 @@ module fft_stage #(
     parameter integer ROM_BASE       = 0,
     parameter integer NPTS           = 16,
     parameter integer PRELOAD_I      = 0,    // FSM alignment preload
-    parameter         PRELOAD_C      = 0     // start in COMPUTE phase
+    parameter         PRELOAD_C      = 0,    // start in COMPUTE phase
+    parameter integer TOPOLOGY       = 0     // 0 = DIF, 1 = DIT
 )(
     input  wire             clk,
     input  wire             ce,
@@ -320,26 +328,46 @@ module fft_stage #(
                 mem_re[ptr] <= in_re;
                 mem_im[ptr] <= in_im;
             end else begin
-                // COMPUTE: pair input a (newer) with delayed d (older)
-                nxt_sum_re = round_shift(w_in_re + w_d_re, SHIFT);
-                nxt_sum_im = round_shift(w_in_im + w_d_im, SHIFT);
-                out_re     <= nxt_sum_re[WIDTH-1:0];
-                out_im     <= nxt_sum_im[WIDTH-1:0];
-
-                // diff contract: OLDER - NEWER
-                // Karatsuba 3-product form (PLAN.md 2.6):
-                //   m1 = dr*tr, m2 = di*ti, m3 = (dr+di)*(tr+ti)
-                //   re = m1 - m2,  im = m3 - m1 - m2
-                // three PARALLEL multiplies + fabric adder tree -- avoids
-                // the 4-deep DSP ALU cascade the fused 4-product form
-                // synthesized into (spike S2). Exact integer arithmetic:
-                // bit-identical to the direct form by construction.
-                m1r = (w_d_re - w_in_re) * w_t_re;
-                m2r = (w_d_im - w_in_im) * w_t_im;
-                m3r = ((w_d_re - w_in_re) + (w_d_im - w_in_im))
-                      * (w_t_re + w_t_im);
-                nxt_pr_re = round_shift(m1r - m2r, TD_PLUS_SHIFT);
-                nxt_pr_im = round_shift(m3r - m1r - m2r, TD_PLUS_SHIFT);
+                // COMPUTE: pair input a (newer) with delayed d (older);
+                // the sum path (stage output) is topology-specific and set
+                // inside the branches below
+                if (TOPOLOGY == 0) begin
+                    // DIF: butterfly first, twiddle on the diff path.
+                    // Karatsuba 3-product form (PLAN.md 2.6), three
+                    // PARALLEL multiplies + fabric adder tree -- avoids the
+                    // DSP ALU cascade (spike S2). Exact arithmetic.
+                    m1r = (w_d_re - w_in_re) * w_t_re;
+                    m2r = (w_d_im - w_in_im) * w_t_im;
+                    m3r = ((w_d_re - w_in_re) + (w_d_im - w_in_im))
+                          * (w_t_re + w_t_im);
+                    nxt_pr_re = round_shift(m1r - m2r, TD_PLUS_SHIFT);
+                    nxt_pr_im = round_shift(m3r - m1r - m2r, TD_PLUS_SHIFT);
+                    // sum path (stage output): butterfly sum, sigma shift
+                    nxt_sum_re = round_shift(w_in_re + w_d_re, SHIFT);
+                    nxt_sum_im = round_shift(w_in_im + w_d_im, SHIFT);
+                    out_re <= nxt_sum_re[WIDTH-1:0];
+                    out_im <= nxt_sum_im[WIDTH-1:0];
+                end else begin
+                    // DIT: twiddle multiplies the NEWER input first, then
+                    // combine at 2^td scale, ONE fused rounding shift.
+                    m1r = w_in_re * w_t_re;
+                    m2r = w_in_im * w_t_im;
+                    m3r = (w_in_re + w_in_im) * (w_t_re + w_t_im);
+                    nxt_sum_re = round_shift(
+                        ((w_d_re << TWIDDLE_DECIMAL) + (m1r - m2r)),
+                        TD_PLUS_SHIFT);
+                    nxt_sum_im = round_shift(
+                        ((w_d_im << TWIDDLE_DECIMAL) + (m3r - m1r - m2r)),
+                        TD_PLUS_SHIFT);
+                    nxt_pr_re = round_shift(
+                        ((w_d_re << TWIDDLE_DECIMAL) - (m1r - m2r)),
+                        TD_PLUS_SHIFT);
+                    nxt_pr_im = round_shift(
+                        ((w_d_im << TWIDDLE_DECIMAL) - (m3r - m1r - m2r)),
+                        TD_PLUS_SHIFT);
+                    out_re <= nxt_sum_re[WIDTH-1:0];
+                    out_im <= nxt_sum_im[WIDTH-1:0];
+                end
                 mem_re[ptr] <= nxt_pr_re[WIDTH-1:0];
                 mem_im[ptr] <= nxt_pr_im[WIDTH-1:0];
             end

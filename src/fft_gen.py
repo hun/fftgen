@@ -17,7 +17,7 @@ from typing import List, Optional, Sequence, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 
 from config import FFTConfig
-from golden import SDFGoldenModel
+from golden import OrderedFFTModel
 from stimuli import freeze_mask, random_frame
 
 
@@ -37,10 +37,16 @@ def write_twiddle_mem(cfg: FFTConfig, path: str) -> None:
     tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal,
                             cfg.inverse)
     words = []
+    dit = cfg.is_dit
     for s in range(cfg.num_stages):
-        D = N >> (s + 1)
-        for i in range(D):
-            re, im = tw[(i << s) % N]
+        if dit:
+            D = 1 << s
+            idxs = [(j << (cfg.num_stages - s - 1)) % N for j in range(D)]
+        else:
+            D = N >> (s + 1)
+            idxs = [(i << s) % N for i in range(D)]
+        for k in idxs:
+            re, im = tw[k]
             packed = ((re & ((1 << cfg.twiddle_width) - 1)) << cfg.twiddle_width) \
                      | (im & ((1 << cfg.twiddle_width) - 1))
             words.append(packed)
@@ -69,8 +75,15 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     frames = [random_frame(N, cfg.sample_width, rng) for _ in range(num_frames)]
     samples = [s for fr in frames for s in fr]
 
-    # golden expected
-    m = SDFGoldenModel(cfg)
+    # DIT consumes bit-reversed input order: reorder BEFORE the expected
+    # is computed (expected must see the same stream the core consumes)
+    if cfg.is_dit:
+        br = [int(format(k, f"0{cfg.num_stages}b")[::-1], 2)
+              for k in range(N)]
+        samples = [fr[br[j]] for fr in frames for j in range(N)]
+
+    # golden expected (OrderedFFTModel covers every order corner)
+    m = OrderedFFTModel(cfg)
     markers = _markers(N, num_frames)
     expected = m.process_stream(samples, markers=markers)
 
@@ -89,8 +102,10 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
             f.write(f"{re} {im} {u} {l}\n")
 
     # RTL + twiddle ROM
-    shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                             "rtl", "fft_sdf.v"), outdir)
+    rtl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                           "rtl")
+    for fn in ("fft_sdf.v", "fft_reorder.v", "fft_top.v"):
+        shutil.copy(os.path.join(rtl_dir, fn), outdir)
     write_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles.mem"))
 
     # build with verilator
@@ -101,6 +116,10 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     pack = 0
     for s, sh in enumerate(cfg.shifts):
         pack |= (sh & 3) << (2 * s)
+    # reorder needed when the outer output order differs from the core's
+    # natural output order (bitreversed for DIF, native for DIT)
+    core_out = "bitreversed" if not cfg.is_dit else "native"
+    reorder_out = (cfg.output_order != core_out)
     gargs = [
         f"-GNUM_POINTS={cfg.num_points}",
         f"-GSAMPLE_WIDTH={cfg.sample_width}",
@@ -111,18 +130,20 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GTWIDDLE_DECIMAL={cfg.twiddle_decimal}",
         f"-GSCALING_PACK=32'h{pack:08x}",
         f"-GINTERN_WIDTH={intern}",
+        f"-GTOPOLOGY={'1' if cfg.is_dit else '0'}",
+        f"-GREORDER_OUT={'1' if reorder_out else '0'}",
     ]
     cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
-           "--top-module", "fft_sdf", "-Wno-fatal",
+           "--top-module", "fft_top", "-Wno-fatal",
            "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
                       f"-DTB_OUTPUT_WIDTH={cfg.output_width}",
            *gargs,
-           "fft_sdf.v", tb]
+           "fft_top.v", "fft_sdf.v", "fft_reorder.v", tb]
     r = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
 
-    r = subprocess.run([os.path.join("obj_dir", "Vfft_sdf")],
+    r = subprocess.run([os.path.join("obj_dir", "Vfft_top")],
                        cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}

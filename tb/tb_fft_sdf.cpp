@@ -9,7 +9,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include "Vfft_sdf.h"
+#include "Vfft_top.h"
 #include "verilated.h"
 
 struct Smp { int64_t re, im; int u, l; };
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
     }
 
     Verilated::traceEverOn(false);
-    Vfft_sdf* dut = new Vfft_sdf;
+    Vfft_top* dut = new Vfft_top;
     dut->rst = 1;
     dut->ce = 0;
     dut->s_axis_tvalid = 0;
