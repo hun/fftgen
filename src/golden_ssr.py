@@ -126,6 +126,8 @@ class SSRGoldenModel:
         # the lanes carry A_r[p] with p counted from THEIR first valid
         # output (they all share the same latency, hence lockstep)
         p = (self._cycles - self.lanes[0].latency) % M
+        self._dbg_p = p
+        self._dbg_lane = [(lo[1], lo[2], lo[0]) for lo in lane_out]
         filled = self._cycles > self.lanes[0].latency + self.CB_LAT
         if not self._synced:
             if filled and p == 0:
@@ -138,9 +140,13 @@ class SSRGoldenModel:
         if valid:
             ow = self.cfg.output_width
             od = self.cfg.output_decimal
-            # BOTH twiddle tables are Q_td: the product chain carries
-            # od + 2*td fractional bits
-            frac = od + 2 * self.cfg.twiddle_decimal
+            # pre-twiddled products carry od + td fractional bits; the
+            # lane-DFT coefficients W_R^{rq} are applied EXACTLY (for
+            # R <= 4 they are in {0, +-1, +-j}), matching an RTL crossbar
+            # that omits trivial multiplications entirely
+            frac = od + self.cfg.twiddle_decimal
+            inv = self.cfg.inverse
+            sgn = -1 if inv else 1
             for q in range(R):
                 sr = si = 0
                 for r in range(R):
@@ -148,9 +154,21 @@ class SSRGoldenModel:
                     wr, wi = self.wn[r][p]
                     tr = vr * wr - vi * wi
                     ti = vr * wi + vi * wr
-                    qr, qi = self.wr[r][q]
-                    sr += tr * qr - ti * qi
-                    si += tr * qi + ti * qr
+                    # exact W_R^{rq}: angle = -sgn*2*pi*rq/R
+                    m = (r * q) % R
+                    if m == 0:
+                        cr, ci = 1, 0
+                    elif m * 4 == R:
+                        cr, ci = 0, (-sgn)
+                    elif m * 2 == R:
+                        cr, ci = -1, 0
+                    elif m * 4 == 3 * R:
+                        cr, ci = 0, sgn
+                    else:
+                        raise NotImplementedError(
+                            "SSR v1 supports exact W_R only for R <= 4")
+                    sr += tr * cr - ti * ci
+                    si += tr * ci + ti * cr
                 sr = round_shift(sr, self.s_x)
                 si = round_shift(si, self.s_x)
                 outs.append(quantize_output(sr, si, frac, ow, od))

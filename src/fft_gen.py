@@ -57,6 +57,192 @@ def write_twiddle_mem(cfg: FFTConfig, path: str) -> None:
             f.write(_hex(w, cfg.twiddle_width * 2) + "\n")
 
 
+def write_lane_twiddle_mem(cfg_m: FFTConfig, path: str) -> None:
+    """Lane twiddle ROM for SSR: plain M-point layout (stage bases are
+    irrelevant to the lane engines' ROM_BASE offsets -- reuse the R=1
+    generator layout)."""
+    write_twiddle_mem(cfg_m, path)
+
+
+def write_wn_mem(cfg: FFTConfig, path: str) -> None:
+    """Crossbar pre-twiddle ROM for fft_cross.v:
+    R*M words, row r = 0..R-1 holds W_N^{r*p} for p in [0,M)."""
+    from twiddles import canonical_twiddles
+    N, R = cfg.num_points, cfg.ssr
+    M = N // R
+    tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal,
+                            cfg.inverse)
+    with open(path, "w") as f:
+        for r in range(R):
+            for p in range(M):
+                re, im = tw[(r * p) % N]
+                packed = ((re & ((1 << cfg.twiddle_width) - 1))
+                          << cfg.twiddle_width) \
+                         | (im & ((1 << cfg.twiddle_width) - 1))
+                f.write(_hex(packed, cfg.twiddle_width * 2) + "\n")
+
+
+def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
+                 seed: int = 1, quiet: bool = True) -> dict:
+    """SSR build: R lanes of M-point fft_top + fft_cross. v1 contract:
+    native input, native (block-contiguous) output. Bit-exactness is
+    checked against SSRGoldenModel within the documented double-
+    quantization tolerance."""
+    import shutil
+    os.makedirs(outdir, exist_ok=True)
+    N, R = cfg.num_points, cfg.ssr
+    assert cfg.input_order == "native" and cfg.output_order == "native"
+    M = N // R
+
+    rng = __import__("random").Random(seed)
+    frames = [[(rng.randint(-2 ** (cfg.sample_width - 1),
+                              2 ** (cfg.sample_width - 1) - 1),
+                rng.randint(-2 ** (cfg.sample_width - 1),
+                            2 ** (cfg.sample_width - 1) - 1))
+               for _ in range(N)] for _ in range(num_frames)]
+    samples = [s for fr in frames for s in fr]
+    markers = []
+    for f in range(num_frames):
+        markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+
+    from golden_ssr import SSRGoldenModel
+    m = SSRGoldenModel(cfg)
+
+    # stimulus: flat natural samples, hex
+    with open(os.path.join(outdir, "stimulus.txt"), "w") as f:
+        for (re_, im_), (u, l) in zip(samples, markers):
+            f.write(f"{_hex(re_, cfg.sample_width)} "
+                    f"{_hex(im_, cfg.sample_width)} {u} {l}\n")
+
+    # expected: flat emission stream (R lines per output word)
+    got = m.process_stream(samples, markers=markers)
+    with open(os.path.join(outdir, "expected.txt"), "w") as f:
+        for re_, im_, u, l in got:
+            f.write(f"{re_} {im_} {u} {l}\n")
+        n_expected = len(got)
+
+    # RTL sources
+    rtl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                           "rtl")
+    for fn in ("fft_sdf.v", "fft_reorder.v", "fft_top.v",
+               "fft_cross.v", "fft_ssr.v"):
+        shutil.copy(os.path.join(rtl_dir, fn), outdir)
+
+    # lane config artifacts: twiddle mem + preload pack + scaling pack
+    import dataclasses
+    lane_cfg = dataclasses.replace(cfg, num_points=M, ssr=1,
+                                   input_order="native",
+                                   output_order="bitreversed")
+    write_lane_twiddle_mem(lane_cfg, os.path.join(outdir,
+                                                  "fft_twiddles_lane.mem"))
+    write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
+
+    intern_m = (cfg.sample_width
+                + max(0, lane_cfg.num_stages - sum(lane_cfg.shifts)) + 1)
+    pack_m = 0
+    for s_, sh in enumerate(lane_cfg.shifts):
+        pack_m |= (sh & 3) << (2 * s_)
+    from golden import SDFGoldenModel
+    SDFGoldenModel(dataclasses.replace(
+        lane_cfg, input_order="native", output_order="bitreversed"), dit=False)
+    # identical field layout to the R=1 path (fft_sdf.v slices it there):
+    # per stage {wptr16, pwp16, raddr16, pipe6, phase_i8, compute1} = 63b
+    _gm = SSRGoldenModel(cfg) if False else None
+    lane_full = dataclasses.replace(cfg, num_points=M, ssr=1,
+                                    input_order="native",
+                                    output_order="bitreversed")
+    _gm = SDFGoldenModel(lane_full, dit=False)
+    pl_pack = 0
+    for i, pl in enumerate(_gm.stage_preloads):
+        pipe_bits = int("".join("1" if b else "0"
+                                for b in reversed(pl["pipe"][:6])), 2) & 0x3F
+        stage = ((pl["wptr"] & 0xFFFF)
+                 | ((pl["pwp"] & 0xFFFF) << 16)
+                 | ((pl["raddr"] & 0xFFFF) << 32)
+                 | (pipe_bits << 48)
+                 | ((pl["phase_i"] & 0xFF) << 54)
+                 | ((1 if pl["compute"] else 0) << 62))
+        pl_pack |= stage << (63 * i)
+    with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
+        f.write("`define FFTGEN_PRELOAD_PACK 512'h%0128x\n" % pl_pack)
+
+    tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                      "tb", "tb_fft_ssr.cpp")
+    gargs = [
+        "+define+FFTGEN_PRELOADS",
+        "+define+TB_SSR=%d" % R,
+        "+incdir+.",
+        f"-GNUM_POINTS={N}",
+        f"-GSSR={R}",
+        f"-GSAMPLE_WIDTH={cfg.sample_width}",
+        f"-GSAMPLE_DECIMAL={cfg.sample_decimal}",
+        f"-GOUTPUT_WIDTH={cfg.output_width}",
+        f"-GOUTPUT_DECIMAL={cfg.output_decimal}",
+        f"-GTWIDDLE_WIDTH={cfg.twiddle_width}",
+        f"-GTWIDDLE_DECIMAL={cfg.twiddle_decimal}",
+        f"-GSCALING_PACK=32'h{pack_m:08x}",
+        f"-GINTERN_WIDTH={intern_m}",
+        "-GPIPE_DEPTH=7",
+    ]
+    cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+           "--top-module", "fft_ssr", "-Wno-fatal",
+           "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                      f"-DTB_OUTPUT_WIDTH={cfg.output_width} "
+                      f"-DTB_SSR={R}",
+           *gargs,
+           "fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
+           "fft_cross.v", tb]
+    r = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True)
+    if r.returncode != 0:
+        return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
+
+    r = subprocess.run([os.path.join("obj_dir", "Vfft_ssr")],
+                       cwd=outdir, capture_output=True, text=True)
+    if r.returncode != 0:
+        return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
+
+    with open(os.path.join(outdir, "expected.txt")) as f:
+        exp = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
+    with open(os.path.join(outdir, "actual.txt")) as f:
+        act = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
+    tol = R // 2 + 1
+
+    def samp_close(e, a):
+        return (all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
+                and e[2:] == a[2:])
+
+    # the RTL and golden may sync to different input frames (both drop
+    # fill until their first frame-aligned word); locate the block offset
+    # of actual[0] within expected by whole-frame (N-sample) steps
+    n_blocks_exp = len(exp) // N
+    n_blocks_act = len(act) // N
+    def vals_close(e, a):
+        return all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
+
+    d0 = None
+    for b in range(n_blocks_exp):
+        if all(vals_close(exp[b * N + e], act[e])
+               for e in range(N)):
+            d0 = b * N
+            break
+    if d0 is None:
+        return {"rc": 1, "outdir": outdir,
+                "log": "no block offset matches",
+                "first_bad": (0, act[0], exp[0])}
+    tail_e = exp[d0+1:] if False else exp[d0:]
+    n_cmp = min(len(tail_e), len(act))
+    mism = [i for i in range(n_cmp) if not samp_close(tail_e[i], act[i])]
+    # require at least one full frame of overlapping verified samples
+    ok = (n_cmp >= N) and not mism
+    first_bad = None
+    if mism:
+        i = mism[0]
+        first_bad = (i, act[i], tail_e[i])
+    return {"rc": 0 if ok else 1, "outdir": outdir,
+            "n_expected": len(exp), "n_actual": len(act),
+            "offset": d0, "first_bad": first_bad}
+
+
 def _markers(N: int, num_frames: int) -> List[Tuple[int, int]]:
     out = []
     for _ in range(num_frames):
