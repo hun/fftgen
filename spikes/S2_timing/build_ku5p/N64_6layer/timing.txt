@@ -1,0 +1,1373 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+--------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2026.1 (lin64) Build 6511674 Tue Jun 16 11:01:26 MDT 2026
+| Date              : Mon Aug 24 21:22:31 2026
+| Host              : hannes-x470aorusultragaming running 64-bit Ubuntu 26.04 LTS
+| Command           : report_timing_summary -delay_type max -max_paths 10 -file build_ku5p/N64_6layer/timing.txt
+| Design            : fft_sdf
+| Device            : xcku5p-ffva676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Synthesized
+| Temperature Grade : E
+--------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Summary Report
+
+------------------------------------------------------------------------------------------------
+| Timer Settings
+| --------------
+------------------------------------------------------------------------------------------------
+
+  Enable Multi Corner Analysis               :  Yes
+  Enable Pessimism Removal                   :  Yes
+  Pessimism Removal Resolution               :  Nearest Common Node
+  Enable Input Delay Default Clock           :  No
+  Enable Preset / Clear Arcs                 :  No
+  Disable Flight Delays                      :  No
+  Ignore I/O Paths                           :  No
+  Timing Early Launch at Borrowing Latches   :  No
+  Borrow Time for Max Delay Exceptions       :  Yes
+  Merge Timing Exceptions                    :  Yes
+  Inter-SLR Compensation                     :  Conservative
+
+  Corner  Analyze    Analyze    
+  Name    Max Paths  Min Paths  
+  ------  ---------  ---------  
+  Slow    Yes        Yes        
+  Fast    Yes        Yes        
+
+
+------------------------------------------------------------------------------------------------
+| Report Methodology
+| ------------------
+------------------------------------------------------------------------------------------------
+
+No report available as report_methodology has not been run prior. Run report_methodology on the current design for the summary of methodology violations.
+
+
+
+check_timing report
+
+Table of Contents
+-----------------
+1. checking no_clock (0)
+2. checking constant_clock (0)
+3. checking pulse_width_clock (0)
+4. checking unconstrained_internal_endpoints (0)
+5. checking no_input_delay (37)
+6. checking no_output_delay (35)
+7. checking multiple_clock (0)
+8. checking generated_clocks (0)
+9. checking loops (0)
+10. checking partial_input_delay (0)
+11. checking partial_output_delay (0)
+12. checking latch_loops (0)
+
+1. checking no_clock (0)
+------------------------
+ There are 0 register/latch pins with no clock.
+
+
+2. checking constant_clock (0)
+------------------------------
+ There are 0 register/latch pins with constant_clock.
+
+
+3. checking pulse_width_clock (0)
+---------------------------------
+ There are 0 register/latch pins which need pulse_width check
+
+
+4. checking unconstrained_internal_endpoints (0)
+------------------------------------------------
+ There are 0 pins that are not constrained for maximum delay.
+
+ There are 0 pins that are not constrained for maximum delay due to constant clock.
+
+
+5. checking no_input_delay (37)
+-------------------------------
+ There are 37 input ports with no input delay specified. (HIGH)
+
+ There are 0 input ports with no input delay but user has a false path constraint.
+
+
+6. checking no_output_delay (35)
+--------------------------------
+ There are 35 ports with no output delay specified. (HIGH)
+
+ There are 0 ports with no output delay but user has a false path constraint
+
+ There are 0 ports with no output delay but with a timing clock defined on it or propagating through it
+
+
+7. checking multiple_clock (0)
+------------------------------
+ There are 0 register/latch pins with multiple clocks.
+
+
+8. checking generated_clocks (0)
+--------------------------------
+ There are 0 generated clocks that are not connected to a clock source.
+
+
+9. checking loops (0)
+---------------------
+ There are 0 combinational loops in the design.
+
+
+10. checking partial_input_delay (0)
+------------------------------------
+ There are 0 input ports with partial input delay specified.
+
+
+11. checking partial_output_delay (0)
+-------------------------------------
+ There are 0 ports with partial output delay specified.
+
+
+12. checking latch_loops (0)
+----------------------------
+ There are 0 combinational latch loops in the design through latch input
+
+
+
+------------------------------------------------------------------------------------------------
+| Design Timing Summary
+| ---------------------
+------------------------------------------------------------------------------------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+    -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+     -3.852     -583.557                    228                 6336        0.427        0.000                       0                  3528  
+
+
+Timing constraints are not met.
+
+
+------------------------------------------------------------------------------------------------
+| Clock Summary
+| -------------
+------------------------------------------------------------------------------------------------
+
+Clock  Waveform(ns)         Period(ns)      Frequency(MHz)
+-----  ------------         ----------      --------------
+clk    {0.000 1.000}        2.000           500.000         
+
+
+------------------------------------------------------------------------------------------------
+| Intra Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+-----             -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+clk                -3.852     -583.557                    228                 6336        0.427        0.000                       0                  3528  
+
+
+------------------------------------------------------------------------------------------------
+| Inter Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints  
+----------    --------          -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Other Path Groups Table
+| -----------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints  
+----------    ----------    --------          -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Timing Details
+| --------------
+------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------------------------
+From Clock:  clk
+  To Clock:  clk
+
+Setup :          228  Failing Endpoints,  Worst Slack       -3.852ns,  Total Violation     -583.557ns
+Hold  :           NA  Failing Endpoints,  Worst Slack           NA  ,  Total Violation           NA
+PW    :            0  Failing Endpoints,  Worst Slack        0.427ns,  Total Violation        0.000ns
+---------------------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack (VIOLATED) :        -3.852ns  (required time - arrival time)
+  Source:                 stages[3].u_stage/tw_b_re_reg[6]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[3].u_stage/mreg_im_reg[34]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.699ns  (logic 4.222ns (74.083%)  route 1.477ns (25.917%))
+  Logic Levels:           19  (CARRY8=6 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT1=1 LUT2=1 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[3].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[3].u_stage/tw_b_re_reg[6]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 f  stages[3].u_stage/tw_b_re_reg[6]/Q
+                         net (fo=6, unplaced)         0.180     3.663    stages[3].u_stage/tw_b_re[6]
+                         LUT1 (Prop_LUT1_I0_O)        0.039     3.702 r  stages[3].u_stage/mreg_im2_i_12/O
+                         net (fo=1, unplaced)         0.025     3.727    stages[3].u_stage/mreg_im2_i_12_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.972 r  stages[3].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.979    stages[3].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[5])
+                                                      0.145     4.124 f  stages[3].u_stage/mreg_im2_i_1/O[5]
+                         net (fo=2, unplaced)         0.213     4.337    stages[3].u_stage/mreg_im2__1/B[13]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[13]_B2_DATA[13])
+                                                      0.195     4.532 r  stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[13]
+                         net (fo=1, unplaced)         0.000     4.532    stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<13>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[13]_B2B1[13])
+                                                      0.092     4.624 r  stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[13]
+                         net (fo=1, unplaced)         0.000     4.624    stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<13>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[13]_U[42])
+                                                      0.737     5.361 f  stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[42]
+                         net (fo=1, unplaced)         0.000     5.361    stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<42>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[42]_U_DATA[42])
+                                                      0.059     5.420 r  stages[3].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[42]
+                         net (fo=1, unplaced)         0.000     5.420    stages[3].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<42>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[42]_ALU_OUT[47])
+                                                      0.699     6.119 f  stages[3].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.119    stages[3].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.278 r  stages[3].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.294    stages[3].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.992 f  stages[3].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.992    stages[3].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.133 r  stages[3].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.374    stages[3].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.437 r  stages[3].u_stage/mreg_im[31]_i_26__2/O
+                         net (fo=1, unplaced)         0.025     7.462    stages[3].u_stage/mreg_im[31]_i_26__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.707 r  stages[3].u_stage/mreg_im_reg[31]_i_19__2/CO[7]
+                         net (fo=1, unplaced)         0.007     7.714    stages[3].u_stage/mreg_im_reg[31]_i_19__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.786 r  stages[3].u_stage/mreg_im_reg[34]_i_9__2/O[0]
+                         net (fo=2, unplaced)         0.214     8.000    stages[3].u_stage/mreg_im_reg[34]_i_9__2_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.085 r  stages[3].u_stage/mreg_im[31]_i_9__2/O
+                         net (fo=2, unplaced)         0.245     8.330    stages[3].u_stage/mreg_im[31]_i_9__2_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.369 r  stages[3].u_stage/mreg_im[31]_i_17__2/O
+                         net (fo=1, unplaced)         0.025     8.394    stages[3].u_stage/mreg_im[31]_i_17__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.639 r  stages[3].u_stage/mreg_im_reg[31]_i_2__2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.646    stages[3].u_stage/mreg_im_reg[31]_i_2__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[2])
+                                                      0.086     8.732 r  stages[3].u_stage/mreg_im_reg[34]_i_2__2/O[2]
+                         net (fo=1, unplaced)         0.214     8.946    stages[3].u_stage/mreg_im0[34]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.031 r  stages[3].u_stage/mreg_im[34]_i_1__2/O
+                         net (fo=1, unplaced)         0.058     9.089    stages[3].u_stage/mreg_im[34]_i_1__2_n_0
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[34]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[3].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[34]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[3].u_stage/mreg_im_reg[34]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.089    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.852    <hidden>
+
+Slack (VIOLATED) :        -3.845ns  (required time - arrival time)
+  Source:                 stages[0].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[0].u_stage/mreg_im_reg[34]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.692ns  (logic 4.179ns (73.419%)  route 1.513ns (26.581%))
+  Logic Levels:           20  (CARRY8=7 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[0].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[0].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[0].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[0].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[0].u_stage/mreg_im2_i_20/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[0].u_stage/mreg_im2_i_20_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[0].u_stage/mreg_im2_i_3/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[0].u_stage/mreg_im2_i_3_n_0
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.030     3.987 r  stages[0].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.994    stages[0].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     4.066 f  stages[0].u_stage/mreg_im2_i_1/O[0]
+                         net (fo=2, unplaced)         0.264     4.330    stages[0].u_stage/mreg_im2__1/B[16]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[16]_B2_DATA[16])
+                                                      0.195     4.525 r  stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[16]
+                         net (fo=1, unplaced)         0.000     4.525    stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<16>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[16]_B2B1[16])
+                                                      0.092     4.617 r  stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[16]
+                         net (fo=1, unplaced)         0.000     4.617    stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<16>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[16]_U[43])
+                                                      0.737     5.354 f  stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     5.354    stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     5.413 r  stages[0].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     5.413    stages[0].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     6.112 f  stages[0].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.112    stages[0].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.271 r  stages[0].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.287    stages[0].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.985 f  stages[0].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.985    stages[0].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.126 r  stages[0].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.367    stages[0].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.430 r  stages[0].u_stage/mreg_im[31]_i_26/O
+                         net (fo=1, unplaced)         0.025     7.455    stages[0].u_stage/mreg_im[31]_i_26_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.700 r  stages[0].u_stage/mreg_im_reg[31]_i_19/CO[7]
+                         net (fo=1, unplaced)         0.007     7.707    stages[0].u_stage/mreg_im_reg[31]_i_19_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.779 r  stages[0].u_stage/mreg_im_reg[34]_i_9/O[0]
+                         net (fo=2, unplaced)         0.214     7.993    stages[0].u_stage/mreg_im_reg[34]_i_9_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.078 r  stages[0].u_stage/mreg_im[31]_i_9/O
+                         net (fo=2, unplaced)         0.245     8.323    stages[0].u_stage/mreg_im[31]_i_9_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.362 r  stages[0].u_stage/mreg_im[31]_i_17/O
+                         net (fo=1, unplaced)         0.025     8.387    stages[0].u_stage/mreg_im[31]_i_17_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.632 r  stages[0].u_stage/mreg_im_reg[31]_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.639    stages[0].u_stage/mreg_im_reg[31]_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[2])
+                                                      0.086     8.725 r  stages[0].u_stage/mreg_im_reg[34]_i_2/O[2]
+                         net (fo=1, unplaced)         0.214     8.939    stages[0].u_stage/mreg_im0[34]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.024 r  stages[0].u_stage/mreg_im[34]_i_1/O
+                         net (fo=1, unplaced)         0.058     9.082    stages[0].u_stage/mreg_im[34]_i_1_n_0
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[34]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[0].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[34]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[0].u_stage/mreg_im_reg[34]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.082    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.845    <hidden>
+
+Slack (VIOLATED) :        -3.845ns  (required time - arrival time)
+  Source:                 stages[1].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[1].u_stage/mreg_im_reg[34]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.692ns  (logic 4.179ns (73.419%)  route 1.513ns (26.581%))
+  Logic Levels:           20  (CARRY8=7 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[1].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[1].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[1].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[1].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[1].u_stage/mreg_im2_i_19/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[1].u_stage/mreg_im2_i_19_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[1].u_stage/mreg_im2_i_3/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[1].u_stage/mreg_im2_i_3_n_0
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.030     3.987 r  stages[1].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.994    stages[1].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     4.066 f  stages[1].u_stage/mreg_im2_i_1/O[0]
+                         net (fo=2, unplaced)         0.264     4.330    stages[1].u_stage/mreg_im2__1/B[16]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[16]_B2_DATA[16])
+                                                      0.195     4.525 r  stages[1].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[16]
+                         net (fo=1, unplaced)         0.000     4.525    stages[1].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<16>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[16]_B2B1[16])
+                                                      0.092     4.617 r  stages[1].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[16]
+                         net (fo=1, unplaced)         0.000     4.617    stages[1].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<16>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[16]_U[43])
+                                                      0.737     5.354 f  stages[1].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     5.354    stages[1].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     5.413 r  stages[1].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     5.413    stages[1].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     6.112 f  stages[1].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.112    stages[1].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.271 r  stages[1].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.287    stages[1].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.985 f  stages[1].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.985    stages[1].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.126 r  stages[1].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.367    stages[1].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.430 r  stages[1].u_stage/mreg_im[31]_i_26__0/O
+                         net (fo=1, unplaced)         0.025     7.455    stages[1].u_stage/mreg_im[31]_i_26__0_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.700 r  stages[1].u_stage/mreg_im_reg[31]_i_19__0/CO[7]
+                         net (fo=1, unplaced)         0.007     7.707    stages[1].u_stage/mreg_im_reg[31]_i_19__0_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.779 r  stages[1].u_stage/mreg_im_reg[34]_i_9__0/O[0]
+                         net (fo=2, unplaced)         0.214     7.993    stages[1].u_stage/mreg_im_reg[34]_i_9__0_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.078 r  stages[1].u_stage/mreg_im[31]_i_9__0/O
+                         net (fo=2, unplaced)         0.245     8.323    stages[1].u_stage/mreg_im[31]_i_9__0_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.362 r  stages[1].u_stage/mreg_im[31]_i_17__0/O
+                         net (fo=1, unplaced)         0.025     8.387    stages[1].u_stage/mreg_im[31]_i_17__0_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.632 r  stages[1].u_stage/mreg_im_reg[31]_i_2__0/CO[7]
+                         net (fo=1, unplaced)         0.007     8.639    stages[1].u_stage/mreg_im_reg[31]_i_2__0_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[2])
+                                                      0.086     8.725 r  stages[1].u_stage/mreg_im_reg[34]_i_2__0/O[2]
+                         net (fo=1, unplaced)         0.214     8.939    stages[1].u_stage/mreg_im0[34]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.024 r  stages[1].u_stage/mreg_im[34]_i_1__0/O
+                         net (fo=1, unplaced)         0.058     9.082    stages[1].u_stage/mreg_im[34]_i_1__0_n_0
+                         FDSE                                         r  stages[1].u_stage/mreg_im_reg[34]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[1].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[1].u_stage/mreg_im_reg[34]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[1].u_stage/mreg_im_reg[34]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.082    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.845    <hidden>
+
+Slack (VIOLATED) :        -3.838ns  (required time - arrival time)
+  Source:                 stages[3].u_stage/tw_b_re_reg[6]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[3].u_stage/mreg_im_reg[32]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.685ns  (logic 4.208ns (74.019%)  route 1.477ns (25.981%))
+  Logic Levels:           19  (CARRY8=6 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT1=1 LUT2=1 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[3].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[3].u_stage/tw_b_re_reg[6]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 f  stages[3].u_stage/tw_b_re_reg[6]/Q
+                         net (fo=6, unplaced)         0.180     3.663    stages[3].u_stage/tw_b_re[6]
+                         LUT1 (Prop_LUT1_I0_O)        0.039     3.702 r  stages[3].u_stage/mreg_im2_i_12/O
+                         net (fo=1, unplaced)         0.025     3.727    stages[3].u_stage/mreg_im2_i_12_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.972 r  stages[3].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.979    stages[3].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[5])
+                                                      0.145     4.124 f  stages[3].u_stage/mreg_im2_i_1/O[5]
+                         net (fo=2, unplaced)         0.213     4.337    stages[3].u_stage/mreg_im2__1/B[13]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[13]_B2_DATA[13])
+                                                      0.195     4.532 r  stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[13]
+                         net (fo=1, unplaced)         0.000     4.532    stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<13>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[13]_B2B1[13])
+                                                      0.092     4.624 r  stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[13]
+                         net (fo=1, unplaced)         0.000     4.624    stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<13>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[13]_U[42])
+                                                      0.737     5.361 f  stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[42]
+                         net (fo=1, unplaced)         0.000     5.361    stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<42>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[42]_U_DATA[42])
+                                                      0.059     5.420 r  stages[3].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[42]
+                         net (fo=1, unplaced)         0.000     5.420    stages[3].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<42>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[42]_ALU_OUT[47])
+                                                      0.699     6.119 f  stages[3].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.119    stages[3].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.278 r  stages[3].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.294    stages[3].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.992 f  stages[3].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.992    stages[3].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.133 r  stages[3].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.374    stages[3].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.437 r  stages[3].u_stage/mreg_im[31]_i_26__2/O
+                         net (fo=1, unplaced)         0.025     7.462    stages[3].u_stage/mreg_im[31]_i_26__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.707 r  stages[3].u_stage/mreg_im_reg[31]_i_19__2/CO[7]
+                         net (fo=1, unplaced)         0.007     7.714    stages[3].u_stage/mreg_im_reg[31]_i_19__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.786 r  stages[3].u_stage/mreg_im_reg[34]_i_9__2/O[0]
+                         net (fo=2, unplaced)         0.214     8.000    stages[3].u_stage/mreg_im_reg[34]_i_9__2_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.085 r  stages[3].u_stage/mreg_im[31]_i_9__2/O
+                         net (fo=2, unplaced)         0.245     8.330    stages[3].u_stage/mreg_im[31]_i_9__2_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.369 r  stages[3].u_stage/mreg_im[31]_i_17__2/O
+                         net (fo=1, unplaced)         0.025     8.394    stages[3].u_stage/mreg_im[31]_i_17__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.639 r  stages[3].u_stage/mreg_im_reg[31]_i_2__2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.646    stages[3].u_stage/mreg_im_reg[31]_i_2__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     8.718 r  stages[3].u_stage/mreg_im_reg[34]_i_2__2/O[0]
+                         net (fo=1, unplaced)         0.214     8.932    stages[3].u_stage/mreg_im0[32]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.017 r  stages[3].u_stage/mreg_im[32]_i_1__2/O
+                         net (fo=1, unplaced)         0.058     9.075    stages[3].u_stage/mreg_im[32]_i_1__2_n_0
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[32]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[3].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[32]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[3].u_stage/mreg_im_reg[32]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.075    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.838    <hidden>
+
+Slack (VIOLATED) :        -3.831ns  (required time - arrival time)
+  Source:                 stages[0].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[0].u_stage/mreg_im_reg[32]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.678ns  (logic 4.165ns (73.353%)  route 1.513ns (26.647%))
+  Logic Levels:           20  (CARRY8=7 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[0].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[0].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[0].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[0].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[0].u_stage/mreg_im2_i_20/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[0].u_stage/mreg_im2_i_20_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[0].u_stage/mreg_im2_i_3/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[0].u_stage/mreg_im2_i_3_n_0
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.030     3.987 r  stages[0].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.994    stages[0].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     4.066 f  stages[0].u_stage/mreg_im2_i_1/O[0]
+                         net (fo=2, unplaced)         0.264     4.330    stages[0].u_stage/mreg_im2__1/B[16]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[16]_B2_DATA[16])
+                                                      0.195     4.525 r  stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[16]
+                         net (fo=1, unplaced)         0.000     4.525    stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<16>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[16]_B2B1[16])
+                                                      0.092     4.617 r  stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[16]
+                         net (fo=1, unplaced)         0.000     4.617    stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<16>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[16]_U[43])
+                                                      0.737     5.354 f  stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     5.354    stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     5.413 r  stages[0].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     5.413    stages[0].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     6.112 f  stages[0].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.112    stages[0].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.271 r  stages[0].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.287    stages[0].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.985 f  stages[0].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.985    stages[0].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.126 r  stages[0].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.367    stages[0].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.430 r  stages[0].u_stage/mreg_im[31]_i_26/O
+                         net (fo=1, unplaced)         0.025     7.455    stages[0].u_stage/mreg_im[31]_i_26_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.700 r  stages[0].u_stage/mreg_im_reg[31]_i_19/CO[7]
+                         net (fo=1, unplaced)         0.007     7.707    stages[0].u_stage/mreg_im_reg[31]_i_19_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.779 r  stages[0].u_stage/mreg_im_reg[34]_i_9/O[0]
+                         net (fo=2, unplaced)         0.214     7.993    stages[0].u_stage/mreg_im_reg[34]_i_9_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.078 r  stages[0].u_stage/mreg_im[31]_i_9/O
+                         net (fo=2, unplaced)         0.245     8.323    stages[0].u_stage/mreg_im[31]_i_9_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.362 r  stages[0].u_stage/mreg_im[31]_i_17/O
+                         net (fo=1, unplaced)         0.025     8.387    stages[0].u_stage/mreg_im[31]_i_17_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.632 r  stages[0].u_stage/mreg_im_reg[31]_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.639    stages[0].u_stage/mreg_im_reg[31]_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     8.711 r  stages[0].u_stage/mreg_im_reg[34]_i_2/O[0]
+                         net (fo=1, unplaced)         0.214     8.925    stages[0].u_stage/mreg_im0[32]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.010 r  stages[0].u_stage/mreg_im[32]_i_1/O
+                         net (fo=1, unplaced)         0.058     9.068    stages[0].u_stage/mreg_im[32]_i_1_n_0
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[32]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[0].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[32]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[0].u_stage/mreg_im_reg[32]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.068    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.831    <hidden>
+
+Slack (VIOLATED) :        -3.831ns  (required time - arrival time)
+  Source:                 stages[1].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[1].u_stage/mreg_im_reg[32]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.678ns  (logic 4.165ns (73.353%)  route 1.513ns (26.647%))
+  Logic Levels:           20  (CARRY8=7 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[1].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[1].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[1].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[1].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[1].u_stage/mreg_im2_i_19/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[1].u_stage/mreg_im2_i_19_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[1].u_stage/mreg_im2_i_3/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[1].u_stage/mreg_im2_i_3_n_0
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.030     3.987 r  stages[1].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.994    stages[1].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     4.066 f  stages[1].u_stage/mreg_im2_i_1/O[0]
+                         net (fo=2, unplaced)         0.264     4.330    stages[1].u_stage/mreg_im2__1/B[16]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[16]_B2_DATA[16])
+                                                      0.195     4.525 r  stages[1].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[16]
+                         net (fo=1, unplaced)         0.000     4.525    stages[1].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<16>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[16]_B2B1[16])
+                                                      0.092     4.617 r  stages[1].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[16]
+                         net (fo=1, unplaced)         0.000     4.617    stages[1].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<16>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[16]_U[43])
+                                                      0.737     5.354 f  stages[1].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     5.354    stages[1].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     5.413 r  stages[1].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     5.413    stages[1].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     6.112 f  stages[1].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.112    stages[1].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.271 r  stages[1].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.287    stages[1].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.985 f  stages[1].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.985    stages[1].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.126 r  stages[1].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.367    stages[1].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.430 r  stages[1].u_stage/mreg_im[31]_i_26__0/O
+                         net (fo=1, unplaced)         0.025     7.455    stages[1].u_stage/mreg_im[31]_i_26__0_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.700 r  stages[1].u_stage/mreg_im_reg[31]_i_19__0/CO[7]
+                         net (fo=1, unplaced)         0.007     7.707    stages[1].u_stage/mreg_im_reg[31]_i_19__0_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.779 r  stages[1].u_stage/mreg_im_reg[34]_i_9__0/O[0]
+                         net (fo=2, unplaced)         0.214     7.993    stages[1].u_stage/mreg_im_reg[34]_i_9__0_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.078 r  stages[1].u_stage/mreg_im[31]_i_9__0/O
+                         net (fo=2, unplaced)         0.245     8.323    stages[1].u_stage/mreg_im[31]_i_9__0_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.362 r  stages[1].u_stage/mreg_im[31]_i_17__0/O
+                         net (fo=1, unplaced)         0.025     8.387    stages[1].u_stage/mreg_im[31]_i_17__0_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.632 r  stages[1].u_stage/mreg_im_reg[31]_i_2__0/CO[7]
+                         net (fo=1, unplaced)         0.007     8.639    stages[1].u_stage/mreg_im_reg[31]_i_2__0_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     8.711 r  stages[1].u_stage/mreg_im_reg[34]_i_2__0/O[0]
+                         net (fo=1, unplaced)         0.214     8.925    stages[1].u_stage/mreg_im0[32]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.010 r  stages[1].u_stage/mreg_im[32]_i_1__0/O
+                         net (fo=1, unplaced)         0.058     9.068    stages[1].u_stage/mreg_im[32]_i_1__0_n_0
+                         FDSE                                         r  stages[1].u_stage/mreg_im_reg[32]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[1].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[1].u_stage/mreg_im_reg[32]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[1].u_stage/mreg_im_reg[32]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.068    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.831    <hidden>
+
+Slack (VIOLATED) :        -3.830ns  (required time - arrival time)
+  Source:                 stages[2].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[2].u_stage/mreg_im_reg[34]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.677ns  (logic 4.222ns (74.370%)  route 1.455ns (25.630%))
+  Logic Levels:           19  (CARRY8=6 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[2].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[2].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[2].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[2].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[2].u_stage/mreg_im2_i_16/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[2].u_stage/mreg_im2_i_16_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[2].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[2].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[5])
+                                                      0.145     4.102 f  stages[2].u_stage/mreg_im2_i_1/O[5]
+                         net (fo=2, unplaced)         0.213     4.315    stages[2].u_stage/mreg_im2__1/B[13]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[13]_B2_DATA[13])
+                                                      0.195     4.510 r  stages[2].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[13]
+                         net (fo=1, unplaced)         0.000     4.510    stages[2].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<13>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[13]_B2B1[13])
+                                                      0.092     4.602 r  stages[2].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[13]
+                         net (fo=1, unplaced)         0.000     4.602    stages[2].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<13>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[13]_U[42])
+                                                      0.737     5.339 f  stages[2].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[42]
+                         net (fo=1, unplaced)         0.000     5.339    stages[2].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<42>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[42]_U_DATA[42])
+                                                      0.059     5.398 r  stages[2].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[42]
+                         net (fo=1, unplaced)         0.000     5.398    stages[2].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<42>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[42]_ALU_OUT[47])
+                                                      0.699     6.097 f  stages[2].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.097    stages[2].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.256 r  stages[2].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.272    stages[2].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.970 f  stages[2].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.970    stages[2].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.111 r  stages[2].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.352    stages[2].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.415 r  stages[2].u_stage/mreg_im[31]_i_26__1/O
+                         net (fo=1, unplaced)         0.025     7.440    stages[2].u_stage/mreg_im[31]_i_26__1_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.685 r  stages[2].u_stage/mreg_im_reg[31]_i_19__1/CO[7]
+                         net (fo=1, unplaced)         0.007     7.692    stages[2].u_stage/mreg_im_reg[31]_i_19__1_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.764 r  stages[2].u_stage/mreg_im_reg[34]_i_9__1/O[0]
+                         net (fo=2, unplaced)         0.214     7.978    stages[2].u_stage/mreg_im_reg[34]_i_9__1_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.063 r  stages[2].u_stage/mreg_im[31]_i_9__1/O
+                         net (fo=2, unplaced)         0.245     8.308    stages[2].u_stage/mreg_im[31]_i_9__1_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.347 r  stages[2].u_stage/mreg_im[31]_i_17__1/O
+                         net (fo=1, unplaced)         0.025     8.372    stages[2].u_stage/mreg_im[31]_i_17__1_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.617 r  stages[2].u_stage/mreg_im_reg[31]_i_2__1/CO[7]
+                         net (fo=1, unplaced)         0.007     8.624    stages[2].u_stage/mreg_im_reg[31]_i_2__1_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[2])
+                                                      0.086     8.710 r  stages[2].u_stage/mreg_im_reg[34]_i_2__1/O[2]
+                         net (fo=1, unplaced)         0.214     8.924    stages[2].u_stage/mreg_im0[34]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     9.009 r  stages[2].u_stage/mreg_im[34]_i_1__1/O
+                         net (fo=1, unplaced)         0.058     9.067    stages[2].u_stage/mreg_im[34]_i_1__1_n_0
+                         FDSE                                         r  stages[2].u_stage/mreg_im_reg[34]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[2].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[2].u_stage/mreg_im_reg[34]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[2].u_stage/mreg_im_reg[34]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.067    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.830    <hidden>
+
+Slack (VIOLATED) :        -3.816ns  (required time - arrival time)
+  Source:                 stages[2].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[2].u_stage/mreg_im_reg[32]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.663ns  (logic 4.208ns (74.307%)  route 1.455ns (25.693%))
+  Logic Levels:           19  (CARRY8=6 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[2].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[2].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[2].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[2].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[2].u_stage/mreg_im2_i_16/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[2].u_stage/mreg_im2_i_16_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[2].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[2].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[5])
+                                                      0.145     4.102 f  stages[2].u_stage/mreg_im2_i_1/O[5]
+                         net (fo=2, unplaced)         0.213     4.315    stages[2].u_stage/mreg_im2__1/B[13]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[13]_B2_DATA[13])
+                                                      0.195     4.510 r  stages[2].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[13]
+                         net (fo=1, unplaced)         0.000     4.510    stages[2].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<13>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[13]_B2B1[13])
+                                                      0.092     4.602 r  stages[2].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[13]
+                         net (fo=1, unplaced)         0.000     4.602    stages[2].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<13>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[13]_U[42])
+                                                      0.737     5.339 f  stages[2].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[42]
+                         net (fo=1, unplaced)         0.000     5.339    stages[2].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<42>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[42]_U_DATA[42])
+                                                      0.059     5.398 r  stages[2].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[42]
+                         net (fo=1, unplaced)         0.000     5.398    stages[2].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<42>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[42]_ALU_OUT[47])
+                                                      0.699     6.097 f  stages[2].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.097    stages[2].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.256 r  stages[2].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.272    stages[2].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.970 f  stages[2].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.970    stages[2].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.111 r  stages[2].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.352    stages[2].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.415 r  stages[2].u_stage/mreg_im[31]_i_26__1/O
+                         net (fo=1, unplaced)         0.025     7.440    stages[2].u_stage/mreg_im[31]_i_26__1_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.685 r  stages[2].u_stage/mreg_im_reg[31]_i_19__1/CO[7]
+                         net (fo=1, unplaced)         0.007     7.692    stages[2].u_stage/mreg_im_reg[31]_i_19__1_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.764 r  stages[2].u_stage/mreg_im_reg[34]_i_9__1/O[0]
+                         net (fo=2, unplaced)         0.214     7.978    stages[2].u_stage/mreg_im_reg[34]_i_9__1_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.063 r  stages[2].u_stage/mreg_im[31]_i_9__1/O
+                         net (fo=2, unplaced)         0.245     8.308    stages[2].u_stage/mreg_im[31]_i_9__1_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.347 r  stages[2].u_stage/mreg_im[31]_i_17__1/O
+                         net (fo=1, unplaced)         0.025     8.372    stages[2].u_stage/mreg_im[31]_i_17__1_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.617 r  stages[2].u_stage/mreg_im_reg[31]_i_2__1/CO[7]
+                         net (fo=1, unplaced)         0.007     8.624    stages[2].u_stage/mreg_im_reg[31]_i_2__1_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     8.696 r  stages[2].u_stage/mreg_im_reg[34]_i_2__1/O[0]
+                         net (fo=1, unplaced)         0.214     8.910    stages[2].u_stage/mreg_im0[32]
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.995 r  stages[2].u_stage/mreg_im[32]_i_1__1/O
+                         net (fo=1, unplaced)         0.058     9.053    stages[2].u_stage/mreg_im[32]_i_1__1_n_0
+                         FDSE                                         r  stages[2].u_stage/mreg_im_reg[32]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[2].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[2].u_stage/mreg_im_reg[32]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[2].u_stage/mreg_im_reg[32]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.053    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.816    <hidden>
+
+Slack (VIOLATED) :        -3.816ns  (required time - arrival time)
+  Source:                 stages[3].u_stage/tw_b_re_reg[6]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[3].u_stage/mreg_im_reg[33]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.663ns  (logic 4.188ns (73.954%)  route 1.475ns (26.046%))
+  Logic Levels:           19  (CARRY8=6 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT1=1 LUT2=1 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[3].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[3].u_stage/tw_b_re_reg[6]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 f  stages[3].u_stage/tw_b_re_reg[6]/Q
+                         net (fo=6, unplaced)         0.180     3.663    stages[3].u_stage/tw_b_re[6]
+                         LUT1 (Prop_LUT1_I0_O)        0.039     3.702 r  stages[3].u_stage/mreg_im2_i_12/O
+                         net (fo=1, unplaced)         0.025     3.727    stages[3].u_stage/mreg_im2_i_12_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.972 r  stages[3].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.979    stages[3].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[5])
+                                                      0.145     4.124 f  stages[3].u_stage/mreg_im2_i_1/O[5]
+                         net (fo=2, unplaced)         0.213     4.337    stages[3].u_stage/mreg_im2__1/B[13]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[13]_B2_DATA[13])
+                                                      0.195     4.532 r  stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[13]
+                         net (fo=1, unplaced)         0.000     4.532    stages[3].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<13>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[13]_B2B1[13])
+                                                      0.092     4.624 r  stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[13]
+                         net (fo=1, unplaced)         0.000     4.624    stages[3].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<13>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[13]_U[42])
+                                                      0.737     5.361 f  stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[42]
+                         net (fo=1, unplaced)         0.000     5.361    stages[3].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<42>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[42]_U_DATA[42])
+                                                      0.059     5.420 r  stages[3].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[42]
+                         net (fo=1, unplaced)         0.000     5.420    stages[3].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<42>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[42]_ALU_OUT[47])
+                                                      0.699     6.119 f  stages[3].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.119    stages[3].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.278 r  stages[3].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.294    stages[3].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.992 f  stages[3].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.992    stages[3].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.133 r  stages[3].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.374    stages[3].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.437 r  stages[3].u_stage/mreg_im[31]_i_26__2/O
+                         net (fo=1, unplaced)         0.025     7.462    stages[3].u_stage/mreg_im[31]_i_26__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.707 r  stages[3].u_stage/mreg_im_reg[31]_i_19__2/CO[7]
+                         net (fo=1, unplaced)         0.007     7.714    stages[3].u_stage/mreg_im_reg[31]_i_19__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.786 r  stages[3].u_stage/mreg_im_reg[34]_i_9__2/O[0]
+                         net (fo=2, unplaced)         0.214     8.000    stages[3].u_stage/mreg_im_reg[34]_i_9__2_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.085 r  stages[3].u_stage/mreg_im[31]_i_9__2/O
+                         net (fo=2, unplaced)         0.245     8.330    stages[3].u_stage/mreg_im[31]_i_9__2_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.369 r  stages[3].u_stage/mreg_im[31]_i_17__2/O
+                         net (fo=1, unplaced)         0.025     8.394    stages[3].u_stage/mreg_im[31]_i_17__2_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.639 r  stages[3].u_stage/mreg_im_reg[31]_i_2__2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.646    stages[3].u_stage/mreg_im_reg[31]_i_2__2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[1])
+                                                      0.097     8.743 r  stages[3].u_stage/mreg_im_reg[34]_i_2__2/O[1]
+                         net (fo=1, unplaced)         0.212     8.955    stages[3].u_stage/mreg_im0[33]
+                         LUT3 (Prop_LUT3_I2_O)        0.040     8.995 r  stages[3].u_stage/mreg_im[33]_i_1__2/O
+                         net (fo=1, unplaced)         0.058     9.053    stages[3].u_stage/mreg_im[33]_i_1__2_n_0
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[33]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[3].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[3].u_stage/mreg_im_reg[33]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[3].u_stage/mreg_im_reg[33]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.053    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.816    <hidden>
+
+Slack (VIOLATED) :        -3.809ns  (required time - arrival time)
+  Source:                 stages[0].u_stage/tw_b_im_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            stages[0].u_stage/mreg_im_reg[33]/D
+                            (rising edge-triggered cell FDSE clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        5.656ns  (logic 4.145ns (73.285%)  route 1.511ns (26.715%))
+  Logic Levels:           20  (CARRY8=7 DSP_A_B_DATA=1 DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=2 DSP_PREADD_DATA=1 LUT2=2 LUT3=2 LUT4=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.584     3.390    stages[0].u_stage/clk_IBUF_BUFG
+                         FDRE                                         r  stages[0].u_stage/tw_b_im_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.093     3.483 r  stages[0].u_stage/tw_b_im_reg[1]/Q
+                         net (fo=1, unplaced)         0.158     3.641    stages[0].u_stage/tw_b_im[1]
+                         LUT2 (Prop_LUT2_I1_O)        0.039     3.680 r  stages[0].u_stage/mreg_im2_i_20/O
+                         net (fo=1, unplaced)         0.025     3.705    stages[0].u_stage/mreg_im2_i_20_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     3.950 r  stages[0].u_stage/mreg_im2_i_3/CO[7]
+                         net (fo=1, unplaced)         0.007     3.957    stages[0].u_stage/mreg_im2_i_3_n_0
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.030     3.987 r  stages[0].u_stage/mreg_im2_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     3.994    stages[0].u_stage/mreg_im2_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     4.066 f  stages[0].u_stage/mreg_im2_i_1/O[0]
+                         net (fo=2, unplaced)         0.264     4.330    stages[0].u_stage/mreg_im2__1/B[16]
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_B[16]_B2_DATA[16])
+                                                      0.195     4.525 r  stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA_INST/B2_DATA[16]
+                         net (fo=1, unplaced)         0.000     4.525    stages[0].u_stage/mreg_im2__1/DSP_A_B_DATA.B2_DATA<16>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[16]_B2B1[16])
+                                                      0.092     4.617 r  stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA_INST/B2B1[16]
+                         net (fo=1, unplaced)         0.000     4.617    stages[0].u_stage/mreg_im2__1/DSP_PREADD_DATA.B2B1<16>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[16]_U[43])
+                                                      0.737     5.354 f  stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     5.354    stages[0].u_stage/mreg_im2__1/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     5.413 r  stages[0].u_stage/mreg_im2__1/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     5.413    stages[0].u_stage/mreg_im2__1/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     6.112 f  stages[0].u_stage/mreg_im2__1/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     6.112    stages[0].u_stage/mreg_im2__1/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     6.271 r  stages[0].u_stage/mreg_im2__1/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     6.287    stages[0].u_stage/mreg_im2__2/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.985 f  stages[0].u_stage/mreg_im2__2/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.985    stages[0].u_stage/mreg_im2__2/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[0]_P[0])
+                                                      0.141     7.126 r  stages[0].u_stage/mreg_im2__2/DSP_OUTPUT_INST/P[0]
+                         net (fo=2, unplaced)         0.241     7.367    stages[0].u_stage/mreg_im2__2_n_105
+                         LUT2 (Prop_LUT2_I0_O)        0.063     7.430 r  stages[0].u_stage/mreg_im[31]_i_26/O
+                         net (fo=1, unplaced)         0.025     7.455    stages[0].u_stage/mreg_im[31]_i_26_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     7.700 r  stages[0].u_stage/mreg_im_reg[31]_i_19/CO[7]
+                         net (fo=1, unplaced)         0.007     7.707    stages[0].u_stage/mreg_im_reg[31]_i_19_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.072     7.779 r  stages[0].u_stage/mreg_im_reg[34]_i_9/O[0]
+                         net (fo=2, unplaced)         0.214     7.993    stages[0].u_stage/mreg_im_reg[34]_i_9_n_15
+                         LUT3 (Prop_LUT3_I2_O)        0.085     8.078 r  stages[0].u_stage/mreg_im[31]_i_9/O
+                         net (fo=2, unplaced)         0.245     8.323    stages[0].u_stage/mreg_im[31]_i_9_n_0
+                         LUT4 (Prop_LUT4_I3_O)        0.039     8.362 r  stages[0].u_stage/mreg_im[31]_i_17/O
+                         net (fo=1, unplaced)         0.025     8.387    stages[0].u_stage/mreg_im[31]_i_17_n_0
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.245     8.632 r  stages[0].u_stage/mreg_im_reg[31]_i_2/CO[7]
+                         net (fo=1, unplaced)         0.007     8.639    stages[0].u_stage/mreg_im_reg[31]_i_2_n_0
+                         CARRY8 (Prop_CARRY8_CI_O[1])
+                                                      0.097     8.736 r  stages[0].u_stage/mreg_im_reg[34]_i_2/O[1]
+                         net (fo=1, unplaced)         0.212     8.948    stages[0].u_stage/mreg_im0[33]
+                         LUT3 (Prop_LUT3_I2_O)        0.040     8.988 r  stages[0].u_stage/mreg_im[33]_i_1/O
+                         net (fo=1, unplaced)         0.058     9.046    stages[0].u_stage/mreg_im[33]_i_1_n_0
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[33]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=3617, unplaced)      2.439     4.944    stages[0].u_stage/clk_IBUF_BUFG
+                         FDSE                                         r  stages[0].u_stage/mreg_im_reg[33]/C
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         FDSE (Setup_FDSE_C_D)        0.027     5.236    stages[0].u_stage/mreg_im_reg[33]
+  -------------------------------------------------------------------
+                         required time                          5.236    <hidden>
+                         arrival time                          -9.046    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -3.809    <hidden>
+
+
+
+
+
+Pulse Width Checks
+--------------------------------------------------------------------------------------
+Clock Name:         clk
+Waveform(ns):       { 0.000 1.000 }
+Period(ns):         2.000
+Sources:            { clk }
+
+Check Type        Corner  Lib Pin      Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location  Pin
+Min Period        n/a     BUFGCE/I     n/a            1.499         2.000       0.501                clk_IBUF_BUFG_inst/I
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_last_reg[32]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_last_reg[64]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_last_reg[96]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_last_reg[98]_srl2/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_user_reg[32]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_user_reg[64]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_user_reg[96]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                mk_user_reg[98]_srl2/CLK
+Min Period        n/a     RAMD64E/CLK  n/a            1.146         2.000       0.854                stages[0].u_stage/pfifo_im_reg_0_63_0_6/RAMA/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[32]_srl32/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[32]_srl32/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[64]_srl32/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[64]_srl32/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[96]_srl32/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[96]_srl32/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[98]_srl2/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[98]_srl2/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_user_reg[32]_srl32/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_user_reg[32]_srl32/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[32]_srl32/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[32]_srl32/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[64]_srl32/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[64]_srl32/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[96]_srl32/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[96]_srl32/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[98]_srl2/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_last_reg[98]_srl2/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_user_reg[32]_srl32/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                mk_user_reg[32]_srl32/CLK
+
+
+

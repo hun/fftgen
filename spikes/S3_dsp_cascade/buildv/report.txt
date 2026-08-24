@@ -1,0 +1,13 @@
+DSPs: 4
+--- acc1 PREG=0 MREG=0
+    PCOUT -> (none)
+    PCIN <- (none)
+--- p0_reg PREG=1 MREG=0
+    PCOUT -> p1_reg
+    PCIN <- (none)
+--- p1_reg PREG=1 MREG=0
+    PCOUT -> p2_reg
+    PCIN <- p0_reg/DSP_OUTPUT_INST
+--- p2_reg PREG=1 MREG=0
+    PCOUT -> (none)
+    PCIN <- p1_reg/DSP_OUTPUT_INST

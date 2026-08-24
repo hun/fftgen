@@ -1,0 +1,283 @@
+INFO: [Common 17-3922] A valid Vivado Design Suite BASIC license has been detected. Your current license is active and will expire on 21-jul-2027.
+
+****** Vivado v2026.1 (64-bit)
+  **** SW Build 6511674 on Tue Jun 16 11:01:26 MDT 2026
+  **** IP Build 6504888 on Tue Jun 09 09:05:25 MDT 2026
+  **** SharedData Build 6501428 on Mon Jun 08 17:34:18 MDT 2026
+  **** Start of session at: Mon Aug 24 21:25:53 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source tcl/synth_probe.tcl
+# set part   [lindex $argv 0]
+# set outdir [lindex $argv 1]
+# set src    [lindex $argv 2]
+# file mkdir $outdir
+# create_project -in_memory -part $part
+# add_files -fileset sources_1 $src
+# set_property top dsp_cascade [current_fileset]
+# set_property file_type {VHDL 2008} [get_files $src]
+# synth_design -top dsp_cascade
+Command: synth_design -top dsp_cascade
+Starting synth_design
+Using part: xcku5p-ffva676-1-e
+Attempting to get a license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 79943
+---------------------------------------------------------------------------------
+Starting Synthesize : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2207.160 ; gain = 495.891 ; free physical = 79445 ; free virtual = 86701
+---------------------------------------------------------------------------------
+INFO: [Synth 8-638] synthesizing module 'dsp_cascade' [/home/hannes/Projects/fftgen/spikes/S3_dsp_cascade/rtl/dsp_cascade.vhd:19]
+INFO: [Synth 8-256] done synthesizing module 'dsp_cascade' (0#1) [/home/hannes/Projects/fftgen/spikes/S3_dsp_cascade/rtl/dsp_cascade.vhd:19]
+---------------------------------------------------------------------------------
+Finished Synthesize : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2294.098 ; gain = 582.828 ; free physical = 79333 ; free virtual = 86594
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2305.973 ; gain = 594.703 ; free physical = 79331 ; free virtual = 86592
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xcku5p-ffva676-1-e
+INFO: [Device 21-403] Loading part xcku5p-ffva676-1-e
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2314.879 ; gain = 603.609 ; free physical = 79331 ; free virtual = 86592
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 2314.879 ; gain = 603.609 ; free physical = 79322 ; free virtual = 86584
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Registers : 
+	               42 Bit    Registers := 1     
+	               36 Bit    Registers := 2     
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1824 (col length:96)
+BRAMs: 960 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+DSP Report: Generating DSP p0_reg, operation Mode is: (A*B)'.
+DSP Report: register p0_reg is absorbed into DSP p0_reg.
+DSP Report: operator p00 is absorbed into DSP p0_reg.
+DSP Report: Generating DSP p1_reg, operation Mode is: (PCIN+A*B)'.
+DSP Report: register p1_reg is absorbed into DSP p1_reg.
+DSP Report: operator p10 is absorbed into DSP p1_reg.
+DSP Report: operator p11 is absorbed into DSP p1_reg.
+DSP Report: Generating DSP p2_reg, operation Mode is: (PCIN-A*B)'.
+DSP Report: register p2_reg is absorbed into DSP p2_reg.
+DSP Report: operator p20 is absorbed into DSP p2_reg.
+DSP Report: operator p21 is absorbed into DSP p2_reg.
+DSP Report: Generating DSP p3_reg, operation Mode is: (C-A*B)'.
+DSP Report: register p3_reg is absorbed into DSP p3_reg.
+DSP Report: operator p30 is absorbed into DSP p3_reg.
+DSP Report: operator ARG is absorbed into DSP p3_reg.
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 3189.691 ; gain = 1478.422 ; free physical = 78499 ; free virtual = 85762
+---------------------------------------------------------------------------------
+ Sort Area is  p0_reg_0 : 0 0 : 2514 7899 : Used 1 time 0
+ Sort Area is  p0_reg_0 : 0 1 : 2621 7899 : Used 1 time 0
+ Sort Area is  p0_reg_0 : 0 2 : 2764 7899 : Used 1 time 0
+ Sort Area is  p3_reg_4 : 0 0 : 2813 2813 : Used 1 time 0
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+DSP: Preliminary Mapping Report (see note below. The ' indicates corresponding REG is set)
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|dsp_cascade | (A*B)'      | 18     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 1    | 0    | 
+|dsp_cascade | (PCIN+A*B)' | 18     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|dsp_cascade | (PCIN-A*B)' | 18     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|dsp_cascade | (C-A*B)'    | 18     | 18     | 36     | -      | 42     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
++------------+-------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+Note: The table above is a preliminary report that shows the DSPs inferred at the current stage of the synthesis flow. Some DSP may be reimplemented as non DSP primitives later in the synthesis flow. Multiple instantiated DSPs are reported only once.
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+No constraint files found.
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 3189.691 ; gain = 1478.422 ; free physical = 78499 ; free virtual = 85762
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 3189.691 ; gain = 1478.422 ; free physical = 78499 ; free virtual = 85762
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+DSP Final Report (the ' indicates corresponding REG is set)
++------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping   | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|dsp_cascade | (A*B)'        | 30     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|dsp_cascade | (PCIN+A*B)'   | 30     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|dsp_cascade | (PCIN-(A*B))' | 30     | 18     | -      | -      | 36     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|dsp_cascade | (C-(A*B))'    | 30     | 18     | 48     | -      | 42     | 0    | 0    | 0    | -    | -     | 0    | 1    | 
++------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+
+Report BlackBoxes: 
++-+--------------+----------+
+| |BlackBox name |Instances |
++-+--------------+----------+
++-+--------------+----------+
+
+Report Cell Usage: 
++------+----------------+------+
+|      |Cell            |Count |
++------+----------------+------+
+|1     |BUFG            |     1|
+|2     |DSP_ALU         |     4|
+|3     |DSP_A_B_DATA    |     4|
+|4     |DSP_C_DATA      |     4|
+|5     |DSP_MULTIPLIER  |     4|
+|6     |DSP_M_DATA      |     4|
+|7     |DSP_OUTPUT      |     4|
+|8     |DSP_PREADD      |     4|
+|9     |DSP_PREADD_DATA |     4|
+|10    |IBUF            |   145|
+|11    |OBUF            |    42|
++------+----------------+------+
+
+Report Instance Areas: 
++------+---------+-----------------+------+
+|      |Instance |Module           |Cells |
++------+---------+-----------------+------+
+|1     |top      |                 |   220|
+|2     |  p0_reg |p3_reg_funnel__1 |     8|
+|3     |  p1_reg |p2_reg_funnel__1 |     8|
+|4     |  p2_reg |p2_reg_funnel    |     8|
+|5     |  p3_reg |p3_reg_funnel    |     8|
++------+---------+-----------------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78390 ; free virtual = 85653
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 0 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3295.504 ; gain = 1584.234 ; free physical = 78383 ; free virtual = 85646
+Synthesis Optimization Complete : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3298.473 ; gain = 1584.234 ; free physical = 78383 ; free virtual = 85646
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3308.379 ; gain = 0.000 ; free physical = 78530 ; free virtual = 85793
+INFO: [Netlist 29-17] Analyzing 150 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3391.879 ; gain = 0.000 ; free physical = 78456 ; free virtual = 85719
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 150 instances were transformed.
+  BUFG => BUFGCE: 1 instance 
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 4 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 145 instances
+
+Synth Design complete | Checksum: c041a233
+INFO: [Common 17-83] Releasing license: Vivado_Synthesis
+15 Infos, 0 Warnings, 0 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:15 ; elapsed = 00:00:14 . Memory (MB): peak = 3394.848 ; gain = 1683.578 ; free physical = 78456 ; free virtual = 85719
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 2783.379; main = 2783.379; forked = 337.357
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 4229.754; main = 3394.852; forked = 1040.059
+# create_clock -period 2.0 -name clk [get_ports clk]
+# set fh [open [file join $outdir report.txt] w]
+# set cells [get_cells -hier -filter {REF_NAME =~ DSP48E2}]
+# puts $fh "DSP48E2 instances: [llength $cells]"
+# foreach c $cells {
+#     set nm [get_property NAME $c]
+#     puts $fh "--- $nm"
+#     foreach prop {AREG BREG DREG MREG PREG USE_DPORT PREADDINSEL} {
+#         set v [get_property -quiet $prop $c]
+#         puts $fh "    $prop = $v"
+#     }
+#     # does this instance drive PCOUT into another DSP's PCIN?
+#     set pco [get_nets -quiet -of [get_pins -of $c -filter {REF_PIN_NAME == "PCOUT"}]]
+#     if {[llength $pco]} {
+#         set sinks [get_pins -quiet -of $pco -filter {REF_PIN_NAME == "PCIN"}]
+#         foreach s $sinks {
+#             puts $fh "    PCOUT -> [get_property PARENT_CELL $s]/PCIN"
+#         }
+#     } else {
+#         puts $fh "    PCOUT: unconnected"
+#     }
+# }
+WARNING: [Vivado 12-508] No pins matched 'get_pins -of p0_reg -filter {REF_PIN_NAME == "PCOUT"}'.
+WARNING: [Vivado 12-508] No pins matched 'get_pins -of p1_reg -filter {REF_PIN_NAME == "PCOUT"}'.
+WARNING: [Vivado 12-508] No pins matched 'get_pins -of p2_reg -filter {REF_PIN_NAME == "PCOUT"}'.
+WARNING: [Vivado 12-508] No pins matched 'get_pins -of p3_reg -filter {REF_PIN_NAME == "PCOUT"}'.
+# close $fh
+# report_utilization -file [file join $outdir util.txt]
+# write_checkpoint -force [file join $outdir synth.dcp]
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3410.855 ; gain = 0.000 ; free physical = 78456 ; free virtual = 85719
+INFO: [Common 17-1381] The checkpoint '/home/hannes/Projects/fftgen/spikes/S3_dsp_cascade/build/synth.dcp' has been generated.
+INFO: [Common 17-206] Exiting Vivado at Mon Aug 24 21:26:13 2026...
