@@ -111,3 +111,70 @@ Raw reports: `spikes/S1_bram_inference/build/<coding>_<geom>_<part>/util.txt`.
   will exercise the real memories end to end).
 - Single geometry family per point; the full cutoff sweep (N × R × styles
   with timing) remains P5 work as planned.
+
+---
+
+## S2 — KU3P timing estimate at 500 MHz target (spike, P2)
+
+**Question.** How bad is timing for the naive (correctness-first) RTL at the
+500 MHz UltraScale+ target?
+
+**Method.** OOC `synth_design` on `xcku3p-ffva676-1-e`, `create_clock 2.0 ns`,
+N ∈ {64, 256, 1024}, 16-bit samples, 18-bit twiddles, auto scaling.
+Sources: `spikes/S2_timing/`.
+
+### Results
+
+| N | WNS @ 2.0 ns | CLB LUTs | Registers | DSP48E2 | LUTRAM | BRAM/URAM |
+|---|---|---|---|---|---|---|
+| 64   | −5.60 ns | — | — | 72  | 176 | 0 |
+| 256  | −5.67 ns | — | — | 96  | 290 | 0 |
+| 1024 | −5.87 ns | 2520 | 522 | 120 | 746 | 0 |
+
+**WNS is N-independent** (~−5.6..−5.9 ns): the limiter is the per-stage
+datapath, not the delay-line depth. Critical path ~7.8 ns ≈ **~128 MHz
+achievable** in this naive state.
+
+### Critical path anatomy (N=64 shown; identical shape all N)
+
+```
+3.39  (flop start, hidden)
+3.92  LUTRAM async read  stages[0].u_stage/mem_re_reg
+4.54  CARRY8 chain       wide subtract (older - newer)
+5.78  DSP MULTIPLIER     __5 (17x18)
+6.69  DSP ALU            __5
+7.55  DSP ALU            __6
+8.84  DSP ALU            p_1_out__0     <- cascaded P->C
+10.12 DSP ALU            p_1_out__1     <- cascaded P->C
+```
+
+Two dominant contributors, in order:
+
+1. **4-deep DSP ALU cascade** (~5.6 ns): Vivado serializes the fused
+   expression `(d-a)*t_re - (di)*t_im` (and the im twin) through DSP
+   accumulators (P→C chaining) instead of parallel multipliers + fabric
+   adder tree. The Karatsuba 3-product form (PLAN.md 2.6) with a registered
+   P output would cut this to one registered DSP stage + one fabric add.
+2. **Async LUTRAM delay-line read** (~4.5 ns incl. subtract): the deep
+   distributed-RAM read feeds the DSP A input combinationally. The
+   BRAM-backed delay line with registered read (PLAN.md 2.7 output-register
+   policy) plus the read-address-ahead trick removes this from the path.
+
+### Resource notes
+
+- 72–120 DSPs = **6 DSPs per stage** for the 4-product complex multiply (the
+  Karatsuba form should be 3). At N=1024: 120 DSPs, 2520 LUTs, 522 FFs —
+  tiny part usage, as expected for an SDF pipeline.
+- All memories are distributed (0 BRAM): stage lines ≤ 512 deep and the
+  shared twiddle ROM. LUTRAM is fine for resources but bad for timing at
+  depth → BRAM policy (mem_policy) is a timing issue as much as an area one.
+- Only 522 registers total: the datapath is fully combinational between
+  stage registers. Pipelining (DSP native regs, registered ROM read,
+  Karatsuba restructure) is the path to 500 MHz.
+
+### Actions this feeds
+
+- P5 (and the next RTL pass): restructure the complex multiply as explicit
+  Karatsuba 3-DSP with native pipeline registers; delay lines to BRAM with
+  registered read when `mem_policy` says so; per-stage twiddle ROMs.
+  Expect ~2x clock from the DSP restructure alone; measured, not assumed.
