@@ -171,8 +171,11 @@ class _SDFStage:
     """
 
     def __init__(self, s: int, N: int, sigma: int, td: int,
-                 stage_twiddles: Sequence[Complex]):
-        self.D = N >> (s + 1)
+                 stage_twiddles: Sequence[Complex], dit: bool = False):
+        # DIF: depth N/2^(s+1) (deep at the input side);
+        # DIT: depth 2^s (mirror -- deep at the output side)
+        self.D = (1 << s) if dit else (N >> (s + 1))
+        self.dit = dit
         self.sigma = sigma
         self.td = td
         self.T = list(stage_twiddles)          # length D, index by pair i
@@ -188,23 +191,37 @@ class _SDFStage:
         result = self.out_reg
         if self.in_compute:
             d_re, d_im = self.buf.popleft()
-            sum_re = round_shift(ar + d_re, self.sigma)
-            sum_im = round_shift(ai + d_im, self.sigma)
-            # diff contract = OLDER - NEWER (matches batch reference
-            # x[i1] - x[i2]); the delayed sample d is the older one.
-            dr, di = d_re - ar, d_im - ai
-            cr, ci = self.T[self.i]
-            pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
-            sh = self.td + self.sigma          # combined normalization+scaling
-            prod = (round_shift(pr, sh), round_shift(pi, sh))
-            # write product; the line drains raw during COMPUTE and refills
-            # with products.
+            if not self.dit:
+                # DIF: butterfly first, twiddle on the diff path
+                sum_re = round_shift(ar + d_re, self.sigma)
+                sum_im = round_shift(ai + d_im, self.sigma)
+                # diff contract = OLDER - NEWER (batch x[i1] - x[i2]);
+                # delayed d is the older one.
+                dr, di = d_re - ar, d_im - ai
+                cr, ci = self.T[self.i]
+                pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
+                sh = self.td + self.sigma       # combined normalization+scaling
+                prod = (round_shift(pr, sh), round_shift(pi, sh))
+                self.out_reg = (sum_re, sum_im)
+            else:
+                # DIT: twiddle multiplies the NEWER input FIRST (exact),
+                # then combine at 2^td scale, ONE fused rounding shift
+                cr, ci = self.T[self.i]
+                tr, ti = complex_multiply_karatsuba(ar, ai, cr, ci)
+                sh = self.td + self.sigma
+                sum_re = round_shift((d_re << self.td) + tr, sh)
+                sum_im = round_shift((d_im << self.td) + ti, sh)
+                diff_re = round_shift((d_re << self.td) - tr, sh)
+                diff_im = round_shift((d_im << self.td) - ti, sh)
+                prod = (diff_re, diff_im)
+                self.out_reg = (sum_re, sum_im)
+            # write the delayed-path result; the line drains raw during
+            # COMPUTE and refills with those values.
             self.buf.append(prod)
             self.i += 1
             if self.i == self.D:
                 self.in_compute = False
                 self.i = 0
-            self.out_reg = (sum_re, sum_im)
         else:
             new_out = self.buf.popleft()       # stored product (or garbage)
             self.buf.append((ar, ai))          # fill raw
@@ -224,23 +241,35 @@ class SDFGoldenModel:
     datapath). Outputs are valid once ``enabled_cycle_count >= latency``.
     """
 
-    def __init__(self, cfg: FFTConfig):
+    def __init__(self, cfg: FFTConfig, dit: bool = False):
         if cfg.ssr != 1:
             raise NotImplementedError("SDFGoldenModel supports ssr=1 only "
                                       "(SSR composition arrives in P4)")
-        if cfg.input_order != "native" or cfg.output_order != "bitreversed":
-            raise NotImplementedError(
-                "core model covers native->bitreversed only; order "
-                "conversion lives in fft_reorder (P3)")
+        if dit:
+            if cfg.input_order != "bitreversed" or cfg.output_order != "native":
+                raise NotImplementedError(
+                    "DIT core model covers bitreversed->native only; order "
+                    "conversion lives in fft_reorder (P3)")
+        else:
+            if cfg.input_order != "native" or cfg.output_order != "bitreversed":
+                raise NotImplementedError(
+                    "DIF core model covers native->bitreversed only; order "
+                    "conversion lives in fft_reorder (P3)")
         self.cfg = cfg
         N = cfg.num_points
         self.N = N
         td = cfg.twiddle_decimal
         tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
+        self.dit = dit
+        n = cfg.num_stages
         self.stages = [
-            _SDFStage(s, N, cfg.shifts[s], td,
-                      [tw[(i << s) % N] for i in range(N >> (s + 1))])
-            for s in range(cfg.num_stages)
+            _SDFStage(
+                s, N, cfg.shifts[s], td,
+                ([tw[(j << (n - s - 1)) % N] for j in range(1 << s)]
+                 if dit else
+                 [tw[(i << s) % N] for i in range(N >> (s + 1))]),
+                dit=dit)
+            for s in range(n)
         ]
         # Combinational schedule latency is N (appendix A); the RTL adds
         # one pipeline register per stage, so the declared core latency
@@ -337,3 +366,59 @@ class SDFGoldenModel:
         assert len(outs) == len(samples), \
             f"stream model dropped samples: {len(outs)} != {len(samples)}"
         return outs
+
+
+# ----------------------------------------------------------------------
+# L1a-DIT: fixed-point batch DIT reference (bit-reversed in, natural out)
+# ----------------------------------------------------------------------
+
+def fft_fixed_batch_dit(samples, cfg, twiddles=None):
+    """Fixed-point DIT batch reference.
+
+    Input is expected in BIT-REVERSED order; output is natural order.
+    This is the mirror topology of the DIF core (PLAN.md 2.3): same
+    butterflies, twiddle multiplies BEFORE the combine.
+
+    Quantization contract (DIT-specific, pinned for the RTL):
+      t_full = x[i2] * W_k            (exact Karatsuba products)
+      sum/diff raw = (x[i1] << td) +- t_full     (exact; <<td aligns scales)
+      out = round_shift(raw, td + sigma_s)       (ONE rounding point, both
+                                                  paths -- symmetric with DIF)
+    """
+    if cfg.ssr != 1:
+        raise NotImplementedError("batch DIT supports ssr=1 only")
+    N = cfg.num_points
+    n = cfg.num_stages
+    shifts = cfg.shifts
+    td = cfg.twiddle_decimal
+    if twiddles is None:
+        twiddles = canonical_twiddles(N, cfg.twiddle_width,
+                                      cfg.twiddle_decimal, cfg.inverse)
+
+    x: List[List[int]] = [[re, im] for re, im in samples]
+
+    for s in range(n):
+        half = 1 << s
+        step = 2 * half
+        sig = shifts[s]
+        for start in range(0, N, step):
+            for j in range(half):
+                i1 = start + j
+                i2 = i1 + half
+                k = (j << (n - s - 1)) % N
+                cr, ci = twiddles[k]
+                tr, ti = complex_multiply_karatsuba(x[i2][0], x[i2][1],
+                                                    cr, ci)
+                # scale the delayed (older) value up by 2^td, add exactly,
+                # then ONE fused rounding shift
+                sr = (x[i1][0] << td) + tr
+                si = (x[i1][1] << td) + ti
+                dr = (x[i1][0] << td) - tr
+                di = (x[i1][1] << td) - ti
+                sh = td + sig
+                x[i1] = [round_shift(sr, sh), round_shift(si, sh)]
+                x[i2] = [round_shift(dr, sh), round_shift(di, sh)]
+
+    return [quantize_output(re, im, cfg.sample_decimal,
+                            cfg.output_width, cfg.output_decimal)
+            for re, im in x]
