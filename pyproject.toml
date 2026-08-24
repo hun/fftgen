@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fftgen"
+version = "0.1.0"
+description = "Parameterized streaming FFT/IFFT Verilog core generator (Xilinx)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Proprietary"}
+
+[project.optional-dependencies]
+dev = ["numpy"]
+
+[tool.setuptools]
+packages = ["src"]
