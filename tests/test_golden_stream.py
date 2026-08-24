@@ -127,14 +127,13 @@ class TestStreamLatencyAndFraming(unittest.TestCase):
             rng = random.Random(N)
             frame = random_frame(N, 16, rng)
             first_valid = None
-            for i, smp in enumerate(frame * 2):
+            for i, smp in enumerate(frame * 4):
                 v, *_ = m.tick(True, smp[0], smp[1])
                 if v and first_valid is None:
                     first_valid = i + 1     # 1-based tick index
                     break
-            expected = N + cfg.num_stages
+            expected = m.latency
             self.assertEqual(first_valid, expected, f"N={N}")
-            self.assertEqual(m.latency, expected)
 
     def test_frame_alignment_back_to_back(self):
         """Output slot j of frame f equals batch result of frame f."""

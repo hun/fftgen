@@ -170,6 +170,11 @@ class _SDFStage:
     pipeline-level valid window (see SDFGoldenModel.tick).
     """
 
+    # pipeline register layers (mirrors the pipelined RTL stage):
+    #   R2 read-data regs  -> R3 butterfly  -> R4 multiply (MREG)
+    #   -> R5 combine -> R6 shift+out
+    NLAYERS = 5   # register hops from R2 capture to R6 output
+
     def __init__(self, s: int, N: int, sigma: int, td: int,
                  stage_twiddles: Sequence[Complex], dit: bool = False):
         # DIF: depth N/2^(s+1) (deep at the input side);
@@ -179,57 +184,123 @@ class _SDFStage:
         self.sigma = sigma
         self.td = td
         self.T = list(stage_twiddles)          # length D, index by pair i
-        self.buf = deque([(0, 0)] * self.D)    # the delay line: D entries
+        # first-half delay RAM (depth 2D, collision-free: read lags write
+        # by D) and product FIFO (depth 2D, same lag). The COMPUTE product
+        # completes K cycles after its pair and is output D cycles later.
+        self.ram = [(0, 0)] * (2 * self.D)
+        self.pfifo = [(0, 0)] * (2 * self.D)
+        self.wptr = 0
+        self.pwp = 0
         self.in_compute = False                # reset state = PASS/FILL
         self.i = 0                             # pair index within phase
-        self.out_reg = (0, 0)                  # stage output register (RTL)
+        # pipeline registers
+        self.d_reg = (0, 0)                    # R2: memory read data
+        self.a_reg = (0, 0)                    # R2: input sample
+        self.tw_reg = (0, 0)                   # R2: twiddle
+        self.bfly_sum = (0, 0)                 # R3: butterfly sum path
+        self.bfly_diff = (0, 0)                # R3: butterfly diff path
+        self.mreg = (0, 0)                     # R4: multiply output
+        self.comb_sum = (0, 0)                 # R5: combine (sum path)
+        self.comb_prod = (0, 0)                # R5: combine (product path)
+        self.out_reg = (0, 0)                  # R6: stage output
+        self.pipe_comp = [False] * self.NLAYERS  # phase flags riding the pipe
+        self.sum_dly = (0, 0)                  # R4: sum-path delay register
+        self.tw_dly1 = (0, 0)                  # R3: twiddle travels with data
+        self.tw_dly2 = (0, 0)                  # R4: twiddle reaches the multiply
+        self.a_dly = (0, 0)                    # R4: a reaches the multiply (DIT)
+        self.d_dly = (0, 0)                    # R3: d first hop
+        self.d_dly2 = (0, 0)                   # R4: d reaches the combine (DIT)
+        self._ctor = (s, N, sigma, td, list(stage_twiddles), dit)
 
     def step(self, ar: int, ai: int) -> Complex:
-        """Advance one enabled cycle; returns the REGISTERED output, i.e.
-        the value computed during the previous enabled cycle -- exactly like
-        the RTL's per-stage pipeline register."""
+        """Advance one enabled cycle (pipelined RTL mirror).
+
+        FIFO depth D+K, write at w, read at w-D. The twiddle and the
+        sum/a/d operands travel delay registers alongside the datapath so
+        the multiply (R4) and combine (R5) see their pair's values.
+        """
         result = self.out_reg
-        if self.in_compute:
-            d_re, d_im = self.buf.popleft()
-            if not self.dit:
-                # DIF: butterfly first, twiddle on the diff path
-                sum_re = round_shift(ar + d_re, self.sigma)
-                sum_im = round_shift(ai + d_im, self.sigma)
-                # diff contract = OLDER - NEWER (batch x[i1] - x[i2]);
-                # delayed d is the older one.
-                dr, di = d_re - ar, d_im - ai
-                cr, ci = self.T[self.i]
-                pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
-                sh = self.td + self.sigma       # combined normalization+scaling
-                prod = (round_shift(pr, sh), round_shift(pi, sh))
-                self.out_reg = (sum_re, sum_im)
-            else:
-                # DIT: twiddle multiplies the NEWER input FIRST (exact),
-                # then combine at 2^td scale, ONE fused rounding shift
-                cr, ci = self.T[self.i]
-                tr, ti = complex_multiply_karatsuba(ar, ai, cr, ci)
-                sh = self.td + self.sigma
-                sum_re = round_shift((d_re << self.td) + tr, sh)
-                sum_im = round_shift((d_im << self.td) + ti, sh)
-                diff_re = round_shift((d_re << self.td) - tr, sh)
-                diff_im = round_shift((d_im << self.td) - ti, sh)
-                prod = (diff_re, diff_im)
-                self.out_reg = (sum_re, sum_im)
-            # write the delayed-path result; the line drains raw during
-            # COMPUTE and refills with those values.
-            self.buf.append(prod)
-            self.i += 1
-            if self.i == self.D:
-                self.in_compute = False
-                self.i = 0
+        w = self.wptr
+        r = (w - self.D) % (2 * self.D)
+        pr = (self.pwp - self.D) % (2 * self.D)
+        d_val = self.ram[r]
+        cur = self.in_compute
+        flags = [cur] + self.pipe_comp[:-1]
+        f_r6, f_r5, f_r4, f_r3 = flags[4], flags[3], flags[2], flags[1]
+
+        # R6: shift + out; product write-back to the product FIFO
+        sh_sum = self.sigma if not self.dit else self.td + self.sigma
+        sh_prod = self.td + self.sigma
+        if f_r6:
+            out_val = (round_shift(self.comb_sum[0], sh_sum),
+                       round_shift(self.comb_sum[1], sh_sum))
+            prod_val = (round_shift(self.comb_prod[0], sh_prod),
+                        round_shift(self.comb_prod[1], sh_prod))
+            self.pfifo[self.pwp] = prod_val
         else:
-            new_out = self.buf.popleft()       # stored product (or garbage)
-            self.buf.append((ar, ai))          # fill raw
-            self.i += 1
-            if self.i == self.D:
-                self.in_compute = True
-                self.i = 0
-            self.out_reg = new_out
+            out_val = self.pfifo[pr]           # product output (D later)
+        self.out_reg = out_val
+
+        # R5: combine (COMPUTE) or passthrough
+        if f_r5:
+            if not self.dit:
+                self.comb_prod = self.mreg
+                self.comb_sum = self.sum_dly
+            else:
+                tr, ti = self.mreg
+                self.comb_sum = ((self.d_dly2[0] << self.td) + tr,
+                                 (self.d_dly2[1] << self.td) + ti)
+                self.comb_prod = ((self.d_dly2[0] << self.td) - tr,
+                                  (self.d_dly2[1] << self.td) - ti)
+        else:
+            self.comb_prod = self.d_dly2
+            self.comb_sum = self.d_dly2
+
+        # R4: multiply (COMPUTE) or passthrough; delay regs advance
+        if f_r4:
+            m = ((self.bfly_diff, self.tw_dly1) if not self.dit
+                 else (self.a_dly, self.tw_dly1))
+            m1 = (m[0][0] * m[1][0], m[0][1] * m[1][1])
+            m3 = ((m[0][0] + m[0][1]) * (m[1][0] + m[1][1]),)
+            self.mreg = (m1[0] - m1[1], m3[0] - m1[0] - m1[1])
+        else:
+            self.mreg = self.d_dly2
+        self.sum_dly = self.bfly_sum
+        self.d_dly2 = self.d_dly
+
+        # R3: butterfly (COMPUTE) or passthrough; twiddle first hop
+        if f_r3:
+            if not self.dit:
+                self.bfly_diff = (self.d_reg[0] - self.a_reg[0],
+                                  self.d_reg[1] - self.a_reg[1])
+                self.bfly_sum = (self.d_reg[0] + self.a_reg[0],
+                                 self.d_reg[1] + self.a_reg[1])
+            else:
+                self.bfly_diff = self.d_reg
+                self.bfly_sum = self.a_reg
+        else:
+            self.bfly_diff = self.d_reg
+            self.bfly_sum = self.d_reg
+        self.tw_dly1 = self.tw_reg
+        self.d_dly = self.bfly_diff
+        if self.dit:
+            self.a_dly = self.bfly_sum         # a rides to the multiply
+
+        # R2: first-half RAM write (PASS only) + read capture
+        if not cur:
+            self.ram[w] = (ar, ai)             # PASS: first half, read-first
+        self.d_reg = d_val
+        self.a_reg = (ar, ai)
+        self.tw_reg = self.T[self.i]
+        self.pipe_comp = flags
+
+        # FSM advance (both pointers free-run, read lags write by D)
+        self.wptr = (w + 1) % (2 * self.D)
+        self.pwp = (self.pwp + 1) % (2 * self.D)
+        self.i += 1
+        if self.i == self.D:
+            self.in_compute = not self.in_compute
+            self.i = 0
         return result
 
 
@@ -271,19 +342,18 @@ class SDFGoldenModel:
                 dit=dit)
             for s in range(n)
         ]
-        # Combinational schedule latency is N (appendix A); the RTL adds
-        # one pipeline register per stage, so the declared core latency
-        # is N + num_stages. Verified empirically per config.
-        self.latency = N + cfg.num_stages
-        # Registered stages need FSM presets so every stage's pairing
-        # window aligns with its (register-delayed) input stream:
-        #   warm_s = -(sum(D_t, t<s) + s) mod 2*D_s
+        # Schedule latency is N (sum of delay depths) plus the pipeline
+        # register layers per stage; verified empirically per config.
+        self.latency = N + _SDFStage.NLAYERS * cfg.num_stages
+        # FSM presets align every stage's pairing window with its
+        # (register-delayed) input stream:
+        #   warm_s = -(sum(D_t, t<s) + NLAYERS*s) mod 2*D_s
         # derived exhaustively for small N, verified for large N. In RTL
         # this is a constant counter/phase preload at reset.
         self.stage_presets = []
         cum = 0
         for s, st in enumerate(self.stages):
-            warm = (-(cum + s)) % (2 * st.D)
+            warm = (-(cum + _SDFStage.NLAYERS * s)) % (2 * st.D)
             self.stage_presets.append(warm)
             for _ in range(warm):
                 st.step(0, 0)
@@ -296,11 +366,7 @@ class SDFGoldenModel:
 
     def reset(self):
         for st, warm in zip(self.stages, self.stage_presets):
-            st.buf.clear()
-            st.buf.extend([((0, 0))] * st.D)
-            st.in_compute = False
-            st.i = 0
-            st.out_reg = (0, 0)
+            st.__init__(*st._ctor)             # rebuild fresh state
             for _ in range(warm):
                 st.step(0, 0)
         self._cycles = 0
