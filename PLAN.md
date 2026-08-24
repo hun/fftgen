@@ -518,3 +518,48 @@ conceptually from firgen's DSP tables.
 13. **Width-fit policy**: **warn and synthesize anyway.** Configs wider than
     the hard multiplier's ports are legal — synthesis maps them to fabric or
     cascaded DSPs; users who want the extra bits can have them.
+
+---
+
+## Appendix A: Derived R2-SDF schedule (golden-model notes, P1)
+
+Working notes from implementing `src/golden.py`; these pin the schedule the
+RTL must reproduce.
+
+**Stage structure (stage s = 0..n-1, D_s = N/2^(s+1)):** alternating phases
+of D_s enabled cycles each, period N:
+
+- `COMPUTE` (D_s cycles): read delayed raw sample `d`, pair with input `a`;
+  emit `round_shift(a + d, sigma_s)` on the sum path; write
+  `round_shift(cmul(a - d, T[k]), td + sigma_s)` (single combined rounding
+  shift) back into the delay line. Pair index `i` runs 0..D_s-1,
+  twiddle `k = i * 2^s`.
+- `PASS/FILL` (D_s cycles): emit stored products from the line, write raw
+  inputs in. (This is exactly one read + one write per cycle = the two BRAM
+  ports of PLAN.md 2.7.)
+
+Reset state: all stages start in `PASS/FILL`. Warmup garbage is flushed by
+`out_valid = enabled_cycle >= L`.
+
+**Latency:** first valid output after `L = N - 1` enabled cycles (sum of
+D_s). The RTL adds one register per stage (declared constant, +n).
+
+**Bit-reversed output:** verified N=4 by hand: stream order equals the batch
+DIF output permutation (bit-reversal).
+
+**Quantization contract per stage:**
+- sum path: `a + b` exact, then `round_shift(., sigma_s)`
+- multiply path: exact Karatsuba products, then ONE combined
+  `round_shift(., twiddle_decimal + sigma_s)` (twiddle Q-format
+  normalization fused with stage scaling -- this is the post-DSP48P shift)
+- stage 0 structurally has no multiplier (`k = 0` for all pairs); stages
+  s >= 1 multiply unconditionally, including their `k = 0` entries
+  (uniform-datapath decision, documented bias)
+- fractional bits evolve as `f_s = sample_decimal - sum(sigma[:s])`; final
+  output rescale + saturate via `quantize_output`
+
+**Equivalence assumption for radix-2^2:** the R2^2 folding changes only
+WHICH cycles carry general multipliers, never the recursion or the rounding
+points (same butterflies, same per-stage shifts). Any R2^2 RTL computing the
+same recursion with the same per-stage shift points is bit-identical to this
+model; pinned by the batch/stream cross-checks.
