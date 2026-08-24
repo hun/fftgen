@@ -240,60 +240,76 @@ class SDFGoldenModel:
         self.latency = N      # derived + verified: see appendix A / tests
         self._cycles = 0          # enabled cycles since reset
         self.frac_out = cfg.sample_decimal
+        # frame-marker sideband rides the pipeline: one entry per enabled
+        # cycle, popped when the corresponding sample reaches the output
+        self._sb = deque()
 
     def reset(self):
         for st in self.stages:
             st.buf.clear()
-            st.buf.extend([(0, 0)] * st.D)
+            st.buf.extend([((0, 0))] * st.D)
             st.in_compute = False
             st.i = 0
         self._cycles = 0
+        self._sb = deque()
 
-    def tick(self, enabled: bool, re: int = 0, im: int = 0
-             ) -> Tuple[bool, int, int]:
+    def tick(self, enabled: bool, re: int = 0, im: int = 0,
+             tuser: int = 0, tlast: int = 0):
         """One clock. If ``enabled`` is false the datapath freezes.
 
-        Returns ``(out_valid, out_re, out_im)``.
+        Returns ``(out_valid, out_re, out_im, out_tuser, out_tlast)``.
+        The frame sidebands are transported at the fixed latency: the
+        markers fed with input sample i emerge attached to output sample i
+        (pinned by tests/test_golden_markers.py).
         """
         if not enabled:
-            return False, 0, 0
+            return False, 0, 0, 0, 0
         cur_re, cur_im = re, im
         for st in self.stages:
             cur_re, cur_im = st.step(cur_re, cur_im)
         self._cycles += 1
+        self._sb.append((tuser, tlast))
         valid = self._cycles >= self.latency
         if valid:
             ow, od = self.cfg.output_width, self.cfg.output_decimal
             cur_re, cur_im = quantize_output(cur_re, cur_im,
                                              self.frac_out, ow, od)
-        return valid, cur_re, cur_im
+            u, l = self._sb.popleft()      # marker of the matching sample
+        else:
+            u, l = 0, 0                    # warmup: suppressed anyway
+        return valid, cur_re, cur_im, u, l
 
     def process_stream(self, samples: Sequence[Complex],
-                       enable: Optional[Sequence[bool]] = None
-                       ) -> List[Complex]:
+                       enable: Optional[Sequence[bool]] = None,
+                       markers: Optional[Sequence[Tuple[int, int]]] = None
+                       ) -> List:
         """Run frames through the model; returns one output per input.
 
         ``enable`` optionally interleaves disabled cycles between samples
-        (same length as ``samples``; True = sample present). Latency flush
+        (same length as ``samples``; True = sample present). ``markers``
+        optionally supplies per-sample ``(tuser, tlast)`` pairs; outputs
+        are then ``(re, im, out_tuser, out_tlast)`` tuples. Latency flush
         cycles are appended automatically.
         """
-        outs: List[Complex] = []
-        it = iter(range(len(samples)))
+        outs: List = []
         for idx, smp in enumerate(samples):
             en = True if enable is None else enable[idx]
+            u, l = markers[idx] if markers is not None else (0, 0)
             if en:
-                v, re, im = self.tick(True, smp[0], smp[1])
+                v, re, im, ou, ol = self.tick(True, smp[0], smp[1], u, l)
                 if v:
-                    outs.append((re, im))
+                    outs.append((re, im, ou, ol) if markers is not None
+                                else (re, im))
             else:
                 self.tick(False)
         # outputs span enabled-ticks [L, L+T-1] for T inputs: the first
         # output emerges on the same tick as input number L, so only L-1
         # trailing enabled cycles are needed to drain.
         for _ in range(self.latency - 1):
-            v, re, im = self.tick(True, 0, 0)
+            v, re, im, ou, ol = self.tick(True, 0, 0)
             if v:
-                outs.append((re, im))
+                outs.append((re, im, ou, ol) if markers is not None
+                            else (re, im))
         assert len(outs) == len(samples), \
             f"stream model dropped samples: {len(outs)} != {len(samples)}"
         return outs

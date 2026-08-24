@@ -106,13 +106,13 @@ class TestStreamFreezeSemantics(unittest.TestCase):
             while idx < len(frame):
                 en = mask[c % len(mask)]
                 c += 1
-                v, re, im = gated.tick(en, frame[idx][0], frame[idx][1])
+                v, re, im, _, _ = gated.tick(en, frame[idx][0], frame[idx][1])
                 if v:
                     out.append((re, im))
                 if en:
                     idx += 1
             for _ in range(gated.latency - 1):
-                v, re, im = gated.tick(True, 0, 0)
+                v, re, im, _, _ = gated.tick(True, 0, 0)
                 if v:
                     out.append((re, im))
             self.assertEqual(out, dense_out, style)
@@ -128,7 +128,7 @@ class TestStreamLatencyAndFraming(unittest.TestCase):
             frame = random_frame(N, 16, rng)
             first_valid = None
             for i, smp in enumerate(frame * 2):
-                v, _, _ = m.tick(True, smp[0], smp[1])
+                v, *_ = m.tick(True, smp[0], smp[1])
                 if v and first_valid is None:
                     first_valid = i + 1     # 1-based tick index
                     break
