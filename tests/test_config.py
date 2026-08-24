@@ -62,7 +62,7 @@ class TestFFTConfigInvalid(unittest.TestCase):
     def test_ssr_divide(self):
         FFTConfig(num_points=32, ssr=8)      # 8 | 32: fine
         with self.assertRaises(ValueError):
-            FFTConfig(num_points=16, ssr=8)  # 8 does not divide 16
+            FFTConfig(num_points=4, ssr=8)   # 8 does not divide 4
 
     def test_orders(self):
         self.assert_invalid(num_points=8, input_order="reversed")
