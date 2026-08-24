@@ -422,3 +422,139 @@ def fft_fixed_batch_dit(samples, cfg, twiddles=None):
     return [quantize_output(re, im, cfg.sample_decimal,
                             cfg.output_width, cfg.output_decimal)
             for re, im in x]
+
+
+# ----------------------------------------------------------------------
+# Reorder buffer (ping-pong, N-deep) + full ordering composition
+# ----------------------------------------------------------------------
+
+def _bitrev(k: int, n: int) -> int:
+    return int(format(k, f"0{n}b")[::-1], 2)
+
+
+class ReorderModel:
+    """Streaming frame reorder: bit-reversal permutation, ping-pong RAM.
+
+    Writes frame f into half-buffer f%2 at natural addresses; reads frame
+    f-1 from the other half at bit-reversed addresses. The half offset
+    makes read/write addresses structurally disjoint (collision rule,
+    PLAN.md 2.7) and keeps the frame boundary clean.
+
+    Latency: N cycles to fill the first frame.
+    """
+
+    def __init__(self, N: int):
+        self.N = N
+        self.n = N.bit_length() - 1
+        self.half = N // 2
+        self.buf_re = [[0] * N for _ in range(2)]   # 2 halves, N each
+        self.buf_im = [[0] * N for _ in range(2)]
+        self.wpos = 0            # natural write position within frame
+        self.frames_written = 0
+        self.out_valid = False
+        self._cycles = 0
+
+    def reset(self):
+        self.wpos = 0
+        self.frames_written = 0
+        self.out_valid = False
+        self._cycles = 0
+
+    def __init__(self, N: int):
+        self.N = N
+        self.n = N.bit_length() - 1
+        self.half = N // 2
+        self.buf_re = [[0] * N for _ in range(2)]   # 2 halves, N each
+        self.buf_im = [[0] * N for _ in range(2)]
+        self.buf_extra = [[None] * N for _ in range(2)]  # markers ride along
+        self.wpos = 0            # natural write position within frame
+        self.frames_written = 0
+        self.out_valid = False
+        self._cycles = 0
+
+    def reset(self):
+        self.wpos = 0
+        self.frames_written = 0
+        self.out_valid = False
+        self._cycles = 0
+
+    def tick(self, enabled: bool, re: int = 0, im: int = 0, extra=None):
+        if not enabled:
+            return self.out_valid, 0, 0, None
+        self._cycles += 1
+        # write current sample (extra fields = sidebands, ride along)
+        f = self.frames_written % 2
+        self.buf_re[f][self.wpos] = re
+        self.buf_im[f][self.wpos] = im
+        self.buf_extra[f][self.wpos] = extra
+        # read previous frame's sample at bitrev position
+        valid = self._cycles > self.N
+        if valid:
+            prev = (self.frames_written - 1) % 2
+            p = _bitrev(self.wpos, self.n)
+            o_re = self.buf_re[prev][p]
+            o_im = self.buf_im[prev][p]
+            o_x = self.buf_extra[prev][p]
+            self.out_valid = True
+        else:
+            o_re = o_im = 0
+            o_x = None
+            self.out_valid = False
+        self.wpos += 1
+        if self.wpos == self.N:
+            self.wpos = 0
+            self.frames_written += 1
+        return self.out_valid, o_re, o_im, o_x
+
+    def process_stream(self, samples, markers=None):
+        outs = []
+        for idx, smp in enumerate(samples):
+            extra = smp[2:] if len(smp) > 2 else None
+            v, re, im, x = self.tick(True, smp[0], smp[1], extra)
+            if v:
+                outs.append((re, im) if x is None else (re, im) + tuple(x))
+        # drain: N cycles flush the last buffered frame (its outputs emerge
+        # during the write of the NEXT frame's slots + one cycle)
+        for _ in range(self.N):
+            v, re, im, x = self.tick(True, 0, 0, None)
+            if v:
+                outs.append((re, im) if x is None else (re, im) + tuple(x))
+        return outs
+
+
+class OrderedFFTModel:
+    """Full streaming FFT model for ANY order corner (PLAN.md 2.3):
+
+      native   -> bitreversed : DIF core
+      bitrev   -> native      : DIT core
+      native   -> native      : DIF core + output reorder
+      bitrev   -> bitrev      : DIT core + output reorder
+    """
+
+    def __init__(self, cfg: FFTConfig):
+        import copy
+        self.cfg = cfg
+        N = cfg.num_points
+        self.dit = (cfg.input_order == "bitreversed")
+        # core is always DIF (native->bitrev) or DIT (bitrev->native);
+        # build it with core-natural orders regardless of the outer ones
+        core_cfg = copy.copy(cfg)
+        core_cfg.input_order = "bitreversed" if self.dit else "native"
+        core_cfg.output_order = "native" if self.dit else "bitreversed"
+        self.core = SDFGoldenModel(core_cfg, dit=self.dit)
+        # extra reorder when the OUTER output order mismatches the core's
+        self.reorder_out = (cfg.output_order != core_cfg.output_order)
+        self.reorder = ReorderModel(N) if self.reorder_out else None
+        self.latency = self.core.latency + (N if self.reorder_out else 0)
+
+    def process_stream(self, samples, markers=None):
+        core_out = self.core.process_stream(samples, markers=markers)
+        if self.reorder is None:
+            return core_out
+        if markers is not None:
+            # reorder markers along with samples
+            outs = []
+            for (re, im, u, l) in core_out:
+                outs.append((re, im, u, l))
+            return self.reorder.process_stream(outs)
+        return self.reorder.process_stream(core_out)
