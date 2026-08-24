@@ -18,9 +18,9 @@ HAVE_VERILATOR = shutil.which("verilator") is not None
 
 @unittest.skipUnless(HAVE_VERILATOR, "verilator not available")
 class TestRTLBitExact(unittest.TestCase):
-    def _check(self, cfg, **kw):
+    def _check(self, cfg, num_frames=2, **kw):
         outdir = f"build/test_rtl/{cfg.num_points}_{int(cfg.inverse)}_{kw.get('freeze','dense')}_{id(cfg)&0xfff}"
-        r = generate(cfg, outdir, num_frames=2, seed=7, **kw)
+        r = generate(cfg, outdir, num_frames=num_frames, seed=7, **kw)
         self.assertEqual(r["rc"], 0, f"{cfg}\n{r.get('log','')[:500]}")
         if r.get("first_bad") is not None:
             self.fail(f"{cfg}: first mismatch {r['first_bad']}")
