@@ -164,6 +164,29 @@ This keeps the SSR core a composition of the verified R=1 engine plus a small
 crossbar — far easier to verify than a monolithic MDC. The golden model
 mirrors this composition exactly. Constraint `R | N`, both powers of two.
 
+**P4 CLOSED — integration verified, timing met (N=8 R=2, KU5P):**
+
+* **RTL vs golden bit-exact** at R=2 (all four order corners via the
+  lane engines; suite 92 tests green, no skips).
+* **Crossbar pipeline (6 stages)**: `fetch(wq/d) → products(pp, one DSP
+  each) → combine(b = pp1−pp4 + j·(pp2+pp3)) → lane-DFT(h) → s_x half
+  shift(x) → rescale+sat(dout)`. `CB_LAT = 6` in RTL *and* golden;
+  emission gate taps `pd6`.
+* **KU5P post-route @ 2.0 ns**: WNS **+0.075 ns**, TNS 0, all nets
+  routed; 20 DSPs, 1063 CLB LUTs, 2139 FFs (<0.5% each).
+  Checkpoint `build/ssr_synth/route.dcp`.
+* **Debug lessons** (see also §"Convention traps"):
+  - a Python cycle-exact replica of the RTL pipeline
+    (`spikes/xbar_sim.py`) fed with golden lane streams finds
+    divergences in seconds and validates fixes before re-running
+    Verilator/Vivado;
+  - registers declared but never assigned silently read as zero in
+    Verilator (`pd4/pd5` gate taps) — Vivado lint is the only netlist-
+    level check that flags such things as constant-driven logic;
+  - multi-driven nets (same reg reset in one always block, driven in
+    another) fold the whole datapath to constants in Vivado with only
+    CRITICAL warnings — always grep the synth log.
+
 **P4 status & refined contract** (implemented, bit-exact for R = 2 and 4;
 R = 8 golden-verified):
 
