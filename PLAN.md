@@ -175,6 +175,32 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
 * **KU5P post-route @ 2.0 ns**: WNS **+0.075 ns**, TNS 0, all nets
   routed; 20 DSPs, 1063 CLB LUTs, 2139 FFs (<0.5% each).
   Checkpoint `build/ssr_synth/route.dcp`.
+
+**R=4 and R=8 closed (N=16, KU5P @ 2.0 ns):**
+
+| config | WNS post-route | DSPs | LUTs | FFs |
+|---|---|---|---|---|
+| R=2 N=8 | +0.075 | 24 | 1063 | 2139 |
+| R=4 N=16 | +0.021 | 44 | 2309 | 3913 |
+| R=8 N=16 | +0.037 | 64 | 3291 | 5056 |
+
+* R=4: 4x M=4 lane engines + 4-lane crossbar; INVERSE-aware second
+  layer (the +/-j signs conjugate; R=2 never exposed this).
+* R=8: 8-point lane DFT via G/H split -> alternating inner-pair
+  (+/-j, conjugates under inverse) -> sigma-signed Q -> ONE real
+  scalar multiply by Q(td) sqrt(2)/2 per odd-q bin. Golden mirrors
+  the E_q + round_shift(F_q*c, td) structure exactly.
+* The 39-bit x 18-bit odd-path multiply does NOT auto-infer DSPs
+  (fabric, 7 CARRY8s): split U = U_hi*2^18 + U_lo (signed/unsigned)
+  so each partial maps to ONE DSP48E2, combine in a registered stage.
+* R=8 crossbar is 10 stages (CB_LAT=10, pd10): fetch, pp, b,
+  G/H(h1), Q/P+e(h2a), sigma-U(h2b), split products(t3a),
+  combine+pe+ce(t3b), s_x shift(x), rescale(dout).
+* I/O pin note: ffva676 has only 256 user I/O; the SSR top with R*16
+  axis buses exceeds it (264 ports at R=4, 519 at R=8), so timing
+  runs use the ssr_timing_wrap timing vehicle (internal LFSR stimulus
+  + checksum sink; only {clk,rst,done} on the boundary) on the real
+  target part. Same die => identical internal critical paths.
 * **Debug lessons** (see also §"Convention traps"):
   - a Python cycle-exact replica of the RTL pipeline
     (`spikes/xbar_sim.py`) fed with golden lane streams finds
