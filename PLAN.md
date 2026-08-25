@@ -201,7 +201,18 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
   runs use the ssr_timing_wrap timing vehicle (internal LFSR stimulus
   + checksum sink; only {clk,rst,done} on the boundary) on the real
   target part. Same die => identical internal critical paths.
-* **Debug lessons** (see also §"Convention traps"):
+* **Wide-N R=1 sweep (N up to 16384):**
+  * N=1024..8192 bit-exact after two preload-width fixes (pack macro
+    was hardcoded 512b; stage `PRELOAD_I` parameter was [7:0]).
+  * N=16384 residual bug: every stage's output is delayed exactly one
+    tick at each PASS->COMPUTE FSM transition (flag-entry timing:
+    golden puts in_compute at pipe[0] same-tick, RTL delays one
+    cycle). The delay persists one FSM period and re-syncs at the
+    next transition; the accumulated skew corrupts the tail quarter
+    of every frame (~5-30 LSB). Reproducer:
+    `PYTHONPATH=src python3 -c "from config import FFTConfig; from fft_gen import generate; print(generate(FFTConfig(num_points=16384),'build/w16k',num_frames=1,seed=3)['rc'])"`
+
+**Debug lessons** (see also §"Convention traps"):
   - a Python cycle-exact replica of the RTL pipeline
     (`spikes/xbar_sim.py`) fed with golden lane streams finds
     divergences in seconds and validates fixes before re-running
