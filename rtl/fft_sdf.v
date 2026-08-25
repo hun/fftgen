@@ -297,7 +297,6 @@ module fft_stage #(
     localparam integer PW = WIDTH + TWIDDLE_WIDTH + 4;
     // native complex-multiply accumulate width: 17b data x 18b twiddle
     // products (35b) plus one guard bit for the +/- accumulation
-    localparam integer MW = WIDTH + TWIDDLE_WIDTH + 1;
 
     // first-half delay RAM (2D slots, sync read, read lags write by D)
     (* ram_style = "distributed" *)
@@ -329,24 +328,32 @@ module fft_stage #(
     reg signed [WIDTH-1:0] y_reg_re /*verilator public_flat*/, y_reg_im;
     reg signed [TWIDDLE_WIDTH-1:0] tw_a_re, tw_a_im;
     reg signed [TWIDDLE_WIDTH-1:0] tw_b_re, tw_b_im;
+    // Butterfly pre-adder width: the d-a / d+a results are consumed
+    // AFTER the per-stage scaling shift, so they need one bit more than
+    // the stage datapath (two WIDTH-bit inputs can differ/sum to
+    // WIDTH+1 bits). Everything from the pre-adder through the cascade
+    // accumulate rides at BW; the >>SHIFT at R8 brings values back to
+    // WIDTH. BW=18 also matches the DSP48E2 B-port natively.
+    localparam integer BW = WIDTH + 1;
     // R4: butterfly (pre-adder + ADREG)
-    reg signed [WIDTH-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im, bfly_s_re, bfly_s_im;
-    reg signed [WIDTH-1:0] d_dly_re, d_dly_im;
-    reg signed [WIDTH-1:0] a_dly_re, a_dly_im;    // DIT
-    // R4: multiply
-    reg signed [MW-1:0] mreg_re /*verilator public_flat*/, mreg_im;
+    reg signed [BW-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im, bfly_s_re, bfly_s_im;
+    reg signed [BW-1:0] d_dly_re, d_dly_im;
+    reg signed [BW-1:0] a_dly_re, a_dly_im;    // DIT
+    // R4: multiply (operands BW x TWIDDLE_WIDTH, +/- accumulation)
+    localparam integer MWB = BW + TWIDDLE_WIDTH + 1;
+    reg signed [MWB-1:0] mreg_re /*verilator public_flat*/, mreg_im;
     // first-lane product registers (DSP PREG candidates feeding PCOUT)
-    reg signed [MW-1:0] lane_hi_re, lane_hi_im;
+    reg signed [MWB-1:0] lane_hi_re, lane_hi_im;
     // receiver DSP operand registers (its A/B input regs)
-    reg signed [WIDTH-1:0] mul_a_re, mul_a_im;
+    reg signed [BW-1:0] mul_a_re, mul_a_im;
     reg signed [TWIDDLE_WIDTH-1:0] mul_t_re, mul_t_im;
     // sign-extended mreg at consumption width
-    wire signed [PW-1:0] mregx_re = {{(PW-MW){mreg_re[MW-1]}}, mreg_re};
-    wire signed [PW-1:0] mregx_im = {{(PW-MW){mreg_im[MW-1]}}, mreg_im};
-    reg signed [WIDTH-1:0] sum_dly_re, sum_dly_im;
-    reg signed [WIDTH-1:0] sum_dly2_re, sum_dly2_im;
-    reg signed [WIDTH-1:0] d_dly2_re, d_dly2_im;
-    reg signed [WIDTH-1:0] d_dly3_re, d_dly3_im;
+    wire signed [PW-1:0] mregx_re = {{(PW-MWB){mreg_re[MWB-1]}}, mreg_re};
+    wire signed [PW-1:0] mregx_im = {{(PW-MWB){mreg_im[MWB-1]}}, mreg_im};
+    reg signed [BW-1:0] sum_dly_re, sum_dly_im;
+    reg signed [BW-1:0] sum_dly2_re, sum_dly2_im;
+    reg signed [BW-1:0] d_dly2_re, d_dly2_im;
+    reg signed [BW-1:0] d_dly3_re, d_dly3_im;
     // R5: combine
     reg signed [PW-1:0] comb_s_re /*verilator public_flat*/, comb_s_im;
     reg signed [PW-1:0] comb_p_re /*verilator public_flat*/, comb_p_im;
@@ -372,7 +379,14 @@ module fft_stage #(
     endfunction
 
     // next-value temps
-    reg signed [WIDTH-1:0] nxt_bf_d_re, nxt_bf_d_im, nxt_bf_s_re, nxt_bf_s_im;
+    reg signed [BW-1:0] nxt_bf_d_re, nxt_bf_d_im, nxt_bf_s_re, nxt_bf_s_im;
+    // WIDTH->BW sign extensions for the pre-adder operands (the add
+    // itself must be evaluated at BW or the carry out of bit WIDTH-1
+    // is lost before the scaling shift ever sees it)
+    wire signed [BW-1:0] x_ext_re = {{(BW-WIDTH){x_reg_re[WIDTH-1]}}, x_reg_re};
+    wire signed [BW-1:0] x_ext_im = {{(BW-WIDTH){x_reg_im[WIDTH-1]}}, x_reg_im};
+    wire signed [BW-1:0] y_ext_re = {{(BW-WIDTH){y_reg_re[WIDTH-1]}}, y_reg_re};
+    wire signed [BW-1:0] y_ext_im = {{(BW-WIDTH){y_reg_im[WIDTH-1]}}, y_reg_im};
     reg signed [PW-1:0] nxt_out_s, nxt_out_p;
     reg signed [PW-1:0] se_d_re, se_d_im;
 
@@ -407,22 +421,22 @@ module fft_stage #(
                 if (TOPOLOGY == 0) begin
                     comb_p_re <= mregx_re;
                     comb_p_im <= mregx_im;
-                    comb_s_re <= {{(PW-WIDTH){sum_dly2_re[WIDTH-1]}}, sum_dly2_re};
-                    comb_s_im <= {{(PW-WIDTH){sum_dly2_im[WIDTH-1]}}, sum_dly2_im};
+                    comb_s_re <= {{(PW-BW){sum_dly2_re[BW-1]}}, sum_dly2_re};
+                    comb_s_im <= {{(PW-BW){sum_dly2_im[BW-1]}}, sum_dly2_im};
                 end else begin
                     // DIT: (d << td) +- t at 2^td scale
-                    se_d_re = {{(PW-WIDTH){d_dly3_re[WIDTH-1]}}, d_dly3_re};
-                    se_d_im = {{(PW-WIDTH){d_dly3_im[WIDTH-1]}}, d_dly3_im};
+                    se_d_re = {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
+                    se_d_im = {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
                     comb_s_re <= (se_d_re <<< TWIDDLE_DECIMAL) + mregx_re;
                     comb_s_im <= (se_d_im <<< TWIDDLE_DECIMAL) + mregx_im;
                     comb_p_re <= (se_d_re <<< TWIDDLE_DECIMAL) - mregx_re;
                     comb_p_im <= (se_d_im <<< TWIDDLE_DECIMAL) - mregx_im;
                 end
             end else begin
-                comb_s_re <= {{(PW-WIDTH){d_dly3_re[WIDTH-1]}}, d_dly3_re};
-                comb_s_im <= {{(PW-WIDTH){d_dly3_im[WIDTH-1]}}, d_dly3_im};
-                comb_p_re <= {{(PW-WIDTH){d_dly3_re[WIDTH-1]}}, d_dly3_re};
-                comb_p_im <= {{(PW-WIDTH){d_dly3_im[WIDTH-1]}}, d_dly3_im};
+                comb_s_re <= {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
+                comb_s_im <= {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
+                comb_p_re <= {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
+                comb_p_im <= {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
             end
 
             // R6b: cascade accumulate -- receiver DSP ALU forms
@@ -432,8 +446,8 @@ module fft_stage #(
                 mreg_re <= lane_hi_re - mul_a_im * mul_t_im;
                 mreg_im <= lane_hi_im + mul_a_im * mul_t_re;
             end else begin
-                mreg_re <= {MW{1'b0}};
-                mreg_im <= {MW{1'b0}};
+                mreg_re <= {MWB{1'b0}};
+                mreg_im <= {MWB{1'b0}};
             end
 
             // R6a: sender DSPs -- first products into PREG (PCOUT), and
@@ -456,8 +470,8 @@ module fft_stage #(
                 mul_t_re <= tw_b_re;
                 mul_t_im <= tw_b_im;
             end else begin
-                lane_hi_re <= {MW{1'b0}};
-                lane_hi_im <= {MW{1'b0}};
+                lane_hi_re <= {MWB{1'b0}};
+                lane_hi_im <= {MWB{1'b0}};
             end
             sum_dly2_re <= sum_dly_re;
             sum_dly2_im <= sum_dly_im;
@@ -475,10 +489,10 @@ module fft_stage #(
             // while sum_dly/d_dly2/tw_b hold the previous ones.
             if (pipe_comp[1]) begin
                 if (TOPOLOGY == 0) begin
-                    nxt_bf_d_re = x_reg_re - y_reg_re;
-                    nxt_bf_d_im = x_reg_im - y_reg_im;
-                    nxt_bf_s_re = x_reg_re + y_reg_re;
-                    nxt_bf_s_im = x_reg_im + y_reg_im;
+                    nxt_bf_d_re = x_ext_re - y_ext_re;
+                    nxt_bf_d_im = x_ext_im - y_ext_im;
+                    nxt_bf_s_re = x_ext_re + y_ext_re;
+                    nxt_bf_s_im = x_ext_im + y_ext_im;
                 end else begin
                     nxt_bf_d_re = x_reg_re;     // d rides to the combine
                     nxt_bf_d_im = x_reg_im;

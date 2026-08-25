@@ -173,8 +173,11 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                  | ((pl["phase_i"] & 0xFFFF) << 54)
                  | ((1 if pl["compute"] else 0) << 70))
         pl_pack |= stage << (71 * i)
+    # same dynamic-width emission as generate(): 71 bits per lane stage
+    preload_bits = 71 * len(_gm.stage_preloads)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
-        f.write("`define FFTGEN_PRELOAD_PACK 512'h%0128x\n" % pl_pack)
+        f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
+                % (preload_bits, pl_pack))
 
     tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                       "tb", "tb_fft_ssr.cpp")
