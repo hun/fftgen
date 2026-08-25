@@ -164,6 +164,35 @@ This keeps the SSR core a composition of the verified R=1 engine plus a small
 crossbar — far easier to verify than a monolithic MDC. The golden model
 mirrors this composition exactly. Constraint `R | N`, both powers of two.
 
+**P4 status & refined contract** (implemented, bit-exact for R = 2 and 4;
+R = 8 golden-verified):
+
+* **Structure**: lane r receives `x[R·j + r]` (stride-R demux is free
+  wiring). Each lane is a full M-point `fft_top` with `REORDER_OUT = 1`,
+  so lanes emit `A_r[p]` in **native p order**, lockstep-aligned.
+* **Crossbar** (`fft_cross.v`): pre-twiddle `B_r = A_r · W_N^{r·p}` — the
+  ROM holds **R rows including r = 0** (`W^0` in Q(td)); skipping row 0
+  makes that lane's contribution 2^td times smaller and the butterfly
+  sums cancel it (this bug produced exact ±pairs on the output). The
+  lane-DFT applies `W_R^{rq}`: for R ≤ 4 these are exactly
+  `{0, ±1, ±j}` → add/sub/swap only; R ≥ 8 needs constant-multiplier
+  layers (W_8 parts involve √2/2; golden path implemented via Q(td)
+  coefficients, frac becomes od + 2·td).
+* **Output order contract**: emission is frame-synced (drop until the
+  first mature p == 0 word, then continuously valid) and each output
+  word carries `X[qM + p]` on lane q — over a frame, output lane q holds
+  the **contiguous block X[qM .. qM+M−1]** ("block-contiguous" order).
+  Truly consecutive per-word packing would need an M×R corner-turn
+  buffer; deferred (downstream can also absorb it).
+* **Markers**: SOF enters with sample n = 0 (lane 0's first sample) and
+  emerges on output lane 0 at p = 0; EOF enters with n = N−1 (lane R−1)
+  and emerges on lane R−1 at p = M−1. Marker pipeline depth equals the
+  crossbar latency.
+* **Scaling**: crossbar adds one rounding shift s_x = log2(R); combined
+  with the lanes' log2(M) this totals log2(N), matching §2.5. Lane
+  outputs re-quantize at the crossbar boundary → vs monolithic batch the
+  reference tolerance is R/2 + 1 LSB (documented double quantization).
+
 ### 2.5 Fixed-point contract
 
 Quantization points (must match RTL register-for-register, like firgen):
