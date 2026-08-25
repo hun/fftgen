@@ -96,20 +96,22 @@ module fft_ssr #(
         end
     endgenerate
 
-    // crossbar input gather
-    wire signed [OUTPUT_WIDTH-1:0] xb_re [0:R-1];
-    wire signed [OUTPUT_WIDTH-1:0] xb_im [0:R-1];
+    // crossbar input gather (packed: lane g at [g*OW +: OW])
+    wire signed [R*OUTPUT_WIDTH-1:0] xb_re;
+    wire signed [R*OUTPUT_WIDTH-1:0] xb_im;
     genvar g;
     generate
         for (g = 0; g < R; g = g + 1) begin : gather
-            assign xb_re[g] = $signed(lanes[g].ore);
-            assign xb_im[g] = $signed(lanes[g].oim);
+            assign xb_re[g*OUTPUT_WIDTH +: OUTPUT_WIDTH] =
+                $signed(lanes[g].ore);
+            assign xb_im[g*OUTPUT_WIDTH +: OUTPUT_WIDTH] =
+                $signed(lanes[g].oim);
         end
     endgenerate
 
     wire                     xb_valid;
-    wire signed [OUTPUT_WIDTH-1:0] xb_ore [0:R-1];
-    wire signed [OUTPUT_WIDTH-1:0] xb_oim [0:R-1];
+    wire signed [R*OUTPUT_WIDTH-1:0] xb_ore;
+    wire signed [R*OUTPUT_WIDTH-1:0] xb_oim;
 
     fft_cross #(
         .NUM_POINTS     (NUM_POINTS),
@@ -151,8 +153,10 @@ module fft_ssr #(
     genvar q;
     generate
         for (q = 0; q < R; q = q + 1) begin : outpack
-            assign m_axis_tdata_re[q*OUTPUT_WIDTH +: OUTPUT_WIDTH] = xb_ore[q];
-            assign m_axis_tdata_im[q*OUTPUT_WIDTH +: OUTPUT_WIDTH] = xb_oim[q];
+            assign m_axis_tdata_re[q*OUTPUT_WIDTH +: OUTPUT_WIDTH] =
+                xb_ore[q*OUTPUT_WIDTH +: OUTPUT_WIDTH];
+            assign m_axis_tdata_im[q*OUTPUT_WIDTH +: OUTPUT_WIDTH] =
+                xb_oim[q*OUTPUT_WIDTH +: OUTPUT_WIDTH];
         end
     endgenerate
 

@@ -1,0 +1,63 @@
+INFO: [Common 17-3922] A valid Vivado Design Suite BASIC license has been detected. Your current license is active and will expire on 21-jul-2027.
+
+****** Vivado v2026.1 (64-bit)
+  **** SW Build 6511674 on Tue Jun 16 11:01:26 MDT 2026
+  **** IP Build 6504888 on Tue Jun 09 09:05:25 MDT 2026
+  **** SharedData Build 6501428 on Mon Jun 08 17:34:18 MDT 2026
+  **** Start of session at: Tue Aug 25 06:38:45 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source tcl/ssr_synth_ku5p.tcl
+# set part    [lindex $argv 0]
+# set npts    [lindex $argv 1]
+# set ssr     [lindex $argv 2]
+# set pack    [lindex $argv 3]
+# set intern  [lindex $argv 4]
+# set outdir  [lindex $argv 5]
+# file mkdir $outdir
+# create_project -in_memory -part $part
+# add_files -fileset sources_1 [list \
+#     /home/hannes/Projects/fftgen/rtl/fft_ssr.v \
+#     /home/hannes/Projects/fftgen/rtl/fft_top.v \
+#     /home/hannes/Projects/fftgen/rtl/fft_sdf.v \
+#     /home/hannes/Projects/fftgen/rtl/fft_reorder.v \
+#     /home/hannes/Projects/fftgen/rtl/fft_cross.v ]
+# set_property top fft_ssr [current_fileset]
+# set_property verilog_define {FFTGEN_PRELOADS=1} [current_fileset]
+# set_property include_dirs {$outdir} [current_fileset]
+# set_property generic {WN_FILE="fft_wn.mem" TWIDDLE_FILE="fft_twiddles_lane.mem"} [get_filesets sources_1]
+# synth_design -top fft_ssr \
+#     -generic NUM_POINTS=$npts -generic SSR=$ssr \
+#     -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \
+#     -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \
+#     -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \
+#     -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern
+Command: synth_design -top fft_ssr -generic NUM_POINTS=32 -generic SSR=2 -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 -generic SCALING_PACK=3435973835 -generic INTERN_WIDTH=17
+Starting synth_design
+Using part: xcku5p-ffva676-1-e
+Attempting to get a license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 146727
+ERROR: [Synth 8-9263] cannot open include file 'fft_preloads.vh' [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:4]
+---------------------------------------------------------------------------------
+Starting Synthesize : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2207.191 ; gain = 495.922 ; free physical = 77349 ; free virtual = 85805
+---------------------------------------------------------------------------------
+ERROR: [Synth 8-9210] cannot access memory 'xb_re' directly [/home/hannes/Projects/fftgen/rtl/fft_ssr.v:127]
+ERROR: [Synth 8-9210] cannot access memory 'xb_im' directly [/home/hannes/Projects/fftgen/rtl/fft_ssr.v:128]
+ERROR: [Synth 8-9210] cannot access memory 'xb_ore' directly [/home/hannes/Projects/fftgen/rtl/fft_ssr.v:130]
+ERROR: [Synth 8-9210] cannot access memory 'xb_oim' directly [/home/hannes/Projects/fftgen/rtl/fft_ssr.v:131]
+INFO: [Synth 8-10285] module 'fft_ssr' is ignored due to previous errors [/home/hannes/Projects/fftgen/rtl/fft_ssr.v:159]
+INFO: [Synth 8-9084] Verilog file '/home/hannes/Projects/fftgen/rtl/fft_ssr.v' ignored due to errors
+ERROR: [Synth 8-12188] Failed to read verilog '/home/hannes/Projects/fftgen/rtl/fft_ssr.v'
+---------------------------------------------------------------------------------
+Finished Synthesize : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2291.129 ; gain = 579.859 ; free physical = 77256 ; free virtual = 85712
+---------------------------------------------------------------------------------
+synthesize failed
+INFO: [Common 17-83] Releasing license: Vivado_Synthesis
+7 Infos, 0 Warnings, 0 Critical Warnings and 7 Errors encountered.
+synth_design failed
+ERROR: [Common 17-69] Command failed: Vivado Synthesis failed
+INFO: [Common 17-206] Exiting Vivado at Tue Aug 25 06:38:53 2026...

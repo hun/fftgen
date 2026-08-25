@@ -40,12 +40,13 @@ module fft_cross #(
     input  wire                        ce,
     input  wire                        rst,
     input  wire                        in_valid,
-    input  wire signed [OUT_WIDTH-1:0] din_re [0:SSR-1],
-    input  wire signed [OUT_WIDTH-1:0] din_im [0:SSR-1],
+    // packed lane words: lane i at [i*OUT_WIDTH +: OUT_WIDTH]
+    input  wire signed [SSR*OUT_WIDTH-1:0] din_re,
+    input  wire signed [SSR*OUT_WIDTH-1:0] din_im,
 
     output wire                        out_valid,
-    output reg  signed [OUT_WIDTH-1:0] dout_re [0:SSR-1],
-    output reg  signed [OUT_WIDTH-1:0] dout_im [0:SSR-1]
+    output reg  signed [SSR*OUT_WIDTH-1:0] dout_re,
+    output reg  signed [SSR*OUT_WIDTH-1:0] dout_im
 );
 
     localparam integer N  = NUM_POINTS;
@@ -102,9 +103,7 @@ module fft_cross #(
     reg signed [AW-1:0] h_im [0:R-1];
     reg                 v2;
 
-    // ---- stage 3 registers: final results ----------------------------
-    reg signed [OW-1:0] o_re [0:R-1];
-    reg signed [OW-1:0] o_im [0:R-1];
+    // ---- stage 3 valid ----------------------------------------------
     reg                 vlast;
 
     assign out_valid = vlast && (synced || out_phase0);
@@ -145,6 +144,30 @@ module fft_cross #(
 
     integer i;
 
+    // stage 1: pre-twiddle -- EVERY lane scales by its W_N^{r*p}
+    // (row 0 is all-ones in Q(td); skipping it would make that lane's
+    // contribution 2^td times smaller than the others')
+    genvar gp;
+    generate
+        for (gp = 0; gp < R; gp = gp + 1) begin : g_pre
+            always @(posedge clk) begin
+                if (rst) begin
+                    b_re[gp] <= {PW{1'b0}};
+                    b_im[gp] <= {PW{1'b0}};
+                end else if (run) begin
+                    b_re[gp] <= $signed(din_re[gp*OUT_WIDTH +: OUT_WIDTH])
+                                * w_re[gp]
+                              - $signed(din_im[gp*OUT_WIDTH +: OUT_WIDTH])
+                                * w_im[gp];
+                    b_im[gp] <= $signed(din_re[gp*OUT_WIDTH +: OUT_WIDTH])
+                                * w_im[gp]
+                              + $signed(din_im[gp*OUT_WIDTH +: OUT_WIDTH])
+                                * w_re[gp];
+                end
+            end
+        end
+    endgenerate
+
     always @(posedge clk) begin
         if (rst) begin
             p      <= {MW{1'b0}};
@@ -161,10 +184,9 @@ module fft_cross #(
             for (i = 0; i < R; i = i + 1) begin
                 b_re[i] <= {PW{1'b0}};  b_im[i] <= {PW{1'b0}};
                 h_re[i] <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
-                o_re[i] <= {OW{1'b0}};  o_im[i] <= {OW{1'b0}};
-                dout_re[i] <= {OW{1'b0}};
-                dout_im[i] <= {OW{1'b0}};
             end
+            dout_re <= {R*OW{1'b0}};
+            dout_im <= {R*OW{1'b0}};
         end else if (run) begin
             // p free-runs gated by run: since the lanes also start
             // counting from their first valid word, p == the phase of
@@ -175,13 +197,6 @@ module fft_cross #(
             pd2  <= pd;
             pd3  <= pd2;
 
-            // stage 1: pre-twiddle -- EVERY lane scales by its W_N^{r*p}
-            // (row 0 is all-ones in Q(td); skipping it would make that
-            // lane's contribution 2^td times smaller than the others')
-            for (i = 0; i < R; i = i + 1) begin
-                b_re[i] <= din_re[i] * w_re[i] - din_im[i] * w_im[i];
-                b_im[i] <= din_re[i] * w_im[i] + din_im[i] * w_re[i];
-            end
             v1 <= 1'b1;
 
             // stage 2: lane-DFT layer(s), full precision
@@ -206,22 +221,21 @@ module fft_cross #(
             // stage 3: second layer (R=4) or identity (R=2), fused
             // rounding shift, rescale and saturate
             if (R == 2) begin
-                o_re[0] <= rescale_sat(rshift(h_re[0], SX));
-                o_im[0] <= rescale_sat(rshift(h_im[0], SX));
-                o_re[1] <= rescale_sat(rshift(h_re[1], SX));
-                o_im[1] <= rescale_sat(rshift(h_im[1], SX));
+                dout_re[0*OW +: OW] <= rescale_sat(rshift(h_re[0], SX));
+                dout_im[0*OW +: OW] <= rescale_sat(rshift(h_im[0], SX));
+                dout_re[1*OW +: OW] <= rescale_sat(rshift(h_re[1], SX));
+                dout_im[1*OW +: OW] <= rescale_sat(rshift(h_im[1], SX));
             end else begin
                 // C0 = H0 + H2 ; C2 = H0 - H2
-                o_re[0] <= rescale_sat(rshift(ext(h_re[0]) + ext(h_re[2]), SX));
-                o_im[0] <= rescale_sat(rshift(ext(h_im[0]) + ext(h_im[2]), SX));
-                o_re[2] <= rescale_sat(rshift(ext(h_re[0]) - ext(h_re[2]), SX));
-                o_im[2] <= rescale_sat(rshift(ext(h_im[0]) - ext(h_im[2]), SX));
-                // C1 = H1 - j*H3 = (H1re + H3im, H1im - H3re)
-                o_re[1] <= rescale_sat(rshift(ext(h_re[1]) + ext(h_im[3]), SX));
-                o_im[1] <= rescale_sat(rshift(ext(h_im[1]) - ext(h_re[3]), SX));
-                // C3 = H1 + j*H3 = (H1re - H3im, H1im + H3re)
-                o_re[3] <= rescale_sat(rshift(ext(h_re[1]) - ext(h_im[3]), SX));
-                o_im[3] <= rescale_sat(rshift(ext(h_im[1]) + ext(h_re[3]), SX));
+                dout_re[0*OW+:OW] <= rescale_sat(rshift(ext(h_re[0]) + ext(h_re[2]), SX));
+                dout_im[0*OW+:OW] <= rescale_sat(rshift(ext(h_im[0]) + ext(h_im[2]), SX));
+                dout_re[2*OW+:OW] <= rescale_sat(rshift(ext(h_re[0]) - ext(h_re[2]), SX));
+                dout_im[2*OW+:OW] <= rescale_sat(rshift(ext(h_im[0]) - ext(h_im[2]), SX));
+                // C1 = H1 - j*H3 ; C3 = H1 + j*H3
+                dout_re[1*OW+:OW] <= rescale_sat(rshift(ext(h_re[1]) + ext(h_im[3]), SX));
+                dout_im[1*OW+:OW] <= rescale_sat(rshift(ext(h_im[1]) - ext(h_re[3]), SX));
+                dout_re[3*OW+:OW] <= rescale_sat(rshift(ext(h_re[1]) - ext(h_im[3]), SX));
+                dout_im[3*OW+:OW] <= rescale_sat(rshift(ext(h_im[1]) + ext(h_re[3]), SX));
             end
             vlast <= v2;
             // frame-sync latch: first mature frame-start word starts
@@ -229,15 +243,6 @@ module fft_cross #(
             synced <= synced || (v2 && out_phase0);
         end
     end
-
-    // output pack
-    genvar go;
-    generate
-        for (go = 0; go < R; go = go + 1) begin : opack
-            assign dout_re[go] = o_re[go];
-            assign dout_im[go] = o_im[go];
-        end
-    endgenerate
 
 endmodule
 `default_nettype wire
