@@ -186,10 +186,12 @@ module fft_cross #(
                     // multiply (differs from golden's 131071-multiply by
                     // <1 LSB, within documented SSR tolerance).
                     if (gp == 0) begin
+                        // W_0 = (1, 0) in Q(td): pp1 = re<<td,
+                        // pp3 = im<<td, pp2 = pp4 = 0
                         pp1[gp] <= d_re[gp] <<< TWIDDLE_DECIMAL;
                         pp2[gp] <= {PW{1'b0}};
-                        pp3[gp] <= {PW{1'b0}};
-                        pp4[gp] <= d_im[gp] <<< TWIDDLE_DECIMAL;
+                        pp3[gp] <= d_im[gp] <<< TWIDDLE_DECIMAL;
+                        pp4[gp] <= {PW{1'b0}};
                     end else begin
                         pp1[gp] <= $signed(d_re[gp]) * wq_re[gp];
                         pp2[gp] <= $signed(d_re[gp]) * wq_im[gp];
@@ -209,6 +211,8 @@ module fft_cross #(
             pd     <= {MW{1'b1}};
             pd2    <= {MW{1'b1}};
             pd3    <= {MW{1'b1}};
+            pd4    <= {MW{1'b1}};
+            pd5    <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -232,6 +236,8 @@ module fft_cross #(
             pd   <= p;
             pd2  <= pd;
             pd3  <= pd2;
+            pd4  <= pd3;
+            pd5  <= pd4;
 
             v1 <= 1'b1;
 
