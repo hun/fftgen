@@ -83,26 +83,36 @@ def write_wn_mem(cfg: FFTConfig, path: str) -> None:
 
 
 def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
-                 seed: int = 1, quiet: bool = True) -> dict:
+                 seed: int = 1, quiet: bool = True,
+                 pad_frames: int = None) -> dict:
     """SSR build: R lanes of M-point fft_top + fft_cross. v1 contract:
-    native input, native (block-contiguous) output. Bit-exactness is
-    checked against SSRGoldenModel within the documented double-
-    quantization tolerance."""
+    native input, native (block-contiguous) output.
+
+    Pipeline fill consumes ~latency/M input frames before the first
+    complete output frame emerges; `pad_frames` (default: enough to
+    cover fill) filler frames are PREPENDED so the last `num_frames`
+    input frames emerge fully. The comparison locates the frame offset
+    by search and verifies the overlapping tail."""
     import shutil
     os.makedirs(outdir, exist_ok=True)
     N, R = cfg.num_points, cfg.ssr
     assert cfg.input_order == "native" and cfg.output_order == "native"
     M = N // R
 
+    from golden_ssr import SSRGoldenModel as _P
+    if pad_frames is None:
+        pad_frames = (_P(cfg).latency + M - 1) // M + 2
+
     rng = __import__("random").Random(seed)
     frames = [[(rng.randint(-2 ** (cfg.sample_width - 1),
                               2 ** (cfg.sample_width - 1) - 1),
                 rng.randint(-2 ** (cfg.sample_width - 1),
                             2 ** (cfg.sample_width - 1) - 1))
-               for _ in range(N)] for _ in range(num_frames)]
+               for _ in range(N)]
+              for _ in range(num_frames + pad_frames)]
     samples = [s for fr in frames for s in fr]
     markers = []
-    for f in range(num_frames):
+    for f in range(num_frames + pad_frames):
         markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
 
     from golden_ssr import SSRGoldenModel
@@ -211,27 +221,33 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         return (all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
                 and e[2:] == a[2:])
 
-    # the RTL and golden may sync to different input frames (both drop
-    # fill until their first frame-aligned word); locate the block offset
-    # of actual[0] within expected by whole-frame (N-sample) steps
-    n_blocks_exp = len(exp) // N
-    n_blocks_act = len(act) // N
-    def vals_close(e, a):
-        return all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
-
+    # The RTL drops pipeline-fill words, so its first complete frame may
+    # be several input frames later than the golden model's; align by
+    # trying every golden frame start (SOF positions) against the head
+    # of the RTL stream, then verify the overlapping tail.
+    def sof_positions(seq):
+        return [i for i, x in enumerate(seq) if x[2] == 1]
+    e_starts = sof_positions(exp)
+    a_sof = next((i for i, x in enumerate(act) if x[2] == 1), None)
+    if not e_starts or a_sof is None:
+        return {"rc": 1, "outdir": outdir,
+                "log": "missing SOF marker",
+                "first_bad": (0, act[0], exp[0])}
+    tail_a = act[a_sof:]
     d0 = None
-    for b in range(n_blocks_exp):
-        if all(vals_close(exp[b * N + e], act[e])
-               for e in range(N)):
-            d0 = b * N
+    for s in e_starts:
+        if s + N > len(exp):
+            break
+        if all(samp_close(exp[s + e], tail_a[e]) for e in range(N)):
+            d0 = s
             break
     if d0 is None:
         return {"rc": 1, "outdir": outdir,
-                "log": "no block offset matches",
+                "log": "no frame offset matches",
                 "first_bad": (0, act[0], exp[0])}
-    tail_e = exp[d0+1:] if False else exp[d0:]
-    n_cmp = min(len(tail_e), len(act))
-    mism = [i for i in range(n_cmp) if not samp_close(tail_e[i], act[i])]
+    tail_e = exp[d0:]
+    n_cmp = min(len(tail_e), len(tail_a))
+    mism = [i for i in range(n_cmp) if not samp_close(tail_e[i], tail_a[i])]
     # require at least one full frame of overlapping verified samples
     ok = (n_cmp >= N) and not mism
     first_bad = None
@@ -240,7 +256,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         first_bad = (i, act[i], tail_e[i])
     return {"rc": 0 if ok else 1, "outdir": outdir,
             "n_expected": len(exp), "n_actual": len(act),
-            "offset": d0, "first_bad": first_bad}
+            "offset": e_sof, "first_bad": first_bad}
 
 
 def _markers(N: int, num_frames: int) -> List[Tuple[int, int]]:

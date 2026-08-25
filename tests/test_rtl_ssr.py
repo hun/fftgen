@@ -5,12 +5,6 @@ from config import FFTConfig
 from fft_gen import generate_ssr
 
 
-@unittest.skip("SSR RTL integration: lanes bit-exact vs golden lanes and "
-               "crossbar unit-verified, but the integrated stream still "
-               "misaligns (suspect residual sync/pipeline off-by-one in "
-               "fft_cross). Debug state: probes in build/ssrdbg, see "
-               "git log. Do not close without re-running the lane-stream "
-               "diff (dbg7) + crossbar $display flow.")
 class TestSSRRtl(unittest.TestCase):
     def _check(self, cfg, num_frames=6, seed=5):
         outdir = (f"build/ssr/N{cfg.num_points}_R{cfg.ssr}"
