@@ -59,7 +59,7 @@ module fft_cross #(
     localparam integer SX = $clog2(R);
     localparam integer RESHIFT = TWIDDLE_DECIMAL;
     // pipeline: stage1 pre-twiddle -> stage2 DFT layer -> stage3 rescale
-    localparam integer CB_LAT = 4;
+    localparam integer CB_LAT = 5;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -235,7 +235,15 @@ module fft_cross #(
 
             v1 <= 1'b1;
 
-            // stage 2: lane-DFT layer(s), full precision
+            // stage 2a: combine partial products -> complex bins
+            // B_r = (pp1 - pp4) + j*(pp2 + pp3)
+            for (i = 0; i < R; i = i + 1) begin
+                b_re[i] <= $signed(ext(pp1[i])) - $signed(ext(pp4[i]));
+                b_im[i] <= $signed(ext(pp2[i])) + $signed(ext(pp3[i]));
+            end
+
+            // stage 2b: lane-DFT layer(s), full precision
+            // uses PREVIOUS b (one cycle behind pp) ✓ correct pairing
             if (R == 2) begin
                 h_re[0] <= ext(b_re[0]) + ext(b_re[1]);
                 h_im[0] <= ext(b_im[0]) + ext(b_im[1]);
