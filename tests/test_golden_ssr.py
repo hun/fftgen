@@ -81,9 +81,6 @@ class TestSSRvsBatch(unittest.TestCase):
                 _check(FFTConfig(num_points=N, ssr=4,
                                 output_order='native'), seed=N + 100)
 
-    @unittest.skip("R=8 needs the quantized-W_R lane-DFT path "
-                   "(W_8 coefficients are not exactly {0,+/-1,+/-j}); "
-                   "planned with the generator-unrolled crossbar")
     def test_r8(self):
         for N in (16, 32):
             with self.subTest(N=N):

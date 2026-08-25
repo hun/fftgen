@@ -133,20 +133,21 @@ module fft_ssr #(
 
     // output pack + markers (lane0 tuser / lane(R-1) tlast through the
     // crossbar's two pipeline stages)
-    reg [1:0] mk_pipe_user, mk_pipe_last;
+    // marker pipeline: same depth as the crossbar (CB_LAT = 3 stages)
+    reg [2:0] mk_pipe_user, mk_pipe_last;
     always @(posedge clk) begin
         if (rst) begin
-            mk_pipe_user <= 2'b00;
-            mk_pipe_last <= 2'b00;
+            mk_pipe_user <= 3'b000;
+            mk_pipe_last <= 3'b000;
         end else if (ce && lanes[0].v) begin   // same run gate as crossbar
-            mk_pipe_user <= {mk_pipe_user[0], lanes[0].ou};
-            mk_pipe_last <= {mk_pipe_last[0], lanes[R-1].ol};
+            mk_pipe_user <= {mk_pipe_user[1:0], lanes[0].ou};
+            mk_pipe_last <= {mk_pipe_last[1:0], lanes[R-1].ol};
         end
     end
 
     assign m_axis_tvalid    = xb_valid;
-    assign m_axis_tuser     = mk_pipe_user[1];
-    assign m_axis_tlast     = mk_pipe_last[1];
+    assign m_axis_tuser     = mk_pipe_user[2];
+    assign m_axis_tlast     = mk_pipe_last[2];
     genvar q;
     generate
         for (q = 0; q < R; q = q + 1) begin : outpack

@@ -140,35 +140,40 @@ class SSRGoldenModel:
         if valid:
             ow = self.cfg.output_width
             od = self.cfg.output_decimal
-            # pre-twiddled products carry od + td fractional bits; the
-            # lane-DFT coefficients W_R^{rq} are applied EXACTLY (for
-            # R <= 4 they are in {0, +-1, +-j}), matching an RTL crossbar
-            # that omits trivial multiplications entirely
-            frac = od + self.cfg.twiddle_decimal
+            # Lane-DFT coefficients W_R^{rq}: for R <= 4 they are exactly
+            # {0,+/-1,+/-j} and are applied without scaling (products stay
+            # at od + td bits). For R >= 8 the coefficients are Q(td)-
+            # quantized (W_8 has sqrt(2)/2 parts), so every product carries
+            # od + 2*td bits -- the RTL crossbar mirrors whichever mode the
+            # generator selected via cfg.ssr.
+            exact_wr = R <= 4
+            frac = od + self.cfg.twiddle_decimal * (1 if exact_wr else 2)
             inv = self.cfg.inverse
             sgn = -1 if inv else 1
             for q in range(R):
                 sr = si = 0
                 for r in range(R):
                     vr, vi = lane_out[r][1], lane_out[r][2]
-                    wr, wi = self.wn[r][p]
-                    tr = vr * wr - vi * wi
-                    ti = vr * wi + vi * wr
-                    # exact W_R^{rq}: angle = -sgn*2*pi*rq/R
+                    wr_, wi_ = self.wn[r][p]
+                    tr = vr * wr_ - vi * wi_
+                    ti = vr * wi_ + vi * wr_
                     m = (r * q) % R
-                    if m == 0:
-                        cr, ci = 1, 0
-                    elif m * 4 == R:
-                        cr, ci = 0, (-sgn)
-                    elif m * 2 == R:
-                        cr, ci = -1, 0
-                    elif m * 4 == 3 * R:
-                        cr, ci = 0, sgn
+                    if exact_wr:
+                        # exact W_R^{rq}: angle = -sgn*2*pi*rq/R
+                        if m == 0:
+                            cr, ci = 1, 0
+                        elif m * 4 == R:
+                            cr, ci = 0, (-sgn)
+                        elif m * 2 == R:
+                            cr, ci = -1, 0
+                        else:  # m*4 == 3R
+                            cr, ci = 0, sgn
+                        sr += tr * cr - ti * ci
+                        si += tr * ci + ti * cr
                     else:
-                        raise NotImplementedError(
-                            "SSR v1 supports exact W_R only for R <= 4")
-                    sr += tr * cr - ti * ci
-                    si += tr * ci + ti * cr
+                        qr, qi = self.wr[r][q]
+                        sr += tr * qr - ti * qi
+                        si += tr * qi + ti * qr
                 sr = round_shift(sr, self.s_x)
                 si = round_shift(si, self.s_x)
                 outs.append(quantize_output(sr, si, frac, ow, od))
