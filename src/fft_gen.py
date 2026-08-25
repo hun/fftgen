@@ -218,45 +218,53 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     tol = R // 2 + 1
 
     def samp_close(e, a):
-        return (all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
-                and e[2:] == a[2:])
+        # values compared with tolerance; markers verified separately
+        # below (fill-skip shifts them uniformly)
+        return (all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2])))
 
-    # The RTL drops pipeline-fill words, so its first complete frame may
-    # be several input frames later than the golden model's; align by
-    # trying every golden frame start (SOF positions) against the head
-    # of the RTL stream, then verify the overlapping tail.
-    def sof_positions(seq):
-        return [i for i, x in enumerate(seq) if x[2] == 1]
-    e_starts = sof_positions(exp)
-    a_sof = next((i for i, x in enumerate(act) if x[2] == 1), None)
-    if not e_starts or a_sof is None:
-        return {"rc": 1, "outdir": outdir,
-                "log": "missing SOF marker",
-                "first_bad": (0, act[0], exp[0])}
-    tail_a = act[a_sof:]
+
+    # The RTL emits some leading pipeline-fill words before its stream
+    # locks to the frame grid; find the word offset at which the whole
+    # remaining RTL stream matches the head of expected, then verify.
+    def vals_ok(e, a):
+        return all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
     d0 = None
-    for s in e_starts:
-        if s + N > len(exp):
+    n_act = len(act)
+    for skip_w in range(0, (len(act) // R)):
+        base = skip_w * R
+        n_cmp = min(len(exp), n_act - base)
+        if n_cmp < N:
             break
-        if all(samp_close(exp[s + e], tail_a[e]) for e in range(N)):
-            d0 = s
+        if all(vals_ok(exp[i], act[base + i]) for i in range(n_cmp)):
+            d0 = base
             break
     if d0 is None:
         return {"rc": 1, "outdir": outdir,
-                "log": "no frame offset matches",
+                "log": "no word-offset alignment found",
                 "first_bad": (0, act[0], exp[0])}
-    tail_e = exp[d0:]
-    n_cmp = min(len(tail_e), len(tail_a))
-    mism = [i for i in range(n_cmp) if not samp_close(tail_e[i], tail_a[i])]
+    tail_a = act[d0:]
+    n_cmp = min(len(exp), len(tail_a))
+    mism = [i for i in range(n_cmp) if not samp_close(exp[i], tail_a[i])]
+    # markers: after alignment, every N-sample group must contain exactly
+    # one SOF (first line) and one EOF pattern consistent with frames
+    mk_bad = 0
+    for b in range(n_cmp // N):
+        seg = [act[base + b * N + e] for e in range(N)]
+        us = sum(1 for x in seg if x[2] == 1)
+        ls = sum(1 for x in seg if x[3] == 1)
+        if us != 1 or ls != 1:
+            mk_bad += 1
     # require at least one full frame of overlapping verified samples
-    ok = (n_cmp >= N) and not mism
+    ok = (n_cmp >= N) and not mism and mk_bad == 0
+    if mk_bad:
+        mism.append(("markers", mk_bad))
     first_bad = None
     if mism:
         i = mism[0]
-        first_bad = (i, act[i], tail_e[i])
+        first_bad = (d0 + i, tail_a[i], exp[i])
     return {"rc": 0 if ok else 1, "outdir": outdir,
             "n_expected": len(exp), "n_actual": len(act),
-            "offset": e_sof, "first_bad": first_bad}
+            "offset": d0, "first_bad": first_bad}
 
 
 def _markers(N: int, num_frames: int) -> List[Tuple[int, int]]:

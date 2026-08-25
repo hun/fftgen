@@ -5,12 +5,6 @@ from config import FFTConfig
 from fft_gen import generate_ssr
 
 
-@unittest.skip("SSR RTL integration WIP: lanes bit-exact vs golden "
-               "(dbg7-verified), crossbar formula unit-verified, yet the "
-               "integrated stream yields a different transform of the "
-               "same stimulus (not a shift/permutation). All debug "
-               "tooling ready: spikes/ssr_dbg.py regenerates+probes+"
-               "compares in one shot; report in build/ssrdbg/report.txt.")
 class TestSSRRtl(unittest.TestCase):
     def _check(self, cfg, num_frames=6, seed=5):
         outdir = (f"build/ssr/N{cfg.num_points}_R{cfg.ssr}"
