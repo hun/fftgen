@@ -34,7 +34,8 @@ module fft_cross #(
     parameter integer OUT_DECIMAL = 0,
     parameter integer TWIDDLE_WIDTH = 18,
     parameter integer TWIDDLE_DECIMAL = 17,
-    parameter         WN_FILE    = "fft_wn.mem"   // R*M words, row r = W_N^{r*p}
+    parameter         WN_FILE    = "fft_wn.mem",   // R*M words, row r = W_N^{r*p}
+    parameter         INVERSE    = 0               // lane-DFT direction
 )(
     input  wire                        clk,
     input  wire                        ce,
@@ -58,9 +59,11 @@ module fft_cross #(
     localparam integer AW = PW + $clog2(R) + 2;
     localparam integer SX = $clog2(R);
     localparam integer RESHIFT = TWIDDLE_DECIMAL;
-    // pipeline: fetch(wq/d) -> products(pp) -> combine(b) -> DFT(h)
+    // pipeline: fetch(wq/d) -> products(pp) -> combine(b) -> DFT layer(s)
     //   -> half-shift(x) -> rescale/sat(dout)
-    localparam integer CB_LAT = 6;
+    // R >= 8 inserts three more registered stages (G/H split, partial
+    // layers + sqrt(2)/2 scalar products, odd-bin assembly).
+    localparam integer CB_LAT = (R >= 8) ? 8 : 6;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -85,12 +88,13 @@ module fft_cross #(
     // slot phase within a frame; pd..pd3 delay it through the three
     // pipeline stages so pd3 == 0 marks an output word that is a frame
     // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6;
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
-    wire         out_phase0 = mature && (pd6 == 0);
+    wire         out_phase0 = mature &&
+                             ((R >= 8) ? (pd8 == 0) : (pd6 == 0));
 
     localparam integer OW = OUT_WIDTH;
 
@@ -120,6 +124,46 @@ module fft_cross #(
     // ---- stage 3a: fused s_x rounding shift --------------------------
     reg signed [AW-1:0] x_re [0:R-1];
     reg signed [AW-1:0] x_im [0:R-1];
+
+    // ---- R = 8 lane-DFT stages ---------------------------------------
+    // W_8 entries are {+/-1, +/-j} or (+/-sqrt2/2)(+/-1 +/- j), so the
+    // 8-point lane DFT decomposes into add/sub/swap networks plus ONE
+    // real scalar multiply by c8 = Q(td) sqrt(2)/2 per odd-q component.
+    //   h1: G_r = B_r + B_{r+4}, H_r = B_r - B_{r+4}
+    //   even q (=2k): 4-pt DFT of G (two trivial add layers)
+    //   odd q: P = H0 -/+ jH2, Q = H1 -/+ jH3 (sign per INVERSE);
+    //          U/V = sigma-signed Q; C_q = P + (U*c8 >>> td)
+    localparam integer FPW = AW + TWIDDLE_WIDTH;
+    localparam real    C8_REAL = 0.7071067811865476 * (2 ** TWIDDLE_DECIMAL);
+    localparam signed [TWIDDLE_WIDTH-1:0] C8 = $rtoi(C8_REAL + 0.5);
+    reg signed [AW-1:0] e_re [0:3];       // even-q first-layer partials
+    reg signed [AW-1:0] e_im [0:3];
+    reg signed [AW-1:0] pq_re [0:3];      // P_k (odd q = 2k+1)
+    reg signed [AW-1:0] pq_im [0:3];
+    reg signed [AW-1:0] pe_re [0:3];      // P carried one more stage
+    reg signed [AW-1:0] pe_im [0:3];
+    reg signed [FPW-1:0] f_re [0:3];      // U * c8 products (DSP layer)
+    reg signed [FPW-1:0] f_im [0:3];
+    reg signed [AW-1:0] ce_re [0:3];      // assembled even bins (q = 2k)
+    reg signed [AW-1:0] ce_im [0:3];
+    reg signed [AW-1:0] u_re [0:3];       // sigma-signed Q combos
+    reg signed [AW-1:0] u_im [0:3];
+
+    function signed [FPW-1:0] wide_round;
+        // round-half-up >>>td in full product width
+        input signed [FPW-1:0] v;
+        begin
+            wide_round = (v + ($signed({{(FPW-1){1'b0}}, 1'b1})
+                                <<< (TWIDDLE_DECIMAL-1)))
+                         >>> TWIDDLE_DECIMAL;
+        end
+    endfunction
+    function signed [AW-1:0] shr_trunc;   // wide_round, truncate to AW
+        input signed [FPW-1:0] v;
+        begin
+            shr_trunc = wide_round(v);
+        end
+    endfunction
 
     // ---- stage 3 valid ----------------------------------------------
     reg                 vlast;
@@ -161,6 +205,9 @@ module fft_cross #(
     endfunction
 
     integer i;
+    integer sig_k;
+    // combinational temps for the R=8 h2 stage (blocking-assigned)
+    reg signed [AW-1:0] tp_re, tp_im, tq_re, tq_im;
 
     // stage 1: pre-twiddle -- EVERY lane scales by its W_N^{r*p}
     // (row 0 is all-ones in Q(td); skipping it would make that lane's
@@ -219,6 +266,8 @@ module fft_cross #(
             pd4    <= {MW{1'b1}};
             pd5    <= {MW{1'b1}};
             pd6    <= {MW{1'b1}};
+            pd7    <= {MW{1'b1}};
+            pd8    <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -231,6 +280,14 @@ module fft_cross #(
                 b_re[i]  <= {AW{1'b0}};  b_im[i] <= {AW{1'b0}};
                 h_re[i]  <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
                 x_re[i]  <= {AW{1'b0}};  x_im[i] <= {AW{1'b0}};
+            end
+            for (i = 0; i < 4; i = i + 1) begin
+                e_re[i]  <= {AW{1'b0}};  e_im[i]  <= {AW{1'b0}};
+                pq_re[i] <= {AW{1'b0}};  pq_im[i] <= {AW{1'b0}};
+                pe_re[i] <= {AW{1'b0}};  pe_im[i] <= {AW{1'b0}};
+                ce_re[i] <= {AW{1'b0}};  ce_im[i] <= {AW{1'b0}};
+                u_re[i]  <= {AW{1'b0}};  u_im[i]  <= {AW{1'b0}};
+                f_re[i]  <= {FPW{1'b0}}; f_im[i]  <= {FPW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
             dout_im <= {R*OW{1'b0}};
@@ -246,6 +303,8 @@ module fft_cross #(
             pd4  <= pd3;
             pd5  <= pd4;
             pd6  <= pd5;
+            pd7  <= pd6;
+            pd8  <= pd7;
 
             v1 <= 1'b1;
 
@@ -263,8 +322,8 @@ module fft_cross #(
                 h_im[0] <= ext(b_im[0]) + ext(b_im[1]);
                 h_re[1] <= ext(b_re[0]) - ext(b_re[1]);
                 h_im[1] <= ext(b_im[0]) - ext(b_im[1]);
-            end else begin
-                // R = 4: even/odd split
+            end else if (R == 4) begin
+                // even/odd split
                 h_re[0] <= ext(b_re[0]) + ext(b_re[2]);
                 h_im[0] <= ext(b_im[0]) + ext(b_im[2]);
                 h_re[1] <= ext(b_re[0]) - ext(b_re[2]);
@@ -273,8 +332,99 @@ module fft_cross #(
                 h_im[2] <= ext(b_im[1]) + ext(b_im[3]);
                 h_re[3] <= ext(b_re[1]) - ext(b_re[3]);
                 h_im[3] <= ext(b_im[1]) - ext(b_im[3]);
+            end else begin
+                // R = 8: G/H split, G in h[0..3], H in h[4..7]
+                for (i = 0; i < 4; i = i + 1) begin
+                    h_re[i]   <= ext(b_re[i]) + ext(b_re[i+4]);
+                    h_im[i]   <= ext(b_im[i]) + ext(b_im[i+4]);
+                    h_re[i+4] <= ext(b_re[i]) - ext(b_re[i+4]);
+                    h_im[i+4] <= ext(b_im[i]) - ext(b_im[i+4]);
+                end
             end
             v2 <= v1;
+
+            if (R >= 8) begin
+                // ---- R=8 stage h2: even partials e, odd P/Q/U --------
+                // even q: first 2-pt layer of the 4-pt DFT of G
+                // NOTE: h_* are AW-wide; ext() would truncate the top
+                // 5 bits when |H| > 2^33 -- use them directly
+                e_re[0] <= h_re[0] + h_re[2];
+                e_im[0] <= h_im[0] + h_im[2];
+                e_re[1] <= h_re[0] - h_re[2];
+                e_im[1] <= h_im[0] - h_im[2];
+                e_re[2] <= h_re[1] + h_re[3];
+                e_im[2] <= h_im[1] + h_im[3];
+                e_re[3] <= h_re[1] - h_re[3];
+                e_im[3] <= h_im[1] - h_im[3];
+                // odd q = 2k+1: C_q = P_k + W_8^q * Q_k where the inner
+                // pair factor W_8^{2q} ALTERNATES (-j for k even, +j for
+                // k odd in FORWARD; conjugate under INVERSE), so P/Q use
+                // per-k +/-j pairings of H0..H3.
+                for (i = 0; i < 4; i = i + 1) begin
+                    if ((i[0] ^ (INVERSE != 0)) == 0) begin  // -j pairing
+                        tp_re = h_re[4] + h_im[6];
+                        tp_im = h_im[4] - h_re[6];
+                        tq_re = h_re[5] + h_im[7];
+                        tq_im = h_im[5] - h_re[7];
+                    end else begin        // q=3,7: +j pairing
+                        tp_re = h_re[4] - h_im[6];
+                        tp_im = h_im[4] + h_re[6];
+                        tq_re = h_re[5] - h_im[7];
+                        tq_im = h_im[5] + h_re[7];
+                    end
+                    pq_re[i] <= tp_re;
+                    pq_im[i] <= tp_im;
+                    // sigma-signed U/V of Q: forward sc/ss per q=2k+1 is
+                    // (1,-1) (-1,-1) (-1,1) (1,1); inverse mirrors k->3-k
+                    sig_k = (INVERSE != 0) ? (3 - i) : i;
+                    case (sig_k)
+                        0: begin
+                            u_re[i] <= tq_re + tq_im;
+                            u_im[i] <= tq_im - tq_re;
+                        end
+                        1: begin
+                            u_re[i] <= tq_im - tq_re;
+                            u_im[i] <= -(tq_im + tq_re);
+                        end
+                        2: begin
+                            u_re[i] <= -(tq_re + tq_im);
+                            u_im[i] <= tq_re - tq_im;
+                        end
+                        3: begin
+                            u_re[i] <= tq_re - tq_im;
+                            u_im[i] <= tq_re + tq_im;
+                        end
+                    endcase
+                end
+            end
+
+            if (R >= 8) begin
+                // ---- R=8 stage t3: scalar products, even finish, P --
+                for (i = 0; i < 4; i = i + 1) begin
+                    // one DSP48E2 per product (registered output)
+                    f_re[i] <= $signed(u_re[i]) * C8;
+                    f_im[i] <= $signed(u_im[i]) * C8;
+                    pe_re[i] <= pq_re[i];   // per-k P carried one stage
+                    pe_im[i] <= pq_im[i];
+                end
+                ce_re[0] <= e_re[0] + e_re[2];   // q = 0
+                ce_im[0] <= e_im[0] + e_im[2];
+                ce_re[2] <= e_re[0] - e_re[2];   // q = 4
+                ce_im[2] <= e_im[0] - e_im[2];
+                if (INVERSE != 0) begin
+                    // q = 2: e1 + j e3 ; q = 6: e1 - j e3
+                    ce_re[1] <= e_re[1] - e_im[3];
+                    ce_im[1] <= e_im[1] + e_re[3];
+                    ce_re[3] <= e_re[1] + e_im[3];
+                    ce_im[3] <= e_im[1] - e_re[3];
+                end else begin
+                    // q = 2: e1 - j e3 ; q = 6: e1 + j e3
+                    ce_re[1] <= e_re[1] + e_im[3];
+                    ce_im[1] <= e_im[1] - e_re[3];
+                    ce_re[3] <= e_re[1] - e_im[3];
+                    ce_im[3] <= e_im[1] + e_re[3];
+                end
+            end
 
             // stage 3a: second DFT layer (R=4) or identity (R=2),
             // fused s_x rounding shift -- registered so the carry
@@ -284,17 +434,35 @@ module fft_cross #(
                 x_im[0] <= rshift(h_im[0], SX);
                 x_re[1] <= rshift(h_re[1], SX);
                 x_im[1] <= rshift(h_im[1], SX);
-            end else begin
+            end else if (R == 4) begin
                 // C0 = H0 + H2 ; C2 = H0 - H2
                 x_re[0] <= rshift(ext(h_re[0]) + ext(h_re[2]), SX);
                 x_im[0] <= rshift(ext(h_im[0]) + ext(h_im[2]), SX);
                 x_re[2] <= rshift(ext(h_re[0]) - ext(h_re[2]), SX);
                 x_im[2] <= rshift(ext(h_im[0]) - ext(h_im[2]), SX);
-                // C1 = H1 - j*H3 ; C3 = H1 + j*H3
-                x_re[1] <= rshift(ext(h_re[1]) + ext(h_im[3]), SX);
-                x_im[1] <= rshift(ext(h_im[1]) - ext(h_re[3]), SX);
-                x_re[3] <= rshift(ext(h_re[1]) - ext(h_im[3]), SX);
-                x_im[3] <= rshift(ext(h_im[1]) + ext(h_re[3]), SX);
+                // C1 = H1 -/+ j*H3 ; C3 = H1 +/- j*H3 (direction-dep)
+                if (INVERSE != 0) begin
+                    x_re[1] <= rshift(ext(h_re[1]) - ext(h_im[3]), SX);
+                    x_im[1] <= rshift(ext(h_im[1]) + ext(h_re[3]), SX);
+                    x_re[3] <= rshift(ext(h_re[1]) + ext(h_im[3]), SX);
+                    x_im[3] <= rshift(ext(h_im[1]) - ext(h_re[3]), SX);
+                end else begin
+                    x_re[1] <= rshift(ext(h_re[1]) + ext(h_im[3]), SX);
+                    x_im[1] <= rshift(ext(h_im[1]) - ext(h_re[3]), SX);
+                    x_re[3] <= rshift(ext(h_re[1]) - ext(h_im[3]), SX);
+                    x_im[3] <= rshift(ext(h_im[1]) + ext(h_re[3]), SX);
+                end
+            end else begin
+                // R = 8: assemble odd bins, pass even bins through,
+                // apply the fused s_x rounding shift to everything
+                for (i = 0; i < 4; i = i + 1) begin
+                    x_re[2*i]   <= rshift(ce_re[i], SX);
+                    x_im[2*i]   <= rshift(ce_im[i], SX);
+                    x_re[2*i+1] <= rshift(pe_re[i]
+                                           + shr_trunc(f_re[i]), SX);
+                    x_im[2*i+1] <= rshift(pe_im[i]
+                                           + shr_trunc(f_im[i]), SX);
+                end
             end
             // stage 3b: rescale Q(od+td) -> Q(od), saturate to OW
             for (i = 0; i < R; i = i + 1) begin

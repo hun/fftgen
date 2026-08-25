@@ -193,6 +193,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GSCALING_PACK=32'h{pack_m:08x}",
         f"-GINTERN_WIDTH={intern_m}",
         "-GPIPE_DEPTH=7",
+        f"-GINVERSE={1 if cfg.inverse else 0}",
     ]
     cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
            "--top-module", "fft_ssr", "-Wno-fatal",

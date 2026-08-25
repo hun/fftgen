@@ -26,6 +26,30 @@ class TestSSRRtl(unittest.TestCase):
                 self._check(FFTConfig(num_points=N, ssr=2, inverse=True,
                                       output_order="native"))
 
+    def test_r4_sizes(self):
+        for N in (16, 32):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N, ssr=4,
+                                      output_order="native"))
+
+    def test_inverse_r4(self):
+        for N in (16, 32):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N, ssr=4, inverse=True,
+                                      output_order="native"))
+
+    def test_r8_sizes(self):
+        for N in (16, 32):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N, ssr=8,
+                                      output_order="native"))
+
+    def test_inverse_r8(self):
+        for N in (16, 32):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N, ssr=8, inverse=True,
+                                      output_order="native"))
+
 
 if __name__ == "__main__":
     unittest.main()

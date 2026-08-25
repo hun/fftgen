@@ -26,6 +26,29 @@ static int64_t parse_hex(const std::string& s, int width) {
 #define TB_SSR 2
 #endif
 
+
+// Wide packed-bus helpers: for R >= 8 the R*SW-bit axis words exceed
+// 64 bits and Verilator models them as VlWide<4> (128-bit).
+#if defined(TB_SSR) && (TB_SSR >= 8)
+typedef VlWide<4> BusT;
+static void bus_set(BusT& b, uint64_t lo, uint64_t hi) {
+    b[0] = (uint32_t)lo;         b[1] = (uint32_t)(lo >> 32);
+    b[2] = (uint32_t)hi;         b[3] = (uint32_t)(hi >> 32);
+}
+static uint64_t bus_get(const BusT& b, int bit) {
+    // extract up to 64 bits starting at bit position 'bit'
+    uint64_t lo = ((uint64_t)b[1] << 32) | b[0];
+    uint64_t hi = ((uint64_t)b[3] << 32) | b[2];
+    if (bit == 0) return lo;
+    if (bit < 64) return (lo >> bit) | (hi << (64 - bit));
+    return hi >> (bit - 64);
+}
+#else
+typedef QData BusT;
+static void bus_set(BusT& b, uint64_t lo, uint64_t) { b = (QData)lo; }
+static uint64_t bus_get(const BusT& b, int bit) { return b >> bit; }
+#endif
+
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     const int R = TB_SSR;
@@ -62,7 +85,8 @@ int main(int argc, char** argv) {
 
     Vfft_ssr* dut = new Vfft_ssr;
     dut->rst = 1; dut->ce = 0; dut->s_axis_tvalid = 0;
-    dut->s_axis_tdata_re = 0; dut->s_axis_tdata_im = 0;
+    { BusT zr, zi; bus_set(zr,0,0); bus_set(zi,0,0);
+      dut->s_axis_tdata_re = zr; dut->s_axis_tdata_im = zi; }
     dut->s_axis_tuser = 0; dut->s_axis_tlast = 0;
     dut->clk = 0;
     for (int i = 0; i < 4; i++) {
@@ -93,13 +117,19 @@ int main(int argc, char** argv) {
         // drain: keep enabled with zero data so lanes flush (matches
         // the R=1 testbench and the golden model's drain semantics)
         dut->s_axis_tvalid = 1;
-        uint64_t tre = 0, tim = 0;
+        uint64_t tre_lo = 0, tre_hi = 0, tim_lo = 0, tim_hi = 0;
         for (int r = 0; r < R; r++) {
-            tre |= ((uint64_t)(uint16_t)wre[r]) << (r * SW);
-            tim |= ((uint64_t)(uint16_t)wim[r]) << (r * SW);
+            if (r * SW < 64) {
+                tre_lo |= ((uint64_t)(uint16_t)wre[r]) << (r * SW);
+                tim_lo |= ((uint64_t)(uint16_t)wim[r]) << (r * SW);
+            } else {
+                tre_hi |= ((uint64_t)(uint16_t)wre[r]) << (r * SW - 64);
+                tim_hi |= ((uint64_t)(uint16_t)wim[r]) << (r * SW - 64);
+            }
         }
-        dut->s_axis_tdata_re = tre;
-        dut->s_axis_tdata_im = tim;
+        { BusT br, bi; bus_set(br, tre_lo, tre_hi);
+          bus_set(bi, tim_lo, tim_hi);
+          dut->s_axis_tdata_re = br; dut->s_axis_tdata_im = bi; }
         dut->s_axis_tuser = wu;
         dut->s_axis_tlast = wl;
         dut->clk = 1; dut->eval();
@@ -111,8 +141,8 @@ int main(int argc, char** argv) {
         }
         if (dut->m_axis_tvalid) {
             for (int q = 0; q < R; q++) {
-                uint64_t ore = dut->m_axis_tdata_re >> (q * OW);
-                uint64_t oim = dut->m_axis_tdata_im >> (q * OW);
+                uint64_t ore = bus_get(dut->m_axis_tdata_re, q * OW);
+                uint64_t oim = bus_get(dut->m_axis_tdata_im, q * OW);
                 uint64_t msk = ((uint64_t)1 << OW) - 1;
                 int64_t mre = (ore & msk) & (((int64_t)1) << (OW-1))
                               ? ((int64_t)(ore & msk)) - (((int64_t)1)<<OW)

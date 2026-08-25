@@ -31,6 +31,7 @@ Output markers ride through the lanes: SOF enters with sample n=0
 """
 
 from typing import List, Sequence, Tuple
+import math
 
 from config import FFTConfig
 from golden import SDFGoldenModel, ReorderModel
@@ -79,6 +80,8 @@ class SSRGoldenModel:
         lane_cfg.num_points = M
         lane_cfg.ssr = 1
         self.lanes = [_SSRLane(lane_cfg) for _ in range(R)]
+        if R >= 8:
+            self.CB_LAT = 8     # +G/H, partial/scalar, assembly stages
         self.latency = self.lanes[0].latency + self.CB_LAT
 
         # crossbar twiddle tables (quantized, single source of truth)
@@ -141,18 +144,26 @@ class SSRGoldenModel:
         if valid:
             ow = self.cfg.output_width
             od = self.cfg.output_decimal
-            # Lane-DFT coefficients W_R^{rq}: for R <= 4 they are exactly
-            # {0,+/-1,+/-j} and are applied without scaling (products stay
-            # at od + td bits). For R >= 8 the coefficients are Q(td)-
-            # quantized (W_8 has sqrt(2)/2 parts), so every product carries
-            # od + 2*td bits -- the RTL crossbar mirrors whichever mode the
-            # generator selected via cfg.ssr.
+            # Lane-DFT coefficient contract:
+            #   R <= 4: every W_R^{rq} is exactly {0,+/-1,+/-j}; the
+            #       combining network is add/sub/swap only.
+            #   R >= 8: W_R entries are {+/-1,+/-j} or
+            #       (+/-sqrt(2)/2)(+/-1 +/- j). Group each output into
+            #       E_q (trivial-coefficient terms, exact adds at
+            #       od + td fractional bits) and F_q ((+/-1 +/- j)
+            #       terms, also exact adds), then apply ONE Q(td)
+            #       real scalar c = round(sqrt(2)/2 * 2^td):
+            #           C_q = E_q + round_shift(F_q * c, td)
+            #       Products return to od + td bits, so the final
+            #       quantize shifts by td only (NOT 2*td).
             exact_wr = R <= 4
-            frac = od + self.cfg.twiddle_decimal * (1 if exact_wr else 2)
+            frac = od + self.cfg.twiddle_decimal  # both modes end at od+td
+            c8 = None if exact_wr else \
+                round((2 ** self.cfg.twiddle_decimal) * (2 ** -0.5))
             inv = self.cfg.inverse
             sgn = -1 if inv else 1
             for q in range(R):
-                sr = si = 0
+                er = ei = fr = fi = 0
                 for r in range(R):
                     vr, vi = lane_out[r][1], lane_out[r][2]
                     wr_, wi_ = self.wn[r][p]
@@ -169,12 +180,29 @@ class SSRGoldenModel:
                             cr, ci = -1, 0
                         else:  # m*4 == 3R
                             cr, ci = 0, sgn
-                        sr += tr * cr - ti * ci
-                        si += tr * ci + ti * cr
+                        er += tr * cr - ti * ci
+                        ei += tr * ci + ti * cr
                     else:
-                        qr, qi = self.wr[r][q]
-                        sr += tr * qr - ti * qi
-                        si += tr * qi + ti * qr
+                        ang = -sgn * 2 * math.pi * m / R
+                        cr = math.cos(ang)
+                        ci = math.sin(ang)
+                        if abs(cr) < 0.5 or abs(ci) < 0.5:
+                            # trivial {0, +/-1} + j{0, +/-1}
+                            er += tr * round(cr) - ti * round(ci)
+                            ei += tr * round(ci) + ti * round(cr)
+                        else:                   # sqrt(2)/2 * (+/-1 +/- j)
+                            sc = round(cr)
+                            ss = round(ci)
+                            fr += tr * sc - ti * ss
+                            fi += ti * sc + tr * ss
+                if exact_wr:
+                    sr = er
+                    si = ei
+                else:
+                    sr = er + round_shift(fr * c8,
+                                          self.cfg.twiddle_decimal)
+                    si = ei + round_shift(fi * c8,
+                                          self.cfg.twiddle_decimal)
                 sr = round_shift(sr, self.s_x)
                 si = round_shift(si, self.s_x)
                 outs.append(quantize_output(sr, si, frac, ow, od))

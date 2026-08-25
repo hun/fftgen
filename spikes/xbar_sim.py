@@ -45,6 +45,11 @@ class CrossbarRTL:
         self.x = [(0, 0)] * R
         self.dout = [(0, 0)] * R
         self.v1 = self.v2 = self.vlast = False
+        self.inverse = bool(cfg.inverse) if hasattr(cfg, 'inverse') else False
+        self.c8 = round((2 ** td) * (2 ** -0.5))
+        self.FPW = self.AW + tw
+        self.e = [(0,0)]*4; self.u = [(0,0)]*4; self.f = [(0,0)]*4
+        self.pq = [(0,0)]*4; self.pe = [(0,0)]*4; self.ce = [(0,0)]*4
 
     def rshift(self, v, sh):
         if sh <= 0:
@@ -97,6 +102,84 @@ class CrossbarRTL:
             # stage 3a: s_x rounding shift of PREVIOUS h
             x_new = [(self.rshift(self.h[q][0], self.SX),
                       self.rshift(self.h[q][1], self.SX)) for q in range(2)]
+        elif R == 8:
+            # h1: G/H split (mirror RTL: G in h[0..3], H in h[4..7])
+            h_new = []
+            for i2 in range(4):
+                h_new.append((s(self.b[i2][0] + self.b[i2+4][0], self.AW),
+                              s(self.b[i2][1] + self.b[i2+4][1], self.AW)))
+            for i2 in range(4):
+                h_new.append((s(self.b[i2][0] - self.b[i2+4][0], self.AW),
+                              s(self.b[i2][1] - self.b[i2+4][1], self.AW)))
+            # h2: e partials, P/Q, sigma-signed U/V (from PREVIOUS h)
+            e_new = [(s(self.h[0][0]+self.h[2][0], self.AW),
+                      s(self.h[0][1]+self.h[2][1], self.AW)),
+                     (s(self.h[0][0]-self.h[2][0], self.AW),
+                      s(self.h[0][1]-self.h[2][1], self.AW)),
+                     (s(self.h[1][0]+self.h[3][0], self.AW),
+                      s(self.h[1][1]+self.h[3][1], self.AW)),
+                     (s(self.h[1][0]-self.h[3][0], self.AW),
+                      s(self.h[1][1]-self.h[3][1], self.AW))]
+            inv = self.inverse
+            # per-k pairing: W8^{2q} alternates (-j k even, +j k odd)
+            pq_new = []; u_new = []
+            sig = [(1,-1),(-1,-1),(-1,1),(1,1)]
+            for k in range(4):
+                if k % 2 == 0:   # q=1,5: -j pairing
+                    Pk = (s(self.h[4][0]+self.h[6][1], self.AW),
+                          s(self.h[4][1]-self.h[6][0], self.AW))
+                    Qk = (s(self.h[5][0]+self.h[7][1], self.AW),
+                          s(self.h[5][1]-self.h[7][0], self.AW))
+                else:            # q=3,7: +j pairing
+                    Pk = (s(self.h[4][0]-self.h[6][1], self.AW),
+                          s(self.h[4][1]+self.h[6][0], self.AW))
+                    Qk = (s(self.h[5][0]-self.h[7][1], self.AW),
+                          s(self.h[5][1]+self.h[7][0], self.AW))
+                pq_new.append(Pk)
+                sc_, ss_ = sig[3-k] if inv else sig[k]
+                ure = sc_*Qk[0] - ss_*Qk[1]
+                uim = sc_*Qk[1] + ss_*Qk[0]
+                u_new.append((s(ure,self.AW), s(uim,self.AW)))
+            # t3: products, P carry, even finish (from PREVIOUS e/u/pq)
+            f_new = [(s(self.u[k][0]*self.c8, self.FPW),
+                      s(self.u[k][1]*self.c8, self.FPW)) for k in range(4)]
+            pe_new = list(self.pq)
+            ce_new = [(s(self.e[0][0]+self.e[2][0], self.AW),
+                       s(self.e[0][1]+self.e[2][1], self.AW)),
+                      (s(self.e[0][0]-self.e[2][0], self.AW),
+                       s(self.e[0][1]-self.e[2][1], self.AW))]
+            if inv:
+                ce_new += [(s(self.e[1][0]-self.e[3][1], self.AW),
+                            s(self.e[1][1]+self.e[3][0], self.AW)),
+                           (s(self.e[1][0]+self.e[3][1], self.AW),
+                            s(self.e[1][1]-self.e[3][0], self.AW))]
+            else:
+                ce_new += [(s(self.e[1][0]+self.e[3][1], self.AW),
+                            s(self.e[1][1]-self.e[3][0], self.AW)),
+                           (s(self.e[1][0]-self.e[3][1], self.AW),
+                            s(self.e[1][1]+self.e[3][0], self.AW))]
+            # x: assemble odd bins, shift everything
+            def wr(v):
+                return s((v + (1 << (self.TD-1))) >> self.TD, self.AW)
+            x_new = []
+            for k in range(4):
+                x_new.append((self.rshift(self.ce[k][0], self.SX),
+                              self.rshift(self.ce[k][1], self.SX)))
+            for k in range(4):
+                ore = self.pe[k][0] + wr(self.f[k][0])
+                oim = self.pe[k][1] + wr(self.f[k][1])
+                x_new.append((self.rshift(s(ore,self.AW), self.SX),
+                              self.rshift(s(oim,self.AW), self.SX)))
+            # interleave to q order: even q first then odd -> reorder
+            x_ord = []
+            for k in range(4):
+                x_ord.append(x_new[k]); x_ord.append(x_new[4+k])
+            x_new = x_ord
+            # commit extra regs
+            self.e, self.u, self.f = e_new, u_new, f_new
+            self.pq, self.pe, self.ce = pq_new + [(0,0),(0,0)], pe_new, ce_new
+            dout_new = [(self.rescale_sat(xv[0]), self.rescale_sat(xv[1]))
+                        for xv in self.x]
         else:
             hh = self.h
             x_new = [

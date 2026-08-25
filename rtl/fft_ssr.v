@@ -29,7 +29,8 @@ module fft_ssr #(
     parameter integer SCALING_PACK   = 32'h01010101,
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
     parameter integer PIPE_DEPTH     = 7,
-    parameter         WN_FILE        = "fft_wn.mem"
+    parameter         WN_FILE        = "fft_wn.mem",
+    parameter         INVERSE        = 0
 )(
     input  wire                     clk,
     input  wire                     ce,
@@ -120,7 +121,8 @@ module fft_ssr #(
         .OUT_DECIMAL    (OUTPUT_DECIMAL),
         .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
         .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-        .WN_FILE        (WN_FILE)
+        .WN_FILE        (WN_FILE),
+        .INVERSE        (INVERSE)
     ) u_cross (
         .clk        (clk),
         .ce         (ce),
