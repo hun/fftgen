@@ -59,7 +59,7 @@ module fft_cross #(
     localparam integer SX = $clog2(R);
     localparam integer RESHIFT = TWIDDLE_DECIMAL;
     // pipeline: stage1 pre-twiddle -> stage2 DFT layer -> stage3 rescale
-    localparam integer CB_LAT = 3;
+    localparam integer CB_LAT = 4;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -89,14 +89,21 @@ module fft_cross #(
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
-    wire         out_phase0 = mature && (pd3 == {{(MW-1){1'b0}}, 1'b0});
+    wire         out_phase0 = mature && (pd2 == {{(MW-1){1'b0}}, 1'b0});
 
     localparam integer OW = OUT_WIDTH;
 
-    // ---- stage 1: pre-twiddle products (full precision registers) ----
+    // ---- stage 1a: coefficient prefetch (registered ROM output) ------
+    reg signed [TWIDDLE_WIDTH-1:0] wq_re [0:R-1];
+    reg signed [TWIDDLE_WIDTH-1:0] wq_im [0:R-1];
+    // ---- stage 1b operands: din delayed one cycle --------------------
+    reg signed [OUT_WIDTH-1:0] d_re [0:R-1];
+    reg signed [OUT_WIDTH-1:0] d_im [0:R-1];
+    // ---- stage 1b products (full precision registers) ----------------
     reg signed [PW-1:0] b_re [0:R-1];
     reg signed [PW-1:0] b_im [0:R-1];
     reg                 v1;
+    wire [MW-1:0]       pn = p + {{(MW-1){1'b0}}, 1'b1};
 
     // ---- stage 2: first DFT layer ------------------------------------
     reg signed [AW-1:0] h_re [0:R-1];
@@ -152,17 +159,27 @@ module fft_cross #(
         for (gp = 0; gp < R; gp = gp + 1) begin : g_pre
             always @(posedge clk) begin
                 if (rst) begin
-                    b_re[gp] <= {PW{1'b0}};
-                    b_im[gp] <= {PW{1'b0}};
+                    wq_re[gp] <= {TWIDDLE_WIDTH{1'b0}};
+                    wq_im[gp] <= {TWIDDLE_WIDTH{1'b0}};
+                    d_re[gp]  <= {OW{1'b0}};
+                    d_im[gp]  <= {OW{1'b0}};
+                    b_re[gp]  <= {PW{1'b0}};
+                    b_im[gp]  <= {PW{1'b0}};
                 end else if (run) begin
-                    b_re[gp] <= $signed(din_re[gp*OUT_WIDTH +: OUT_WIDTH])
-                                * w_re[gp]
-                              - $signed(din_im[gp*OUT_WIDTH +: OUT_WIDTH])
-                                * w_im[gp];
-                    b_im[gp] <= $signed(din_re[gp*OUT_WIDTH +: OUT_WIDTH])
-                                * w_im[gp]
-                              + $signed(din_im[gp*OUT_WIDTH +: OUT_WIDTH])
-                                * w_re[gp];
+                    // stage 1a: coefficient prefetch -- read with the
+                    // NEXT slot phase; the registered coefficient pairs
+                    // with the NEXT word's (delayed) data
+                    wq_re[gp] <= w_re[gp];
+                    wq_im[gp] <= w_im[gp];
+                    d_re[gp]  <= din_re[gp*OW +: OW];
+                    d_im[gp]  <= din_im[gp*OW +: OW];
+                    // stage 1b: pre-twiddle products from the DELAYED
+                    // operands and PREVIOUSLY fetched coefficient --
+                    // both registered, keeping ROM+DSP off one cycle
+                    b_re[gp] <= $signed(d_re[gp]) * wq_re[gp]
+                              - $signed(d_im[gp]) * wq_im[gp];
+                    b_im[gp] <= $signed(d_re[gp]) * wq_im[gp]
+                              + $signed(d_im[gp]) * wq_re[gp];
                 end
             end
         end
@@ -181,9 +198,15 @@ module fft_cross #(
             v1     <= 1'b0;
             v2     <= 1'b0;
             vlast  <= 1'b0;
+            // NOTE: b_re/b_im are owned by the per-lane pre-twiddle
+            // generate blocks below -- do not drive them here too
+            // (multi-driven nets fold the whole datapath to constants)
             for (i = 0; i < R; i = i + 1) begin
-                b_re[i] <= {PW{1'b0}};  b_im[i] <= {PW{1'b0}};
-                h_re[i] <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
+                wq_re[i] <= {TWIDDLE_WIDTH{1'b0}};
+                wq_im[i] <= {TWIDDLE_WIDTH{1'b0}};
+                d_re[i]  <= {OW{1'b0}};
+                d_im[i]  <= {OW{1'b0}};
+                h_re[i]  <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
             dout_im <= {R*OW{1'b0}};

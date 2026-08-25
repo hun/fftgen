@@ -77,3 +77,16 @@ Critical path after P&R: fabric carry chain from the R3 DSP operand
 registers into a lane DSP's B-input register (1.48 ns).
 
 500 MHz closure CONFIRMED. Utilization: <1% LUT/FF/DSP on KU5P.
+
+## SSR P4 debug state (WIP, test skipped)
+
+Integrated fft_ssr stream still misaligns vs golden despite:
+* lanes verified bit-exact against golden lane streams (dbg7 flow)
+* crossbar unit-verified vs python formula (unit.cpp flow)
+* frame-sync gate uses pd2 (content-phase tap: dout during word w
+  holds input word w-2)
+
+Leading hypothesis: one more residual off-by-one in the fetch/multiply/
+emit chain (emitted SOF position shifts by 1 word when the phase-tap
+delay changes). Next step: single-word hand-verification of one emitted
+frame using dbg4-style dumps with the packed-port build.

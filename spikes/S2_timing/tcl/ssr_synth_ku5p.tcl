@@ -18,10 +18,12 @@ add_files -fileset sources_1 [list \
     /home/hannes/Projects/fftgen/rtl/fft_cross.v ]
 set_property top fft_ssr [current_fileset]
 set_property verilog_define {FFTGEN_PRELOADS=1} [current_fileset]
-set_property include_dirs {$outdir} [current_fileset]
-set_property generic {WN_FILE="fft_wn.mem" TWIDDLE_FILE="fft_twiddles_lane.mem"} [get_filesets sources_1]
+set_property include_dirs $outdir [current_fileset]
+set wn_abs  [file normalize [file join [pwd] fft_wn.mem]]
+set tw_abs  [file normalize [file join [pwd] fft_twiddles_lane.mem]]
 synth_design -top fft_ssr \
     -generic NUM_POINTS=$npts -generic SSR=$ssr \
+    -generic WN_FILE=$wn_abs -generic TWIDDLE_FILE=$tw_abs \
     -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \
     -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \
     -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \
