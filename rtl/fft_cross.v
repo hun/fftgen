@@ -198,14 +198,10 @@ module fft_cross #(
             v1     <= 1'b0;
             v2     <= 1'b0;
             vlast  <= 1'b0;
-            // NOTE: b_re/b_im are owned by the per-lane pre-twiddle
+            // NOTE: wq_*/d_*/b_* are owned by the per-lane pre-twiddle
             // generate blocks below -- do not drive them here too
             // (multi-driven nets fold the whole datapath to constants)
             for (i = 0; i < R; i = i + 1) begin
-                wq_re[i] <= {TWIDDLE_WIDTH{1'b0}};
-                wq_im[i] <= {TWIDDLE_WIDTH{1'b0}};
-                d_re[i]  <= {OW{1'b0}};
-                d_im[i]  <= {OW{1'b0}};
                 h_re[i]  <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
