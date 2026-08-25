@@ -63,7 +63,7 @@ module fft_cross #(
     //   -> half-shift(x) -> rescale/sat(dout)
     // R >= 8 inserts three more registered stages (G/H split, partial
     // layers + sqrt(2)/2 scalar products, odd-bin assembly).
-    localparam integer CB_LAT = (R >= 8) ? 9 : 6;
+    localparam integer CB_LAT = (R >= 8) ? 10 : 6;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -88,13 +88,13 @@ module fft_cross #(
     // slot phase within a frame; pd..pd3 delay it through the three
     // pipeline stages so pd3 == 0 marks an output word that is a frame
     // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9;
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9, pd10;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
     wire         out_phase0 = mature &&
-                             ((R >= 8) ? (pd9 == 0) : (pd6 == 0));
+                             ((R >= 8) ? (pd10 == 0) : (pd6 == 0));
 
     localparam integer OW = OUT_WIDTH;
 
@@ -140,13 +140,19 @@ module fft_cross #(
     localparam signed [TWIDDLE_WIDTH-1:0] C8 = $rtoi(C8_REAL + 0.5);
     reg signed [AW-1:0] e_re [0:3];       // even-q first-layer partials
     reg signed [AW-1:0] e_im [0:3];
-    reg signed [AW-1:0] pq_re [0:3];      // P_k (odd q = 2k+1)
+    reg signed [AW-1:0] qq_re [0:3];      // Q_k (odd q = 2k+1) h2a
+    reg signed [AW-1:0] qq_im [0:3];
+    reg signed [AW-1:0] pp2_re [0:3];     // P_k h2a
+    reg signed [AW-1:0] pp2_im [0:3];
+    reg signed [AW-1:0] pq_re [0:3];      // P_k carried (h2b)
     reg signed [AW-1:0] pq_im [0:3];
+    reg signed [AW-1:0] e3_re [0:3];      // even partials carried (h2b)
+    reg signed [AW-1:0] e3_im [0:3];
     reg signed [AW-1:0] pe_re [0:3];      // P carried one more stage
     reg signed [AW-1:0] pe_im [0:3];
     reg signed [AW-1:0] pq2_re [0:3];     // P carried through prod stage
     reg signed [AW-1:0] pq2_im [0:3];
-    reg signed [AW-1:0] e2_re [0:3];      // even partials carried
+    reg signed [AW-1:0] e2_re [0:3];      // even partials carried (t3a)
     reg signed [AW-1:0] e2_im [0:3];
     // U * c8 with U wider than one DSP A-port: split into lo(18b)/hi
     // so each partial maps to ONE DSP48E2, then combine (registered).
@@ -281,6 +287,7 @@ module fft_cross #(
             pd7    <= {MW{1'b1}};
             pd8    <= {MW{1'b1}};
             pd9    <= {MW{1'b1}};
+            pd10   <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -305,6 +312,9 @@ module fft_cross #(
                 fhi_re[i]<= {FHW{1'b0}}; fhi_im[i] <= {FHW{1'b0}};
                 pq2_re[i]<= {AW{1'b0}}; pq2_im[i] <= {AW{1'b0}};
                 e2_re[i] <= {AW{1'b0}}; e2_im[i]  <= {AW{1'b0}};
+                qq_re[i] <= {AW{1'b0}}; qq_im[i]  <= {AW{1'b0}};
+                pp2_re[i]<= {AW{1'b0}}; pp2_im[i] <= {AW{1'b0}};
+                e3_re[i] <= {AW{1'b0}}; e3_im[i]  <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
             dout_im <= {R*OW{1'b0}};
@@ -323,6 +333,7 @@ module fft_cross #(
             pd7  <= pd6;
             pd8  <= pd7;
             pd9  <= pd8;
+            pd10 <= pd9;
 
             v1 <= 1'b1;
 
@@ -378,6 +389,9 @@ module fft_cross #(
                 // pair factor W_8^{2q} ALTERNATES (-j for k even, +j for
                 // k odd in FORWARD; conjugate under INVERSE), so P/Q use
                 // per-k +/-j pairings of H0..H3.
+                // h2a registers Q and P (one add level from H); the
+                // sigma-signed U combos move to h2b so at most one
+                // 39-bit add sits before the DSP multiply.
                 for (i = 0; i < 4; i = i + 1) begin
                     if ((i[0] ^ (INVERSE != 0)) == 0) begin  // -j pairing
                         tp_re = h_re[4] + h_im[6];
@@ -390,29 +404,41 @@ module fft_cross #(
                         tq_re = h_re[5] - h_im[7];
                         tq_im = h_im[5] + h_re[7];
                     end
-                    pq_re[i] <= tp_re;
-                    pq_im[i] <= tp_im;
-                    // sigma-signed U/V of Q: forward sc/ss per q=2k+1 is
-                    // (1,-1) (-1,-1) (-1,1) (1,1); inverse mirrors k->3-k
+                    pp2_re[i] <= tp_re;
+                    pp2_im[i] <= tp_im;
+                    qq_re[i]  <= tq_re;
+                    qq_im[i]  <= tq_im;
+                end
+            end
+
+            if (R >= 8) begin
+                // ---- R=8 stage h2b: sigma-signed U, P/e carries ------
+                for (i = 0; i < 4; i = i + 1) begin
+                    // forward sc/ss per q=2k+1: (1,-1) (-1,-1) (-1,1) (1,1);
+                    // inverse mirrors k->3-k
                     sig_k = (INVERSE != 0) ? (3 - i) : i;
                     case (sig_k)
                         0: begin
-                            u_re[i] <= tq_re + tq_im;
-                            u_im[i] <= tq_im - tq_re;
+                            u_re[i] <= qq_re[i] + qq_im[i];
+                            u_im[i] <= qq_im[i] - qq_re[i];
                         end
                         1: begin
-                            u_re[i] <= tq_im - tq_re;
-                            u_im[i] <= -(tq_im + tq_re);
+                            u_re[i] <= qq_im[i] - qq_re[i];
+                            u_im[i] <= -(qq_im[i] + qq_re[i]);
                         end
                         2: begin
-                            u_re[i] <= -(tq_re + tq_im);
-                            u_im[i] <= tq_re - tq_im;
+                            u_re[i] <= -(qq_re[i] + qq_im[i]);
+                            u_im[i] <= qq_re[i] - qq_im[i];
                         end
                         3: begin
-                            u_re[i] <= tq_re - tq_im;
-                            u_im[i] <= tq_re + tq_im;
+                            u_re[i] <= qq_re[i] - qq_im[i];
+                            u_im[i] <= qq_re[i] + qq_im[i];
                         end
                     endcase
+                    pq_re[i] <= pp2_re[i];
+                    pq_im[i] <= pp2_im[i];
+                    e3_re[i] <= e_re[i];
+                    e3_im[i] <= e_im[i];
                 end
             end
 
@@ -432,8 +458,8 @@ module fft_cross #(
                     pq2_im[i] <= pq_im[i];
                 end
                 for (i = 0; i < 4; i = i + 1) begin
-                    e2_re[i] <= e_re[i];
-                    e2_im[i] <= e_im[i];
+                    e2_re[i] <= e3_re[i];
+                    e2_im[i] <= e3_im[i];
                 end
             end
 
