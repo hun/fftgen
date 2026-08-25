@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2026.1 (lin64) Build 6511674 Tue Jun 16 11:01:26 MDT 2026
-| Date         : Tue Aug 25 11:32:21 2026
+| Date         : Tue Aug 25 11:38:36 2026
 | Host         : hannes-x470aorusultragaming running 64-bit Ubuntu 26.04 LTS
 | Command      : report_utilization -file /home/hannes/Projects/fftgen/spikes/S2_timing/build_ku5p/SSR_N32_R2/util.txt
 | Design       : fft_ssr
@@ -32,19 +32,19 @@ Table of Contents
 +----------------------------+------+-------+------------+-----------+-------+
 |          Site Type         | Used | Fixed | Prohibited | Available | Util% |
 +----------------------------+------+-------+------------+-----------+-------+
-| CLB LUTs*                  |  230 |     0 |          0 |    216960 |  0.11 |
-|   LUT as Logic             |  222 |     0 |          0 |    216960 |  0.10 |
-|   LUT as Memory            |    8 |     0 |          0 |     99840 | <0.01 |
-|     LUT as Distributed RAM |    4 |     0 |            |           |       |
-|     LUT as Shift Register  |    4 |     0 |            |           |       |
-| CLB Registers              |  270 |     0 |          0 |    433920 |  0.06 |
-|   Register as Flip Flop    |  270 |     0 |          0 |    433920 |  0.06 |
+| CLB LUTs*                  | 2103 |     0 |          0 |    216960 |  0.97 |
+|   LUT as Logic             | 1399 |     0 |          0 |    216960 |  0.64 |
+|   LUT as Memory            |  704 |     0 |          0 |     99840 |  0.71 |
+|     LUT as Distributed RAM |  428 |     0 |            |           |       |
+|     LUT as Shift Register  |  276 |     0 |            |           |       |
+| CLB Registers              | 3578 |     0 |          0 |    433920 |  0.82 |
+|   Register as Flip Flop    | 3578 |     0 |          0 |    433920 |  0.82 |
 |   Register as Latch        |    0 |     0 |          0 |    433920 |  0.00 |
-| CARRY8                     |   56 |     0 |          0 |     27120 |  0.21 |
+| CARRY8                     |  256 |     0 |          0 |     27120 |  0.94 |
 | F7 Muxes                   |    0 |     0 |          0 |    108480 |  0.00 |
 | F8 Muxes                   |    0 |     0 |          0 |     54240 |  0.00 |
 | F9 Muxes                   |    0 |     0 |          0 |     27120 |  0.00 |
-| Unique Control Sets        |    9 |       |          0 |     54240 |  0.02 |
+| Unique Control Sets        |   49 |       |          0 |     54240 |  0.09 |
 +----------------------------+------+-------+------------+-----------+-------+
 * Warning! The Final LUT count, after physical optimizations and full implementation, is typically lower. Run opt_design after synthesis, if not already completed, for a more realistic count.
 Warning! LUT value is adjusted to account for LUT combining.
@@ -66,8 +66,8 @@ Warning! For any ECO changes, please run place_design if there are unplaced inst
 | 0     |          Yes |           - |            - |
 | 0     |          Yes |           - |          Set |
 | 0     |          Yes |           - |        Reset |
-| 8     |          Yes |         Set |            - |
-| 262   |          Yes |       Reset |            - |
+| 410   |          Yes |         Set |            - |
+| 3168  |          Yes |       Reset |            - |
 +-------+--------------+-------------+--------------+
 
 
@@ -91,8 +91,8 @@ Warning! For any ECO changes, please run place_design if there are unplaced inst
 +----------------+------+-------+------------+-----------+-------+
 |    Site Type   | Used | Fixed | Prohibited | Available | Util% |
 +----------------+------+-------+------------+-----------+-------+
-| DSPs           |    8 |     0 |          0 |      1824 |  0.44 |
-|   DSP48E2 only |    8 |       |            |           |       |
+| DSPs           |   40 |     0 |          0 |      1824 |  2.19 |
+|   DSP48E2 only |   40 |       |            |           |       |
 +----------------+------+-------+------------+-----------+-------+
 
 
@@ -102,7 +102,7 @@ Warning! For any ECO changes, please run place_design if there are unplaced inst
 +------------------+------+-------+------------+-----------+-------+
 |     Site Type    | Used | Fixed | Prohibited | Available | Util% |
 +------------------+------+-------+------------+-----------+-------+
-| Bonded IOB       |   73 |     0 |          0 |       256 | 28.52 |
+| Bonded IOB       |  137 |     0 |          0 |       256 | 53.52 |
 |   HPIOB_M        |    0 |     0 |          0 |        96 |  0.00 |
 |   HPIOB_S        |    0 |     0 |          0 |        96 |  0.00 |
 |   HDIOB_M        |    0 |     0 |          0 |        24 |  0.00 |
@@ -172,21 +172,23 @@ Warning! For any ECO changes, please run place_design if there are unplaced inst
 +----------+------+---------------------+
 | Ref Name | Used | Functional Category |
 +----------+------+---------------------+
-| FDRE     |  262 |            Register |
-| LUT2     |  149 |                 CLB |
-| LUT3     |   76 |                 CLB |
+| FDRE     | 3168 |            Register |
+| LUT3     | 1232 |                 CLB |
+| RAMD32   |  744 |                 CLB |
+| LUT2     |  582 |                 CLB |
+| FDSE     |  410 |            Register |
+| SRL16E   |  272 |                 CLB |
+| CARRY8   |  256 |                 CLB |
+| RAMS32   |  108 |                 CLB |
+| LUT1     |   71 |                 CLB |
+| LUT4     |   70 |                 CLB |
+| INBUF    |   70 |                 I/O |
+| IBUFCTRL |   70 |                 I/O |
 | OBUF     |   67 |                 I/O |
-| CARRY8   |   56 |                 CLB |
-| LUT4     |   15 |                 CLB |
-| LUT1     |   15 |                 CLB |
-| LUT6     |   13 |                 CLB |
-| FDSE     |    8 |            Register |
-| DSP48E2  |    8 |          Arithmetic |
-| INBUF    |    6 |                 I/O |
-| IBUFCTRL |    6 |                 I/O |
+| DSP48E2  |   40 |          Arithmetic |
+| LUT6     |   15 |                 CLB |
+| LUT5     |    6 |                 CLB |
 | SRLC32E  |    4 |                 CLB |
-| RAMD32   |    4 |                 CLB |
-| LUT5     |    4 |                 CLB |
 | BUFGCE   |    1 |               Clock |
 +----------+------+---------------------+
 

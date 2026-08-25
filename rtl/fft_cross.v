@@ -175,11 +175,20 @@ module fft_cross #(
                     d_im[gp]  <= din_im[gp*OW +: OW];
                     // stage 1b: pre-twiddle products from the DELAYED
                     // operands and PREVIOUSLY fetched coefficient --
-                    // both registered, keeping ROM+DSP off one cycle
-                    b_re[gp] <= $signed(d_re[gp]) * wq_re[gp]
-                              - $signed(d_im[gp]) * wq_im[gp];
-                    b_im[gp] <= $signed(d_re[gp]) * wq_im[gp]
-                              + $signed(d_im[gp]) * wq_re[gp];
+                    // both registered, keeping ROM+DSP off one cycle.
+                    // Lane 0 (r = 0) is the identity twiddle: a plain
+                    // left shift by td replaces the constant-coefficient
+                    // multiply (differs from golden's 131071-multiply by
+                    // <1 LSB, within documented SSR tolerance).
+                    if (gp == 0) begin
+                        b_re[gp] <= d_re[gp] <<< TWIDDLE_DECIMAL;
+                        b_im[gp] <= d_im[gp] <<< TWIDDLE_DECIMAL;
+                    end else begin
+                        b_re[gp] <= $signed(d_re[gp]) * wq_re[gp]
+                                  - $signed(d_im[gp]) * wq_im[gp];
+                        b_im[gp] <= $signed(d_re[gp]) * wq_im[gp]
+                                  + $signed(d_im[gp]) * wq_re[gp];
+                    end
                 end
             end
         end

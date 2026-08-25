@@ -4,7 +4,7 @@ INFO: [Common 17-3922] A valid Vivado Design Suite BASIC license has been detect
   **** SW Build 6511674 on Tue Jun 16 11:01:26 MDT 2026
   **** IP Build 6504888 on Tue Jun 09 09:05:25 MDT 2026
   **** SharedData Build 6501428 on Mon Jun 08 17:34:18 MDT 2026
-  **** Start of session at: Tue Aug 25 11:31:58 2026
+  **** Start of session at: Tue Aug 25 11:38:11 2026
     ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
     ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
 
@@ -42,9 +42,9 @@ Attempting to get a license for feature 'Vivado_Synthesis' and/or device 'xcku5p
 INFO: [Common 17-349] Got license for feature 'Vivado_Synthesis' and/or device 'xcku5p'
 INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
 INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
-INFO: [Synth 8-7075] Helper process launched with PID 174778
+INFO: [Synth 8-7075] Helper process launched with PID 176484
 ---------------------------------------------------------------------------------
-Starting Synthesize : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2207.883 ; gain = 496.617 ; free physical = 76951 ; free virtual = 85609
+Starting Synthesize : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2207.496 ; gain = 496.227 ; free physical = 77017 ; free virtual = 85679
 ---------------------------------------------------------------------------------
 WARNING: [Synth 8-6901] identifier 'tw_rom' is used before its declaration [/home/hannes/Projects/fftgen/rtl/fft_sdf.v:178]
 WARNING: [Synth 8-6901] identifier 'p' is used before its declaration [/home/hannes/Projects/fftgen/rtl/fft_cross.v:79]
@@ -317,10 +317,10 @@ WARNING: [Synth 8-7129] Port dbg_stage_re[173] in module fft_top is either uncon
 WARNING: [Synth 8-7129] Port dbg_stage_re[172] in module fft_top is either unconnected or has no load
 INFO: [Common 17-14] Message 'Synth 8-7129' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
 ---------------------------------------------------------------------------------
-Finished Synthesize : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2307.852 ; gain = 596.586 ; free physical = 76796 ; free virtual = 85471
+Finished Synthesize : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2308.465 ; gain = 597.195 ; free physical = 76871 ; free virtual = 85536
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Constraint Validation : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2319.727 ; gain = 608.461 ; free physical = 76789 ; free virtual = 85464
+Finished Constraint Validation : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2323.309 ; gain = 612.039 ; free physical = 76868 ; free virtual = 85534
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Loading Part and Timing Information
@@ -329,12 +329,12 @@ Loading part: xcku5p-ffva676-1-e
 INFO: [Device 21-403] Loading part xcku5p-ffva676-1-e
 INFO: [Synth 8-6742] Reading net delay rules and data
 ---------------------------------------------------------------------------------
-Finished Loading Part and Timing Information : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2328.633 ; gain = 617.367 ; free physical = 76789 ; free virtual = 85464
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 2332.215 ; gain = 620.945 ; free physical = 76868 ; free virtual = 85534
 ---------------------------------------------------------------------------------
 INFO: [Synth 8-6904] The RAM "fft_reorder:/mk_user_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
 INFO: [Synth 8-6904] The RAM "fft_reorder:/mk_last_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
 ---------------------------------------------------------------------------------
-Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 2347.617 ; gain = 636.352 ; free physical = 76770 ; free virtual = 85447
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 2348.230 ; gain = 636.961 ; free physical = 76842 ; free virtual = 85509
 ---------------------------------------------------------------------------------
 No constraint files found.
 ---------------------------------------------------------------------------------
@@ -355,11 +355,10 @@ Detailed RTL Component Info :
 	   2 Input    1 Bit       Adders := 10    
 +---Registers : 
 	               37 Bit    Registers := 20    
-	               34 Bit    Registers := 4     
 	               32 Bit    Registers := 2     
 	               18 Bit    Registers := 32    
 	               17 Bit    Registers := 200   
-	               16 Bit    Registers := 8     
+	               16 Bit    Registers := 16    
 	                8 Bit    Registers := 1     
 	                6 Bit    Registers := 10    
 	                4 Bit    Registers := 9     
@@ -630,254 +629,52 @@ DSP Report: operator with_reorder.u_core/stages[3].u_stage/mreg_im0 is absorbed 
 DSP Report: operator with_reorder.u_core/stages[3].u_stage/mreg_im1 is absorbed into DSP with_reorder.u_core/stages[3].u_stage/mreg_im_reg.
 INFO: [Synth 8-6904] The RAM "fft_top:/with_reorder.u_reorder/mk_user_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
 INFO: [Synth 8-6904] The RAM "fft_top:/with_reorder.u_reorder/mk_last_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
-DSP Report: Generating DSP p_0_out, operation Mode is: A*B.
+DSP Report: Generating DSP p_0_out, operation Mode is: A2*B2.
+DSP Report: register g_pre[1].d_re_reg[1] is absorbed into DSP p_0_out.
+DSP Report: register g_pre[1].wq_re_reg[1] is absorbed into DSP p_0_out.
 DSP Report: operator p_0_out is absorbed into DSP p_0_out.
-DSP Report: Generating DSP g_pre[1].b_re_reg[1], operation Mode is: (PCIN-A*B)'.
+DSP Report: Generating DSP g_pre[1].b_re_reg[1], operation Mode is: (PCIN-A2*B2)'.
+DSP Report: register g_pre[1].d_im_reg[1] is absorbed into DSP g_pre[1].b_re_reg[1].
+DSP Report: register g_pre[1].wq_im_reg[1] is absorbed into DSP g_pre[1].b_re_reg[1].
 DSP Report: register g_pre[1].b_re_reg[1] is absorbed into DSP g_pre[1].b_re_reg[1].
 DSP Report: operator p_1_out is absorbed into DSP g_pre[1].b_re_reg[1].
 DSP Report: operator p_0_out is absorbed into DSP g_pre[1].b_re_reg[1].
-DSP Report: Generating DSP p_0_out, operation Mode is: A*B.
+DSP Report: Generating DSP p_0_out, operation Mode is: A2*B2.
+DSP Report: register g_pre[0].d_re_reg[0] is absorbed into DSP p_0_out.
+DSP Report: register g_pre[0].wq_re_reg[0] is absorbed into DSP p_0_out.
 DSP Report: operator p_0_out is absorbed into DSP p_0_out.
-DSP Report: Generating DSP g_pre[0].b_re_reg[0], operation Mode is: (PCIN-A*B)'.
+DSP Report: Generating DSP g_pre[0].b_re_reg[0], operation Mode is: (PCIN-A2*B2)'.
+DSP Report: register g_pre[0].d_im_reg[0] is absorbed into DSP g_pre[0].b_re_reg[0].
+DSP Report: register g_pre[0].wq_im_reg[0] is absorbed into DSP g_pre[0].b_re_reg[0].
 DSP Report: register g_pre[0].b_re_reg[0] is absorbed into DSP g_pre[0].b_re_reg[0].
 DSP Report: operator p_1_out is absorbed into DSP g_pre[0].b_re_reg[0].
 DSP Report: operator p_0_out is absorbed into DSP g_pre[0].b_re_reg[0].
-DSP Report: Generating DSP p_0_out, operation Mode is: A*B.
+DSP Report: Generating DSP p_0_out, operation Mode is: A2*B2.
+DSP Report: register g_pre[1].d_re_reg[1] is absorbed into DSP p_0_out.
+DSP Report: register g_pre[1].wq_im_reg[1] is absorbed into DSP p_0_out.
 DSP Report: operator p_0_out is absorbed into DSP p_0_out.
-DSP Report: Generating DSP g_pre[1].b_im_reg[1], operation Mode is: (PCIN+A*B)'.
+DSP Report: Generating DSP g_pre[1].b_im_reg[1], operation Mode is: (PCIN+A2*B2)'.
+DSP Report: register g_pre[1].d_im_reg[1] is absorbed into DSP g_pre[1].b_im_reg[1].
+DSP Report: register g_pre[1].wq_re_reg[1] is absorbed into DSP g_pre[1].b_im_reg[1].
 DSP Report: register g_pre[1].b_im_reg[1] is absorbed into DSP g_pre[1].b_im_reg[1].
 DSP Report: operator p_1_out is absorbed into DSP g_pre[1].b_im_reg[1].
 DSP Report: operator p_0_out is absorbed into DSP g_pre[1].b_im_reg[1].
-DSP Report: Generating DSP p_0_out, operation Mode is: A*B.
+DSP Report: Generating DSP p_0_out, operation Mode is: A2*B2.
+DSP Report: register g_pre[0].d_re_reg[0] is absorbed into DSP p_0_out.
+DSP Report: register g_pre[0].wq_im_reg[0] is absorbed into DSP p_0_out.
 DSP Report: operator p_0_out is absorbed into DSP p_0_out.
-DSP Report: Generating DSP g_pre[0].b_im_reg[0], operation Mode is: (PCIN+A*B)'.
+DSP Report: Generating DSP g_pre[0].b_im_reg[0], operation Mode is: (PCIN+A2*B2)'.
+DSP Report: register g_pre[0].d_im_reg[0] is absorbed into DSP g_pre[0].b_im_reg[0].
+DSP Report: register g_pre[0].wq_re_reg[0] is absorbed into DSP g_pre[0].b_im_reg[0].
 DSP Report: register g_pre[0].b_im_reg[0] is absorbed into DSP g_pre[0].b_im_reg[0].
 DSP Report: operator p_1_out is absorbed into DSP g_pre[0].b_im_reg[0].
 DSP Report: operator p_0_out is absorbed into DSP g_pre[0].b_im_reg[0].
 INFO: [Synth 8-6904] The RAM "fft_top:/with_reorder.u_reorder/mk_user_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
 INFO: [Synth 8-6904] The RAM "fft_top:/with_reorder.u_reorder/mk_last_reg" of size (depth=32 x width=1) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][15]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][14]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][13]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][12]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][11]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][10]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][9]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][8]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][7]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][6]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][5]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][4]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][3]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][2]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][1]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_re_reg[1][0]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][17]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][16]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][15]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][14]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][13]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][12]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][11]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][10]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][9]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][8]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][7]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][6]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][5]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][4]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][3]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][2]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][1]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/wq_re_reg[1][0]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][15]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][14]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][13]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][12]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][11]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][10]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][9]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][8]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][7]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][6]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][5]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][4]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][3]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][2]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][1]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 1st driver pin 'u_cross/d_im_reg[1][0]/Q' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6859] multi-driven net on pin Q with 2nd driver pin 'GND' [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-INFO: [Common 17-14] Message 'Synth 8-6859' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:208]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:206]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:207]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-CRITICAL WARNING: [Synth 8-6858] multi-driven net Q is connected to at least one constant driver which has been preserved, other driver is ignored [/home/hannes/Projects/fftgen/rtl/fft_cross.v:205]
-INFO: [Common 17-14] Message 'Synth 8-6858' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[0].u_stage/lane_hi_re_reg /\with_reorder.u_core/stages[0].u_stage/lane_hi_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[0].u_stage/mreg_re_reg /\with_reorder.u_core/stages[0].u_stage/mreg_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg /\with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[0].u_stage/lane_hi_im_reg /\with_reorder.u_core/stages[0].u_stage/lane_hi_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[0].u_stage/mreg_im_reg /\with_reorder.u_core/stages[0].u_stage/mreg_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[1].u_stage/mreg_re_reg /\with_reorder.u_core/stages[1].u_stage/mreg_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[2].u_stage/lane_hi_re_reg /\with_reorder.u_core/stages[2].u_stage/lane_hi_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[1].u_stage/lane_hi_im_reg /\with_reorder.u_core/stages[1].u_stage/lane_hi_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[1].u_stage/mreg_im_reg /\with_reorder.u_core/stages[1].u_stage/mreg_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[2].u_stage/mreg_re_reg /\with_reorder.u_core/stages[2].u_stage/mreg_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[3].u_stage/lane_hi_re_reg /\with_reorder.u_core/stages[3].u_stage/lane_hi_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[2].u_stage/lane_hi_im_reg /\with_reorder.u_core/stages[2].u_stage/lane_hi_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[2].u_stage/mreg_im_reg /\with_reorder.u_core/stages[2].u_stage/mreg_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[3].u_stage/mreg_re_reg /\with_reorder.u_core/stages[3].u_stage/mreg_re_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg /\with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg , of type : DSP48E2 in constant propagation
-WARNING: [Synth 8-13373] Removed Macro Instance : fft_top:/\with_reorder.u_core/stages[3].u_stage/mreg_im_reg /\with_reorder.u_core/stages[3].u_stage/mreg_im_reg , of type : DSP48E2 in constant propagation
 WARNING: [Synth 8-13374] Removed Unreachable instance \lanes[0].u_lane /i_109 containing BRAMs/URAMs in constant propagation
 WARNING: [Synth 8-13374] Removed Unreachable instance \lanes[1].u_lane /i_108 containing BRAMs/URAMs in constant propagation
 ---------------------------------------------------------------------------------
-Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 3212.430 ; gain = 1501.164 ; free physical = 75964 ; free virtual = 84643
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3212.012 ; gain = 1500.742 ; free physical = 75982 ; free virtual = 84652
 ---------------------------------------------------------------------------------
  Sort Area is  with_reorder.u_core/stages[0].u_stage/lane_hi_re_reg_3 : 0 0 : 2455 5179 : Used 1 time 0
  Sort Area is  with_reorder.u_core/stages[0].u_stage/lane_hi_re_reg_3 : 0 1 : 2724 5179 : Used 1 time 0
@@ -911,14 +708,14 @@ Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:11 ; elaps
  Sort Area is  with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg_12 : 0 1 : 2582 5037 : Used 1 time 0
  Sort Area is  with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg_a : 0 0 : 2455 5037 : Used 1 time 0
  Sort Area is  with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg_a : 0 1 : 2582 5037 : Used 1 time 0
- Sort Area is  p_0_out_13 : 0 0 : 2126 4522 : Used 1 time 0
- Sort Area is  p_0_out_13 : 0 1 : 2396 4522 : Used 1 time 0
- Sort Area is  p_0_out_16 : 0 0 : 2126 4522 : Used 1 time 0
- Sort Area is  p_0_out_16 : 0 1 : 2396 4522 : Used 1 time 0
- Sort Area is  p_0_out_17 : 0 0 : 2126 4387 : Used 1 time 0
- Sort Area is  p_0_out_17 : 0 1 : 2261 4387 : Used 1 time 0
- Sort Area is  p_0_out_19 : 0 0 : 2126 4387 : Used 1 time 0
- Sort Area is  p_0_out_19 : 0 1 : 2261 4387 : Used 1 time 0
+ Sort Area is  p_0_out_13 : 0 0 : 2160 4590 : Used 1 time 0
+ Sort Area is  p_0_out_13 : 0 1 : 2430 4590 : Used 1 time 0
+ Sort Area is  p_0_out_16 : 0 0 : 2160 4590 : Used 1 time 0
+ Sort Area is  p_0_out_16 : 0 1 : 2430 4590 : Used 1 time 0
+ Sort Area is  p_0_out_17 : 0 0 : 2160 4455 : Used 1 time 0
+ Sort Area is  p_0_out_17 : 0 1 : 2295 4455 : Used 1 time 0
+ Sort Area is  p_0_out_19 : 0 0 : 2160 4455 : Used 1 time 0
+ Sort Area is  p_0_out_19 : 0 1 : 2295 4455 : Used 1 time 0
 ---------------------------------------------------------------------------------
 Start ROM, RAM, DSP, Shift Register and Retiming Reporting
 ---------------------------------------------------------------------------------
@@ -938,12 +735,48 @@ ROM: Preliminary Mapping Report
 
 
 Distributed RAM: Preliminary Mapping Report (see note below)
-+------------+------------------------------------+-----------+----------------------+---------------+
-|Module Name | RTL Object                         | Inference | Size (Depth x Width) | Primitives    | 
-+------------+------------------------------------+-----------+----------------------+---------------+
-|fft_top:    | with_reorder.u_reorder/mk_user_reg | Implied   | 32 x 1               | RAM32X1D x 1  | 
-|fft_top:    | with_reorder.u_reorder/mk_last_reg | Implied   | 32 x 1               | RAM32X1D x 1  | 
-+------------+------------------------------------+-----------+----------------------+---------------+
++------------+----------------------------------------------------+----------------+----------------------+---------------+
+|Module Name | RTL Object                                         | Inference      | Size (Depth x Width) | Primitives    | 
++------------+----------------------------------------------------+----------------+----------------------+---------------+
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_re_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_im_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mk_user_reg                 | Implied        | 32 x 1               | RAM32X1D x 1  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_re_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_im_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mk_last_reg                 | Implied        | 32 x 1               | RAM32X1D x 1  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
++------------+----------------------------------------------------+----------------+----------------------+---------------+
 
 Note: The table above is a preliminary report that shows the Distributed RAMs at the current stage of the synthesis flow. Some Distributed RAMs may be reimplemented as non Distributed RAM primitives later in the synthesis flow. Multiple instantiated RAMs are reported only once.
 
@@ -983,14 +816,14 @@ DSP: Preliminary Mapping Report (see note below. The ' indicates corresponding R
 |fft_top     | (PCIN-A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
 |fft_top     | (A''*B2)'       | 18     | 17     | -      | -      | 35     | 2    | 1    | -    | -    | -     | 1    | 0    | 
 |fft_top     | (PCIN+A''*B'')' | 18     | 17     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B             | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN-A*B)'     | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B             | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN-A*B)'     | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B             | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN+A*B)'     | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B             | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN+A*B)'     | 18     | 16     | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A2*B2           | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN-A2*B2)'   | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A2*B2           | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN-A2*B2)'   | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A2*B2           | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN+A2*B2)'   | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A2*B2           | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN+A2*B2)'   | 18     | 16     | -      | -      | 34     | 1    | 1    | -    | -    | -     | 0    | 1    | 
 +------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
 
 Note: The table above is a preliminary report that shows the DSPs inferred at the current stage of the synthesis flow. Some DSP may be reimplemented as non DSP primitives later in the synthesis flow. Multiple instantiated DSPs are reported only once.
@@ -1002,19 +835,55 @@ No constraint files found.
 Start Timing Optimization
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Timing Optimization : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 3212.430 ; gain = 1501.164 ; free physical = 75959 ; free virtual = 84637
+Finished Timing Optimization : Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 3212.012 ; gain = 1500.742 ; free physical = 75982 ; free virtual = 84652
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start ROM, RAM, DSP, Shift Register and Retiming Reporting
 ---------------------------------------------------------------------------------
 
 Distributed RAM: Final Mapping Report
-+------------+------------------------------------+-----------+----------------------+---------------+
-|Module Name | RTL Object                         | Inference | Size (Depth x Width) | Primitives    | 
-+------------+------------------------------------+-----------+----------------------+---------------+
-|fft_top:    | with_reorder.u_reorder/mk_user_reg | Implied   | 32 x 1               | RAM32X1D x 1  | 
-|fft_top:    | with_reorder.u_reorder/mk_last_reg | Implied   | 32 x 1               | RAM32X1D x 1  | 
-+------------+------------------------------------+-----------+----------------------+---------------+
++------------+----------------------------------------------------+----------------+----------------------+---------------+
+|Module Name | RTL Object                                         | Inference      | Size (Depth x Width) | Primitives    | 
++------------+----------------------------------------------------+----------------+----------------------+---------------+
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_re_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_im_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mk_user_reg                 | Implied        | 32 x 1               | RAM32X1D x 1  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_re_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/pfifo_im_reg | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_re_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/pfifo_im_reg | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_re_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/pfifo_im_reg | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_re_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/pfifo_im_reg | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_re_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mem_im_reg                  | User Attribute | 32 x 16              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_reorder/mk_last_reg                 | Implied        | 32 x 1               | RAM32X1D x 1  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_re_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[0].u_stage/ram_im_reg   | User Attribute | 16 x 17              | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_re_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[1].u_stage/ram_im_reg   | User Attribute | 8 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_re_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[2].u_stage/ram_im_reg   | User Attribute | 4 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_re_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
+|fft_top:    | with_reorder.u_core/stages[3].u_stage/ram_im_reg   | User Attribute | 2 x 17               | RAM32M16 x 2  | 
++------------+----------------------------------------------------+----------------+----------------------+---------------+
 
 ---------------------------------------------------------------------------------
 Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
@@ -1023,7 +892,7 @@ Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
 Start Technology Mapping
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Technology Mapping : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 3212.430 ; gain = 1501.164 ; free physical = 75958 ; free virtual = 84637
+Finished Technology Mapping : Time (s): cpu = 00:00:13 ; elapsed = 00:00:13 . Memory (MB): peak = 3212.012 ; gain = 1500.742 ; free physical = 75982 ; free virtual = 84648
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start IO Insertion
@@ -1041,48 +910,49 @@ Start Final Netlist Cleanup
 Finished Final Netlist Cleanup
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished IO Insertion : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished IO Insertion : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75881 ; free virtual = 84547
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Instances
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Instances : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75881 ; free virtual = 84547
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Rebuilding User Hierarchy
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75880 ; free virtual = 84546
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Ports
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Ports : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75879 ; free virtual = 84546
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Handling Custom Attributes
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Handling Custom Attributes : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75879 ; free virtual = 84545
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Nets
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Nets : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75879 ; free virtual = 84545
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start ROM, RAM, DSP, Shift Register and Retiming Reporting
 ---------------------------------------------------------------------------------
 
 Static Shift Register Report:
-+------------+-----------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
-|Module Name | RTL Name                                            | Length | Width | Reset Signal | Pull out first Reg | Pull out last Reg | SRL16E | SRLC32E | 
-+------------+-----------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
-|fft_ssr     | lanes[0].u_lane/with_reorder.u_core/mk_user_reg[43] | 44     | 2     | NO           | YES                | YES               | 0      | 4       | 
-+------------+-----------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
++------------+-------------------------------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
+|Module Name | RTL Name                                                                | Length | Width | Reset Signal | Pull out first Reg | Pull out last Reg | SRL16E | SRLC32E | 
++------------+-------------------------------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
+|fft_ssr     | lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly3_re_reg[16] | 3      | 272   | NO           | NO                 | YES               | 272    | 0       | 
+|fft_ssr     | lanes[0].u_lane/with_reorder.u_core/mk_user_reg[43]                     | 44     | 2     | NO           | YES                | YES               | 0      | 4       | 
++------------+-------------------------------------------------------------------------+--------+-------+--------------+--------------------+-------------------+--------+---------+
 
 ---------------------------------------------------------------------------------
 Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
@@ -1092,18 +962,50 @@ Start Writing Synthesis Report
 ---------------------------------------------------------------------------------
 
 DSP Final Report (the ' indicates corresponding REG is set)
-+------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
-|Module Name | DSP Mapping   | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
-+------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
-|fft_cross   | A*B           | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN-(A*B))' | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B           | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN-(A*B))' | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B           | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN+A*B)'   | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-|fft_cross   | A*B           | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 0    | 
-|fft_cross   | (PCIN+A*B)'   | 0      | 0      | -      | -      | 34     | 0    | 0    | -    | -    | -     | 0    | 1    | 
-+------------+---------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping       | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A*B''))'   | 0      | 18     | -      | -      | 36     | 0    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A*B')'           | 0      | 18     | -      | -      | 0      | 0    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A''*B''))' | 30     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 30     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A''*B')'         | 17     | 18     | -      | -      | 0      | 2    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN-(A*B''))'   | 0      | 18     | -      | -      | 36     | 0    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (A*B')'           | 0      | 18     | -      | -      | 0      | 0    | 1    | -    | -    | -     | 0    | 1    | 
+|fft_top     | (PCIN+A''*B'')'   | 17     | 18     | -      | -      | 36     | 2    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A'*B''            | 30     | 18     | -      | -      | 0      | 1    | 2    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN-(A'*B''))'  | 30     | 18     | -      | -      | 34     | 1    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A'*B''            | 17     | 18     | -      | -      | 0      | 1    | 2    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN-(A'*B''))'  | 0      | 18     | -      | -      | 34     | 1    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A'*B''            | 30     | 18     | -      | -      | 0      | 1    | 2    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN+A'*B'')'    | 30     | 18     | -      | -      | 34     | 1    | 2    | -    | -    | -     | 0    | 1    | 
+|fft_cross   | A'*B''            | 0      | 18     | -      | -      | 0      | 1    | 2    | -    | -    | -     | 0    | 0    | 
+|fft_cross   | (PCIN+A'*B'')'    | 17     | 18     | -      | -      | 34     | 1    | 2    | -    | -    | -     | 0    | 1    | 
++------------+-------------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
 
 
 Report BlackBoxes: 
@@ -1113,75 +1015,135 @@ Report BlackBoxes:
 +-+--------------+----------+
 
 Report Cell Usage: 
-+------+---------+------+
-|      |Cell     |Count |
-+------+---------+------+
-|1     |BUFG     |     1|
-|2     |CARRY8   |    56|
-|3     |DSP48E2  |     8|
-|4     |LUT1     |    15|
-|5     |LUT2     |   149|
-|6     |LUT3     |    76|
-|7     |LUT4     |    15|
-|8     |LUT5     |     4|
-|9     |LUT6     |    13|
-|10    |RAM32X1D |     2|
-|11    |SRLC32E  |     4|
-|12    |FDRE     |   262|
-|13    |FDSE     |     8|
-|14    |IBUF     |     6|
-|15    |OBUF     |    67|
-+------+---------+------+
++------+----------------+------+
+|      |Cell            |Count |
++------+----------------+------+
+|1     |BUFG            |     1|
+|2     |CARRY8          |   256|
+|3     |DSP_ALU         |    40|
+|4     |DSP_A_B_DATA    |    40|
+|5     |DSP_C_DATA      |    40|
+|6     |DSP_MULTIPLIER  |    40|
+|7     |DSP_M_DATA      |    40|
+|8     |DSP_OUTPUT      |    40|
+|9     |DSP_PREADD      |    40|
+|10    |DSP_PREADD_DATA |    40|
+|11    |LUT1            |    71|
+|12    |LUT2            |   582|
+|13    |LUT3            |  1232|
+|14    |LUT4            |    70|
+|15    |LUT5            |     6|
+|16    |LUT6            |    15|
+|17    |RAM32M          |     2|
+|18    |RAM32M16        |    52|
+|19    |RAM32X1D        |     2|
+|20    |SRL16E          |   272|
+|21    |SRLC32E         |     4|
+|22    |FDRE            |  3168|
+|23    |FDSE            |   410|
+|24    |IBUF            |    70|
+|25    |OBUF            |    67|
++------+----------------+------+
 
 Report Instance Areas: 
-+------+-----------------------------+--------------+------+
-|      |Instance                     |Module        |Cells |
-+------+-----------------------------+--------------+------+
-|1     |top                          |              |   686|
-|2     |  \lanes[0].u_lane           |fft_top       |    47|
-|3     |    \with_reorder.u_core     |fft_sdf_1     |    23|
-|4     |    \with_reorder.u_reorder  |fft_reorder_2 |    24|
-|5     |  \lanes[1].u_lane           |fft_top_0     |    36|
-|6     |    \with_reorder.u_core     |fft_sdf       |    23|
-|7     |    \with_reorder.u_reorder  |fft_reorder   |    13|
-|8     |  u_cross                    |fft_cross     |   523|
-+------+-----------------------------+--------------+------+
++------+-----------------------------+----------------------------------------------------------------------------------+------+
+|      |Instance                     |Module                                                                            |Cells |
++------+-----------------------------+----------------------------------------------------------------------------------+------+
+|1     |top                          |                                                                                  |  6600|
+|2     |  \lanes[0].u_lane           |fft_top                                                                           |  2927|
+|3     |    \with_reorder.u_core     |fft_sdf_1                                                                         |  2899|
+|4     |      \stages[0].u_stage     |fft_stage_3                                                                       |   739|
+|5     |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__11  |     8|
+|6     |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__8      |     8|
+|7     |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__6   |     8|
+|8     |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__6      |     8|
+|9     |      \stages[1].u_stage     |fft_stage__parameterized0_4                                                       |   707|
+|10    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel      |     8|
+|11    |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__2      |     8|
+|12    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__1   |     8|
+|13    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__4      |     8|
+|14    |      \stages[2].u_stage     |fft_stage__parameterized1_5                                                       |   682|
+|15    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__12  |     8|
+|16    |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__13     |     8|
+|17    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__5   |     8|
+|18    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__12     |     8|
+|19    |      \stages[3].u_stage     |fft_stage__parameterized2_6                                                       |   710|
+|20    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__13  |     8|
+|21    |        mreg_re_reg          |\lanes[0].u_lane/with_reorder.u_core/stages[3].u_stage/mreg_re_reg_funnel         |     8|
+|22    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg_funnel      |     8|
+|23    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__1      |     8|
+|24    |    \with_reorder.u_reorder  |fft_reorder_2                                                                     |    28|
+|25    |  \lanes[1].u_lane           |fft_top_0                                                                         |  2914|
+|26    |    \with_reorder.u_core     |fft_sdf                                                                           |  2897|
+|27    |      \stages[0].u_stage     |fft_stage                                                                         |   737|
+|28    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__9   |     8|
+|29    |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel         |     8|
+|30    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__4   |     8|
+|31    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__11     |     8|
+|32    |      \stages[1].u_stage     |fft_stage__parameterized0                                                         |   707|
+|33    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__7   |     8|
+|34    |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__9      |     8|
+|35    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__2   |     8|
+|36    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__7      |     8|
+|37    |      \stages[2].u_stage     |fft_stage__parameterized1                                                         |   682|
+|38    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__10  |     8|
+|39    |        mreg_re_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__3      |     8|
+|40    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__3   |     8|
+|41    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__5      |     8|
+|42    |      \stages[3].u_stage     |fft_stage__parameterized2                                                         |   710|
+|43    |        lane_hi_re_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[1].u_stage/lane_hi_re_reg_funnel__8   |     8|
+|44    |        mreg_re_reg          |\lanes[0].u_lane/with_reorder.u_core/stages[3].u_stage/mreg_re_reg_funnel__1      |     8|
+|45    |        lane_hi_im_reg       |\lanes[0].u_lane/with_reorder.u_core/stages[3].u_stage/lane_hi_im_reg_funnel__1   |     8|
+|46    |        mreg_im_reg          |\lanes[1].u_lane/with_reorder.u_core/stages[0].u_stage/mreg_re_reg_funnel__10     |     8|
+|47    |    \with_reorder.u_reorder  |fft_reorder                                                                       |    17|
+|48    |  u_cross                    |fft_cross                                                                         |   615|
+|49    |    p_0_out                  |\u_cross/p_0_out__1_funnel__3                                                     |     8|
+|50    |    \g_pre[1].b_re_reg[1]    |\u_cross/g_pre[1].b_re_reg[1]_funnel                                              |     8|
+|51    |    p_0_out__0               |\u_cross/p_0_out__1_funnel__1                                                     |     8|
+|52    |    \g_pre[0].b_re_reg[0]    |\u_cross/g_pre[1].b_re_reg[1]_funnel__3                                           |     8|
+|53    |    p_0_out__1               |\u_cross/p_0_out__1_funnel                                                        |     8|
+|54    |    \g_pre[1].b_im_reg[1]    |\u_cross/g_pre[1].b_re_reg[1]_funnel__2                                           |     8|
+|55    |    p_0_out__2               |\u_cross/p_0_out__1_funnel__2                                                     |     8|
+|56    |    \g_pre[0].b_im_reg[0]    |\u_cross/g_pre[1].b_re_reg[1]_funnel__1                                           |     8|
++------+-----------------------------+----------------------------------------------------------------------------------+------+
 ---------------------------------------------------------------------------------
-Finished Writing Synthesis Report : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75826 ; free virtual = 84520
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75879 ; free virtual = 84545
 ---------------------------------------------------------------------------------
-Synthesis finished with 0 errors, 408 critical warnings and 1158 warnings.
-Synthesis Optimization Runtime : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3301.242 ; gain = 1589.977 ; free physical = 75818 ; free virtual = 84512
-Synthesis Optimization Complete : Time (s): cpu = 00:00:14 ; elapsed = 00:00:14 . Memory (MB): peak = 3304.211 ; gain = 1589.977 ; free physical = 75818 ; free virtual = 84512
+Synthesis finished with 0 errors, 0 critical warnings and 1142 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3316.824 ; gain = 1605.555 ; free physical = 75882 ; free virtual = 84548
+Synthesis Optimization Complete : Time (s): cpu = 00:00:16 ; elapsed = 00:00:16 . Memory (MB): peak = 3319.793 ; gain = 1605.555 ; free physical = 75882 ; free virtual = 84548
 INFO: [Project 1-571] Translating synthesized netlist
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3316.117 ; gain = 0.000 ; free physical = 75932 ; free virtual = 84625
-INFO: [Netlist 29-17] Analyzing 73 Unisim elements for replacement
+Netlist sorting complete. Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.02 . Memory (MB): peak = 3331.699 ; gain = 0.000 ; free physical = 75934 ; free virtual = 84600
+INFO: [Netlist 29-17] Analyzing 423 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
 INFO: [Project 1-570] Preparing netlist for logic optimization
 INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3439.668 ; gain = 0.000 ; free physical = 75861 ; free virtual = 84546
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3470.062 ; gain = 0.000 ; free physical = 75897 ; free virtual = 84564
 INFO: [Project 1-111] Unisim Transformation Summary:
-  A total of 17 instances were transformed.
+  A total of 167 instances were transformed.
   BUFG => BUFGCE: 1 instance 
-  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 8 instances
-  IBUF => IBUF (IBUFCTRL, INBUF): 6 instances
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 40 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 70 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 2 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 52 instances
   RAM32X1D => RAM32X1D (RAMD32(x2)): 2 instances
 
-Synth Design complete | Checksum: b7fe14ad
+Synth Design complete | Checksum: 6eddeb9
 INFO: [Common 17-83] Releasing license: Vivado_Synthesis
-44 Infos, 170 Warnings, 200 Critical Warnings and 0 Errors encountered.
+42 Infos, 154 Warnings, 0 Critical Warnings and 0 Errors encountered.
 synth_design completed successfully
-synth_design: Time (s): cpu = 00:00:18 ; elapsed = 00:00:16 . Memory (MB): peak = 3442.637 ; gain = 1731.371 ; free physical = 75860 ; free virtual = 84545
-INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 2799.920; main = 2799.920; forked = 338.611
-INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 4252.492; main = 3442.641; forked = 1040.059
+synth_design: Time (s): cpu = 00:00:20 ; elapsed = 00:00:19 . Memory (MB): peak = 3473.031 ; gain = 1761.762 ; free physical = 75902 ; free virtual = 84569
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 2831.885; main = 2831.885; forked = 338.557
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 4252.074; main = 3473.035; forked = 1040.059
 # create_clock -period 2.0 -name clk [get_ports clk]
 # report_utilization -file [file join $outdir util.txt]
 # report_timing_summary -delay_type max -max_paths 10 -file [file join $outdir timing.txt]
 INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -1, Temperature grade: E, Delay Type: max.
 INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
 INFO: [Timing 38-35] Done setting XDC timing constraints.
-report_timing_summary: Time (s): cpu = 00:00:13 ; elapsed = 00:00:13 . Memory (MB): peak = 4489.977 ; gain = 1047.340 ; free physical = 75009 ; free virtual = 83694
+report_timing_summary: Time (s): cpu = 00:00:18 ; elapsed = 00:00:14 . Memory (MB): peak = 4425.707 ; gain = 952.676 ; free physical = 75279 ; free virtual = 83938
 # write_checkpoint -force [file join $outdir synth.dcp]
 INFO: [Timing 38-480] Writing timing data to binary archive.
-Write ShapeDB Complete: Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00 . Memory (MB): peak = 4521.992 ; gain = 0.000 ; free physical = 75009 ; free virtual = 83694
+Write ShapeDB Complete: Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.01 . Memory (MB): peak = 4457.723 ; gain = 0.000 ; free physical = 75278 ; free virtual = 83938
 INFO: [Common 17-1381] The checkpoint '/home/hannes/Projects/fftgen/spikes/S2_timing/build_ku5p/SSR_N32_R2/synth.dcp' has been generated.
-INFO: [Common 17-206] Exiting Vivado at Tue Aug 25 11:32:34 2026...
+INFO: [Common 17-206] Exiting Vivado at Tue Aug 25 11:38:51 2026...
