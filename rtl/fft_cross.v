@@ -63,7 +63,7 @@ module fft_cross #(
     //   -> half-shift(x) -> rescale/sat(dout)
     // R >= 8 inserts three more registered stages (G/H split, partial
     // layers + sqrt(2)/2 scalar products, odd-bin assembly).
-    localparam integer CB_LAT = (R >= 8) ? 8 : 6;
+    localparam integer CB_LAT = (R >= 8) ? 9 : 6;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -88,13 +88,13 @@ module fft_cross #(
     // slot phase within a frame; pd..pd3 delay it through the three
     // pipeline stages so pd3 == 0 marks an output word that is a frame
     // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8;
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
     wire         out_phase0 = mature &&
-                             ((R >= 8) ? (pd8 == 0) : (pd6 == 0));
+                             ((R >= 8) ? (pd9 == 0) : (pd6 == 0));
 
     localparam integer OW = OUT_WIDTH;
 
@@ -134,6 +134,8 @@ module fft_cross #(
     //   odd q: P = H0 -/+ jH2, Q = H1 -/+ jH3 (sign per INVERSE);
     //          U/V = sigma-signed Q; C_q = P + (U*c8 >>> td)
     localparam integer FPW = AW + TWIDDLE_WIDTH;
+    localparam integer FLW = TWIDDLE_WIDTH + 18;   // lo product width
+    localparam integer FHW = TWIDDLE_WIDTH + AW - 18 + 1; // hi product
     localparam real    C8_REAL = 0.7071067811865476 * (2 ** TWIDDLE_DECIMAL);
     localparam signed [TWIDDLE_WIDTH-1:0] C8 = $rtoi(C8_REAL + 0.5);
     reg signed [AW-1:0] e_re [0:3];       // even-q first-layer partials
@@ -142,7 +144,17 @@ module fft_cross #(
     reg signed [AW-1:0] pq_im [0:3];
     reg signed [AW-1:0] pe_re [0:3];      // P carried one more stage
     reg signed [AW-1:0] pe_im [0:3];
-    reg signed [FPW-1:0] f_re [0:3];      // U * c8 products (DSP layer)
+    reg signed [AW-1:0] pq2_re [0:3];     // P carried through prod stage
+    reg signed [AW-1:0] pq2_im [0:3];
+    reg signed [AW-1:0] e2_re [0:3];      // even partials carried
+    reg signed [AW-1:0] e2_im [0:3];
+    // U * c8 with U wider than one DSP A-port: split into lo(18b)/hi
+    // so each partial maps to ONE DSP48E2, then combine (registered).
+    reg signed [FLW-1:0] flo_re [0:3];
+    reg signed [FLW-1:0] flo_im [0:3];
+    reg signed [FHW-1:0] fhi_re [0:3];
+    reg signed [FHW-1:0] fhi_im [0:3];
+    reg signed [FPW-1:0] f_re [0:3];      // combined U*c8 (registered)
     reg signed [FPW-1:0] f_im [0:3];
     reg signed [AW-1:0] ce_re [0:3];      // assembled even bins (q = 2k)
     reg signed [AW-1:0] ce_im [0:3];
@@ -268,6 +280,7 @@ module fft_cross #(
             pd6    <= {MW{1'b1}};
             pd7    <= {MW{1'b1}};
             pd8    <= {MW{1'b1}};
+            pd9    <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -288,6 +301,10 @@ module fft_cross #(
                 ce_re[i] <= {AW{1'b0}};  ce_im[i] <= {AW{1'b0}};
                 u_re[i]  <= {AW{1'b0}};  u_im[i]  <= {AW{1'b0}};
                 f_re[i]  <= {FPW{1'b0}}; f_im[i]  <= {FPW{1'b0}};
+                flo_re[i]<= {FLW{1'b0}}; flo_im[i] <= {FLW{1'b0}};
+                fhi_re[i]<= {FHW{1'b0}}; fhi_im[i] <= {FHW{1'b0}};
+                pq2_re[i]<= {AW{1'b0}}; pq2_im[i] <= {AW{1'b0}};
+                e2_re[i] <= {AW{1'b0}}; e2_im[i]  <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
             dout_im <= {R*OW{1'b0}};
@@ -305,6 +322,7 @@ module fft_cross #(
             pd6  <= pd5;
             pd7  <= pd6;
             pd8  <= pd7;
+            pd9  <= pd8;
 
             v1 <= 1'b1;
 
@@ -399,30 +417,52 @@ module fft_cross #(
             end
 
             if (R >= 8) begin
-                // ---- R=8 stage t3: scalar products, even finish, P --
+                // ---- R=8 stage t3a: split scalar products (DSPs) ----
                 for (i = 0; i < 4; i = i + 1) begin
-                    // one DSP48E2 per product (registered output)
-                    f_re[i] <= $signed(u_re[i]) * C8;
-                    f_im[i] <= $signed(u_im[i]) * C8;
-                    pe_re[i] <= pq_re[i];   // per-k P carried one stage
-                    pe_im[i] <= pq_im[i];
+                    // u = u_hi*2^18 + u_lo (signed/unsigned split); each
+                    // partial fits one DSP48E2 (18x18 and ~21x18).
+                    // low 18 bits are UNSIGNED (part-select of a signed
+                    // vector is unsigned; $signed() would mis-sign it)
+                    flo_re[i] <= $unsigned(u_re[i][17:0]) * C8;
+                    flo_im[i] <= $unsigned(u_im[i][17:0]) * C8;
+                    fhi_re[i] <= ($signed(u_re[i]) >>> 18) * C8;
+                    fhi_im[i] <= ($signed(u_im[i]) >>> 18) * C8;
+                    // P and even partials ride the product latency
+                    pq2_re[i] <= pq_re[i];
+                    pq2_im[i] <= pq_im[i];
                 end
-                ce_re[0] <= e_re[0] + e_re[2];   // q = 0
-                ce_im[0] <= e_im[0] + e_im[2];
-                ce_re[2] <= e_re[0] - e_re[2];   // q = 4
-                ce_im[2] <= e_im[0] - e_im[2];
+                for (i = 0; i < 4; i = i + 1) begin
+                    e2_re[i] <= e_re[i];
+                    e2_im[i] <= e_im[i];
+                end
+            end
+
+            if (R >= 8) begin
+                // ---- R=8 stage t3b: combine products, P, even bins --
+                for (i = 0; i < 4; i = i + 1) begin
+                    f_re[i] <= ($signed({ { (FPW-FHW){fhi_re[i][FHW-1]}},
+                                          fhi_re[i]}) <<< 18) + flo_re[i];
+                    f_im[i] <= ($signed({ { (FPW-FHW){fhi_im[i][FHW-1]}},
+                                          fhi_im[i]}) <<< 18) + flo_im[i];
+                    pe_re[i] <= pq2_re[i];  // final P (one stage later)
+                    pe_im[i] <= pq2_im[i];
+                end
+                ce_re[0] <= e2_re[0] + e2_re[2];   // q = 0
+                ce_im[0] <= e2_im[0] + e2_im[2];
+                ce_re[2] <= e2_re[0] - e2_re[2];   // q = 4
+                ce_im[2] <= e2_im[0] - e2_im[2];
                 if (INVERSE != 0) begin
                     // q = 2: e1 + j e3 ; q = 6: e1 - j e3
-                    ce_re[1] <= e_re[1] - e_im[3];
-                    ce_im[1] <= e_im[1] + e_re[3];
-                    ce_re[3] <= e_re[1] + e_im[3];
-                    ce_im[3] <= e_im[1] - e_re[3];
+                    ce_re[1] <= e2_re[1] - e2_im[3];
+                    ce_im[1] <= e2_im[1] + e2_re[3];
+                    ce_re[3] <= e2_re[1] + e2_im[3];
+                    ce_im[3] <= e2_im[1] - e2_re[3];
                 end else begin
                     // q = 2: e1 - j e3 ; q = 6: e1 + j e3
-                    ce_re[1] <= e_re[1] + e_im[3];
-                    ce_im[1] <= e_im[1] - e_re[3];
-                    ce_re[3] <= e_re[1] - e_im[3];
-                    ce_im[3] <= e_im[1] + e_re[3];
+                    ce_re[1] <= e2_re[1] + e2_im[3];
+                    ce_im[1] <= e2_im[1] - e2_re[3];
+                    ce_re[3] <= e2_re[1] - e2_im[3];
+                    ce_im[3] <= e2_im[1] + e2_re[3];
                 end
             end
 

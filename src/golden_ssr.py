@@ -81,7 +81,7 @@ class SSRGoldenModel:
         lane_cfg.ssr = 1
         self.lanes = [_SSRLane(lane_cfg) for _ in range(R)]
         if R >= 8:
-            self.CB_LAT = 8     # +G/H, partial/scalar, assembly stages
+            self.CB_LAT = 9     # +G/H, partials, split scalar, combine
         self.latency = self.lanes[0].latency + self.CB_LAT
 
         # crossbar twiddle tables (quantized, single source of truth)
