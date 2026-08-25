@@ -31,10 +31,12 @@ module fft_sdf #(
     // datapath pipeline layers per stage (golden model NLAYERS=7)
     parameter integer PIPE_DEPTH     = 7,
     // per-stage post-warm reset preloads, packed: for stage g (LSB first)
-    //   {wptr(16), pwp(16), raddr(16), pipe(6), phase_i(8), compute(1)}
-    // = 63 bits per stage
+    //   {wptr(16), pwp(16), raddr(16), pipe(6), phase_i(16), compute(1)}
+    // = 71 bits per stage (phase_i must cover DEPTH up to N/2 = 13 bits)
     // supplied by the generator via a macro (the -G parser caps at 32 bits)
-    parameter [511:0] PRELOAD_PACK   = `FFTGEN_PRELOAD_PACK
+    // width must cover the largest supported transform (63 bits/stage;
+    // N=16384 -> 14 stages -> 882 bits); narrower macros zero-extend
+    parameter [4095:0] PRELOAD_PACK  = `FFTGEN_PRELOAD_PACK
 )(
     input  wire                      clk,
     input  wire                      ce,
@@ -130,13 +132,14 @@ module fft_sdf #(
             localparam integer PRELOAD_I = WARM % DEPTH;
             localparam        PRELOAD_C = (WARM >= DEPTH) ? 1 : 0;
             // slice this stage's preload from the pack (63 bits each)
-            localparam [575:0] PRE_SLICE = {{64{1'b0}}, PRELOAD_PACK} >> (63 * g);
+            localparam [4159:0] PRE_SLICE =
+                {{64{1'b0}}, PRELOAD_PACK} >> (71 * g);
             localparam [15:0] WPTR_PRE = PRE_SLICE[15:0];
             localparam [15:0] PWP_PRE  = PRE_SLICE[31:16];
             localparam [15:0] RADDR_PRE= PRE_SLICE[47:32];
             localparam [5:0]  PIPE_PRE = PRE_SLICE[53:48];
-            localparam [7:0]  PRE_I    = PRE_SLICE[61:54];
-            localparam        PRE_C    = PRE_SLICE[62];
+            localparam [15:0] PRE_I   = PRE_SLICE[69:54];
+            localparam        PRE_C    = PRE_SLICE[70];
 
             wire signed [TWIDDLE_WIDTH*2-1:0] rom_word;
             wire [AROM_W-1:0]                 rom_addr_w;
@@ -263,7 +266,11 @@ module fft_stage #(
     parameter integer K_STRIDE       = 1,    // (unused; generator pre-permutes)
     parameter integer ROM_BASE       = 0,
     parameter integer NPTS           = 16,
-    parameter [7:0]  PRELOAD_I      = 8'h0,  // FSM alignment preload
+    // NO declared width: the parameter takes the width of the value
+    // passed by the generator (phase must cover DEPTH up to N/2;
+    // N=16384 needs 13 bits). An explicit narrow range here was the
+    // root cause of the N>=2048 failures (505 & 0xFF = 249).
+    parameter        PRELOAD_I      = 0,    // FSM alignment preload
     parameter         PRELOAD_C      = 0,    // start in COMPUTE phase
     parameter [15:0]  WPTR_PRE       = 16'h0, // post-warm pointer state
     parameter [15:0]  PWP_PRE        = 16'h0,

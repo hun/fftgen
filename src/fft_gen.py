@@ -156,7 +156,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     SDFGoldenModel(dataclasses.replace(
         lane_cfg, input_order="native", output_order="bitreversed"), dit=False)
     # identical field layout to the R=1 path (fft_sdf.v slices it there):
-    # per stage {wptr16, pwp16, raddr16, pipe6, phase_i8, compute1} = 63b
+    # per stage {wptr16, pwp16, raddr16, pipe6, phase_i16, compute1} = 71b
     _gm = SSRGoldenModel(cfg) if False else None
     lane_full = dataclasses.replace(cfg, num_points=M, ssr=1,
                                     input_order="native",
@@ -170,9 +170,9 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                  | ((pl["pwp"] & 0xFFFF) << 16)
                  | ((pl["raddr"] & 0xFFFF) << 32)
                  | (pipe_bits << 48)
-                 | ((pl["phase_i"] & 0xFF) << 54)
-                 | ((1 if pl["compute"] else 0) << 62))
-        pl_pack |= stage << (63 * i)
+                 | ((pl["phase_i"] & 0xFFFF) << 54)
+                 | ((1 if pl["compute"] else 0) << 70))
+        pl_pack |= stage << (71 * i)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
         f.write("`define FFTGEN_PRELOAD_PACK 512'h%0128x\n" % pl_pack)
 
@@ -350,13 +350,16 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
                 | ((pl["raddr"] & 0xFFFF) << 32) \
                 | (pipe_bits << 48) \
-                | ((pl["phase_i"] & 0xFF) << 54) \
-                | ((1 if pl["compute"] else 0) << 62)
-        pl_pack |= stage << (63 * i)
+                | ((pl["phase_i"] & 0xFFFF) << 54) \
+                | ((1 if pl["compute"] else 0) << 70)
+        pl_pack |= stage << (71 * i)
     # per-stage preloads travel via a generated header (the -G parser
-    # caps parameter values at 32 bits)
+    # caps parameter values at 32 bits); width grows with stage count:
+    # 63 bits/stage, so N=16384 (14 stages) needs 882 bits
+    preload_bits = 71 * len(_gm.stage_preloads)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
-        f.write("`define FFTGEN_PRELOAD_PACK 512'h%0128x\n" % pl_pack)
+        f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
+                % (preload_bits, pl_pack))
     gargs = [
         "+define+FFTGEN_PRELOADS",
         "+incdir+.",
