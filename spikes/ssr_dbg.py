@@ -15,6 +15,7 @@ Usage:  python3 spikes/ssr_dbg.py [--n 8] [--r 2] [--frames 6] [--seed 1]
 Everything is absolute-pathed and idempotent; safe to re-run.
 """
 import argparse
+import dataclasses
 import os
 import re
 import shutil
@@ -101,6 +102,15 @@ def build_and_run(cfg, outdir, P):
            "-GOUTPUT_DECIMAL=%d" % cfg.output_decimal,
            "-GTWIDDLE_WIDTH=%d" % cfg.twiddle_width,
            "-GTWIDDLE_DECIMAL=%d" % cfg.twiddle_decimal,
+           "-GSCALING_PACK=32'h%08x" % (sum((sh & 3) << (2 * s_)
+               for s_, sh in enumerate(dataclasses.replace(
+                   cfg, num_points=cfg.num_points // R, ssr=1).shifts)),
+               ),
+           "-GINTERN_WIDTH=%d" % (cfg.sample_width + max(0,
+               dataclasses.replace(cfg, num_points=cfg.num_points // R,
+                                   ssr=1).num_stages
+               - sum(dataclasses.replace(cfg, num_points=cfg.num_points // R,
+                                         ssr=1).shifts)) + 1),
            "+define+FFTGEN_PRELOADS", "+incdir+.",
            "fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
            "fft_cross.v", "probe.cpp", "-o", "probe", "--Mdir", "prob"]

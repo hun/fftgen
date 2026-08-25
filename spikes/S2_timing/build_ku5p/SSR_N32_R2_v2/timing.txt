@@ -1,0 +1,1038 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2026.1 (lin64) Build 6511674 Tue Jun 16 11:01:26 MDT 2026
+| Date              : Tue Aug 25 11:49:49 2026
+| Host              : hannes-x470aorusultragaming running 64-bit Ubuntu 26.04 LTS
+| Command           : report_timing_summary -delay_type max -max_paths 10 -file /home/hannes/Projects/fftgen/spikes/S2_timing/build_ku5p/SSR_N32_R2_v2/timing.txt
+| Design            : fft_ssr
+| Device            : xcku5p-ffva676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Synthesized
+| Temperature Grade : E
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Summary Report
+
+------------------------------------------------------------------------------------------------
+| Timer Settings
+| --------------
+------------------------------------------------------------------------------------------------
+
+  Enable Multi Corner Analysis               :  Yes
+  Enable Pessimism Removal                   :  Yes
+  Pessimism Removal Resolution               :  Nearest Common Node
+  Enable Input Delay Default Clock           :  No
+  Enable Preset / Clear Arcs                 :  No
+  Disable Flight Delays                      :  No
+  Ignore I/O Paths                           :  No
+  Timing Early Launch at Borrowing Latches   :  No
+  Borrow Time for Max Delay Exceptions       :  Yes
+  Merge Timing Exceptions                    :  Yes
+  Inter-SLR Compensation                     :  Conservative
+
+  Corner  Analyze    Analyze    
+  Name    Max Paths  Min Paths  
+  ------  ---------  ---------  
+  Slow    Yes        Yes        
+  Fast    Yes        Yes        
+
+
+------------------------------------------------------------------------------------------------
+| Report Methodology
+| ------------------
+------------------------------------------------------------------------------------------------
+
+No report available as report_methodology has not been run prior. Run report_methodology on the current design for the summary of methodology violations.
+
+
+
+check_timing report
+
+Table of Contents
+-----------------
+1. checking no_clock (0)
+2. checking constant_clock (0)
+3. checking pulse_width_clock (0)
+4. checking unconstrained_internal_endpoints (0)
+5. checking no_input_delay (69)
+6. checking no_output_delay (67)
+7. checking multiple_clock (0)
+8. checking generated_clocks (0)
+9. checking loops (0)
+10. checking partial_input_delay (0)
+11. checking partial_output_delay (0)
+12. checking latch_loops (0)
+
+1. checking no_clock (0)
+------------------------
+ There are 0 register/latch pins with no clock.
+
+
+2. checking constant_clock (0)
+------------------------------
+ There are 0 register/latch pins with constant_clock.
+
+
+3. checking pulse_width_clock (0)
+---------------------------------
+ There are 0 register/latch pins which need pulse_width check
+
+
+4. checking unconstrained_internal_endpoints (0)
+------------------------------------------------
+ There are 0 pins that are not constrained for maximum delay.
+
+ There are 0 pins that are not constrained for maximum delay due to constant clock.
+
+
+5. checking no_input_delay (69)
+-------------------------------
+ There are 69 input ports with no input delay specified. (HIGH)
+
+ There are 0 input ports with no input delay but user has a false path constraint.
+
+
+6. checking no_output_delay (67)
+--------------------------------
+ There are 67 ports with no output delay specified. (HIGH)
+
+ There are 0 ports with no output delay but user has a false path constraint
+
+ There are 0 ports with no output delay but with a timing clock defined on it or propagating through it
+
+
+7. checking multiple_clock (0)
+------------------------------
+ There are 0 register/latch pins with multiple clocks.
+
+
+8. checking generated_clocks (0)
+--------------------------------
+ There are 0 generated clocks that are not connected to a clock source.
+
+
+9. checking loops (0)
+---------------------
+ There are 0 combinational loops in the design.
+
+
+10. checking partial_input_delay (0)
+------------------------------------
+ There are 0 input ports with partial input delay specified.
+
+
+11. checking partial_output_delay (0)
+-------------------------------------
+ There are 0 ports with partial output delay specified.
+
+
+12. checking latch_loops (0)
+----------------------------
+ There are 0 combinational latch loops in the design through latch input
+
+
+
+------------------------------------------------------------------------------------------------
+| Design Timing Summary
+| ---------------------
+------------------------------------------------------------------------------------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+    -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+     -0.893     -137.147                   1696                11406        0.427        0.000                       0                  4869  
+
+
+Timing constraints are not met.
+
+
+------------------------------------------------------------------------------------------------
+| Clock Summary
+| -------------
+------------------------------------------------------------------------------------------------
+
+Clock  Waveform(ns)         Period(ns)      Frequency(MHz)
+-----  ------------         ----------      --------------
+clk    {0.000 1.000}        2.000           500.000         
+
+
+------------------------------------------------------------------------------------------------
+| Intra Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+-----             -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+clk                -0.893     -137.147                   1696                11406        0.427        0.000                       0                  4869  
+
+
+------------------------------------------------------------------------------------------------
+| Inter Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints  
+----------    --------          -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Other Path Groups Table
+| -----------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints  
+----------    ----------    --------          -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Timing Details
+| --------------
+------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------------------------
+From Clock:  clk
+  To Clock:  clk
+
+Setup :         1696  Failing Endpoints,  Worst Slack       -0.893ns,  Total Violation     -137.147ns
+Hold  :           NA  Failing Endpoints,  Worst Slack           NA  ,  Total Violation           NA
+PW    :            0  Failing Endpoints,  Worst Slack        0.427ns,  Total Violation        0.000ns
+---------------------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[0]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[0])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[0]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<0>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[0]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[0])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[10]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[10])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[10]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<10>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[10]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[10])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[11]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[11])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[11]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<11>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[11]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[11])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[12]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[12])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[12]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<12>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[12]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[12])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[13]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[13])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[13]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<13>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[13]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[13])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[14]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[14])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[14]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<14>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[14]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[14])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[15]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[15])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[15]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<15>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[15]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[15])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[16]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[16])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[16]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<16>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[16]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[16])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[17]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[17])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[17]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<17>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[17]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[17])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+Slack (VIOLATED) :        -0.893ns  (required time - arrival time)
+  Source:                 u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+                            (rising edge-triggered cell DSP_A_B_DATA clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Destination:            u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[18]
+                            (rising edge-triggered cell DSP_OUTPUT clocked by clk  {rise@0.000ns fall@1.000ns period=2.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            2.000ns  (clk rise@2.000ns - clk rise@0.000ns)
+  Data Path Delay:        2.723ns  (logic 2.707ns (99.412%)  route 0.016ns (0.588%))
+  Logic Levels:           6  (DSP_ALU=2 DSP_M_DATA=1 DSP_MULTIPLIER=1 DSP_OUTPUT=1 DSP_PREADD_DATA=1)
+  Clock Path Skew:        -0.145ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.944ns = ( 4.944 - 2.000 ) 
+    Source Clock Delay      (SCD):    3.390ns
+    Clock Pessimism Removal (CPR):    0.301ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  <hidden>
+                                                      0.000     0.000 r  clk
+                         net (fo=0)                   0.000     0.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.609     0.609 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     0.609    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     0.609 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.169     0.778    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.028     0.806 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.584     3.390    u_cross/p_0_out__0/CLK
+                         DSP_A_B_DATA                                 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/CLK
+  -------------------------------------------------------------------    -------------------
+                         DSP_A_B_DATA (Prop_DSP_A_B_DATA_CLK_B2_DATA[17])
+                                                      0.263     3.653 r  u_cross/p_0_out__0/DSP_A_B_DATA_INST/B2_DATA[17]
+                         net (fo=1, unplaced)         0.000     3.653    u_cross/p_0_out__0/DSP_A_B_DATA.B2_DATA<17>
+                         DSP_PREADD_DATA (Prop_DSP_PREADD_DATA_B2_DATA[17]_B2B1[17])
+                                                      0.092     3.745 r  u_cross/p_0_out__0/DSP_PREADD_DATA_INST/B2B1[17]
+                         net (fo=1, unplaced)         0.000     3.745    u_cross/p_0_out__0/DSP_PREADD_DATA.B2B1<17>
+                         DSP_MULTIPLIER (Prop_DSP_MULTIPLIER_B2B1[17]_U[43])
+                                                      0.737     4.482 f  u_cross/p_0_out__0/DSP_MULTIPLIER_INST/U[43]
+                         net (fo=1, unplaced)         0.000     4.482    u_cross/p_0_out__0/DSP_MULTIPLIER.U<43>
+                         DSP_M_DATA (Prop_DSP_M_DATA_U[43]_U_DATA[43])
+                                                      0.059     4.541 r  u_cross/p_0_out__0/DSP_M_DATA_INST/U_DATA[43]
+                         net (fo=1, unplaced)         0.000     4.541    u_cross/p_0_out__0/DSP_M_DATA.U_DATA<43>
+                         DSP_ALU (Prop_DSP_ALU_U_DATA[43]_ALU_OUT[47])
+                                                      0.699     5.240 f  u_cross/p_0_out__0/DSP_ALU_INST/ALU_OUT[47]
+                         net (fo=1, unplaced)         0.000     5.240    u_cross/p_0_out__0/DSP_ALU.ALU_OUT<47>
+                         DSP_OUTPUT (Prop_DSP_OUTPUT_ALU_OUT[47]_PCOUT[47])
+                                                      0.159     5.399 r  u_cross/p_0_out__0/DSP_OUTPUT_INST/PCOUT[47]
+                         net (fo=1, unplaced)         0.016     5.415    u_cross/g_pre[1].b_im_reg[1]/PCIN[47]
+                         DSP_ALU (Prop_DSP_ALU_PCIN[47]_ALU_OUT[18])
+                                                      0.698     6.113 r  u_cross/g_pre[1].b_im_reg[1]/DSP_ALU_INST/ALU_OUT[18]
+                         net (fo=1, unplaced)         0.000     6.113    u_cross/g_pre[1].b_im_reg[1]/DSP_ALU.ALU_OUT<18>
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/ALU_OUT[18]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        2.000     2.000 r  <hidden>
+                                                      0.000     2.000 r  clk
+                         net (fo=0)                   0.000     2.000    clk_IBUF_inst/I
+                         INBUF (Prop_INBUF_PAD_O)     0.341     2.341 r  clk_IBUF_inst/INBUF_INST/O
+                         net (fo=1, unplaced)         0.000     2.341    clk_IBUF_inst/OUT
+                         IBUFCTRL (Prop_IBUFCTRL_I_O)
+                                                      0.000     2.341 r  clk_IBUF_inst/IBUFCTRL_INST/O
+                         net (fo=1, unplaced)         0.140     2.481    clk_IBUF
+                         BUFGCE (Prop_BUFGCE_I_O)     0.024     2.505 r  clk_IBUF_BUFG_inst/O
+                         net (fo=5016, unplaced)      2.439     4.944    u_cross/g_pre[1].b_im_reg[1]/CLK
+                         DSP_OUTPUT                                   r  u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST/CLK
+                         clock pessimism              0.301     5.245    <hidden>
+                         clock uncertainty           -0.035     5.209    <hidden>
+                         DSP_OUTPUT (Setup_DSP_OUTPUT_CLK_ALU_OUT[18])
+                                                      0.010     5.219    u_cross/g_pre[1].b_im_reg[1]/DSP_OUTPUT_INST
+  -------------------------------------------------------------------
+                         required time                          5.219    <hidden>
+                         arrival time                          -6.113    <hidden>
+  -------------------------------------------------------------------
+                         slack                                 -0.893    <hidden>
+
+
+
+
+
+Pulse Width Checks
+--------------------------------------------------------------------------------------
+Clock Name:         clk
+Waveform(ns):       { 0.000 1.000 }
+Period(ns):         2.000
+Sources:            { clk }
+
+Check Type        Corner  Lib Pin      Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location  Pin
+Min Period        n/a     BUFGCE/I     n/a            1.499         2.000       0.501                clk_IBUF_BUFG_inst/I
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[32]_srl32/CLK
+Min Period        n/a     SRLC32E/CLK  n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[42]_srl10/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[0]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[10]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[11]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[12]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[13]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[14]_srl2/CLK
+Min Period        n/a     SRL16E/CLK   n/a            1.146         2.000       0.854                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[15]_srl2/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[32]_srl32/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[32]_srl32/CLK
+Low Pulse Width   Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[42]_srl10/CLK
+Low Pulse Width   Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[42]_srl10/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[0]_srl2/CLK
+Low Pulse Width   Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[0]_srl2/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[10]_srl2/CLK
+Low Pulse Width   Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[10]_srl2/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[11]_srl2/CLK
+Low Pulse Width   Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[11]_srl2/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[32]_srl32/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[32]_srl32/CLK
+High Pulse Width  Slow    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[42]_srl10/CLK
+High Pulse Width  Fast    SRLC32E/CLK  n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/mk_user_reg[42]_srl10/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[0]_srl2/CLK
+High Pulse Width  Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[0]_srl2/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[10]_srl2/CLK
+High Pulse Width  Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[10]_srl2/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[11]_srl2/CLK
+High Pulse Width  Fast    SRL16E/CLK   n/a            0.573         1.000       0.427                lanes[0].u_lane/with_reorder.u_core/stages[0].u_stage/d_dly2_im_reg[11]_srl2/CLK
+
+
+

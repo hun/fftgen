@@ -96,7 +96,7 @@ class SSRGoldenModel:
         self._cycles = 0                     # enabled words consumed
         self._synced = False                 # waiting for p == 0
 
-    CB_LAT = 4                              # fetch + multiply + DFT + rescale
+    CB_LAT = 5                              # fetch + multiply + DFT + rescale
 
     # ------------------------------------------------------------------
     def reset(self):

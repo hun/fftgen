@@ -84,12 +84,12 @@ module fft_cross #(
     // slot phase within a frame; pd..pd3 delay it through the three
     // pipeline stages so pd3 == 0 marks an output word that is a frame
     // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3;
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
-    wire         out_phase0 = mature && (pd2 == {{(MW-1){1'b0}}, 1'b0});
+    wire         out_phase0 = mature && (pd5 == 0);
 
     localparam integer OW = OUT_WIDTH;
 
@@ -99,9 +99,15 @@ module fft_cross #(
     // ---- stage 1b operands: din delayed one cycle --------------------
     reg signed [OUT_WIDTH-1:0] d_re [0:R-1];
     reg signed [OUT_WIDTH-1:0] d_im [0:R-1];
-    // ---- stage 1b products (full precision registers) ----------------
-    reg signed [PW-1:0] b_re [0:R-1];
-    reg signed [PW-1:0] b_im [0:R-1];
+    // ---- stage 1b products (each maps to one DSP) --------------------
+    // pp1 = dre*wre ; pp2 = dre*wim ; pp3 = dim*wre ; pp4 = dim*wim
+    reg signed [PW-1:0] pp1 [0:R-1];
+    reg signed [PW-1:0] pp2 [0:R-1];
+    reg signed [PW-1:0] pp3 [0:R-1];
+    reg signed [PW-1:0] pp4 [0:R-1];
+    // ---- stage 1c combine --------------------------------------------
+    reg signed [AW-1:0] b_re [0:R-1];
+    reg signed [AW-1:0] b_im [0:R-1];
     reg                 v1;
     wire [MW-1:0]       pn = p + {{(MW-1){1'b0}}, 1'b1};
 
@@ -173,21 +179,22 @@ module fft_cross #(
                     wq_im[gp] <= w_im[gp];
                     d_re[gp]  <= din_re[gp*OW +: OW];
                     d_im[gp]  <= din_im[gp*OW +: OW];
-                    // stage 1b: pre-twiddle products from the DELAYED
-                    // operands and PREVIOUSLY fetched coefficient --
-                    // both registered, keeping ROM+DSP off one cycle.
+                    // stage 1b: partial products -- each maps to ONE
+                    // DSP48E2 (registered at its MREG/PREG boundary).
                     // Lane 0 (r = 0) is the identity twiddle: a plain
                     // left shift by td replaces the constant-coefficient
                     // multiply (differs from golden's 131071-multiply by
                     // <1 LSB, within documented SSR tolerance).
                     if (gp == 0) begin
-                        b_re[gp] <= d_re[gp] <<< TWIDDLE_DECIMAL;
-                        b_im[gp] <= d_im[gp] <<< TWIDDLE_DECIMAL;
+                        pp1[gp] <= d_re[gp] <<< TWIDDLE_DECIMAL;
+                        pp2[gp] <= {PW{1'b0}};
+                        pp3[gp] <= {PW{1'b0}};
+                        pp4[gp] <= d_im[gp] <<< TWIDDLE_DECIMAL;
                     end else begin
-                        b_re[gp] <= $signed(d_re[gp]) * wq_re[gp]
-                                  - $signed(d_im[gp]) * wq_im[gp];
-                        b_im[gp] <= $signed(d_re[gp]) * wq_im[gp]
-                                  + $signed(d_im[gp]) * wq_re[gp];
+                        pp1[gp] <= $signed(d_re[gp]) * wq_re[gp];
+                        pp2[gp] <= $signed(d_re[gp]) * wq_im[gp];
+                        pp3[gp] <= $signed(d_im[gp]) * wq_re[gp];
+                        pp4[gp] <= $signed(d_im[gp]) * wq_im[gp];
                     end
                 end
             end
@@ -211,6 +218,7 @@ module fft_cross #(
             // generate blocks below -- do not drive them here too
             // (multi-driven nets fold the whole datapath to constants)
             for (i = 0; i < R; i = i + 1) begin
+                b_re[i]  <= {AW{1'b0}};  b_im[i] <= {AW{1'b0}};
                 h_re[i]  <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
