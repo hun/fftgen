@@ -89,7 +89,7 @@ module fft_cross #(
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
-    wire         out_phase0 = mature && (pd2 == {{(MW-1){1'b0}}, 1'b0});
+    wire         out_phase0 = mature && (pd3 == {{(MW-1){1'b0}}, 1'b0});
 
     localparam integer OW = OUT_WIDTH;
 

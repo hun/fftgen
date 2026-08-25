@@ -5,10 +5,12 @@ from config import FFTConfig
 from fft_gen import generate_ssr
 
 
-@unittest.skip("SSR RTL integration WIP: lanes bit-exact vs golden and "
-               "crossbar unit-verified; integrated stream still misaligns "
-               "(crossbar q0 imag path off on some slots). Debug with "
-               "spikes/ssr_dbg.py --n 8 --r 2 (one-shot harness).")
+@unittest.skip("SSR RTL integration WIP: lanes bit-exact vs golden "
+               "(dbg7-verified), crossbar formula unit-verified, yet the "
+               "integrated stream yields a different transform of the "
+               "same stimulus (not a shift/permutation). All debug "
+               "tooling ready: spikes/ssr_dbg.py regenerates+probes+"
+               "compares in one shot; report in build/ssrdbg/report.txt.")
 class TestSSRRtl(unittest.TestCase):
     def _check(self, cfg, num_frames=6, seed=5):
         outdir = (f"build/ssr/N{cfg.num_points}_R{cfg.ssr}"
@@ -16,7 +18,7 @@ class TestSSRRtl(unittest.TestCase):
                   f"_sw{cfg.sample_width}ow{cfg.output_width}")
         r = generate_ssr(cfg, outdir, num_frames=num_frames, seed=seed)
         self.assertEqual(r["rc"], 0,
-                         f"{cfg}\\n{r.get('log', '')[-500:]}\\n"
+                         f"{cfg}\n{r.get('log', '')[-500:]}\n"
                          f"first_bad={r.get('first_bad')}")
 
     def test_r2_sizes(self):
