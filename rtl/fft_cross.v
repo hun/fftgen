@@ -58,8 +58,9 @@ module fft_cross #(
     localparam integer AW = PW + $clog2(R) + 2;
     localparam integer SX = $clog2(R);
     localparam integer RESHIFT = TWIDDLE_DECIMAL;
-    // pipeline: stage1 pre-twiddle -> stage2 DFT layer -> stage3 rescale
-    localparam integer CB_LAT = 5;
+    // pipeline: fetch(wq/d) -> products(pp) -> combine(b) -> DFT(h)
+    //   -> half-shift(x) -> rescale/sat(dout)
+    localparam integer CB_LAT = 6;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -84,12 +85,12 @@ module fft_cross #(
     // slot phase within a frame; pd..pd3 delay it through the three
     // pipeline stages so pd3 == 0 marks an output word that is a frame
     // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5;
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
-    wire         out_phase0 = mature && (pd5 == 0);
+    wire         out_phase0 = mature && (pd6 == 0);
 
     localparam integer OW = OUT_WIDTH;
 
@@ -115,6 +116,10 @@ module fft_cross #(
     reg signed [AW-1:0] h_re [0:R-1];
     reg signed [AW-1:0] h_im [0:R-1];
     reg                 v2;
+
+    // ---- stage 3a: fused s_x rounding shift --------------------------
+    reg signed [AW-1:0] x_re [0:R-1];
+    reg signed [AW-1:0] x_im [0:R-1];
 
     // ---- stage 3 valid ----------------------------------------------
     reg                 vlast;
@@ -169,8 +174,8 @@ module fft_cross #(
                     wq_im[gp] <= {TWIDDLE_WIDTH{1'b0}};
                     d_re[gp]  <= {OW{1'b0}};
                     d_im[gp]  <= {OW{1'b0}};
-                    b_re[gp]  <= {PW{1'b0}};
-                    b_im[gp]  <= {PW{1'b0}};
+                    // NOTE: b_* are owned exclusively by the main block
+                    // (combine stage) -- do not drive them here
                 end else if (run) begin
                     // stage 1a: coefficient prefetch -- read with the
                     // NEXT slot phase; the registered coefficient pairs
@@ -213,6 +218,7 @@ module fft_cross #(
             pd3    <= {MW{1'b1}};
             pd4    <= {MW{1'b1}};
             pd5    <= {MW{1'b1}};
+            pd6    <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -224,6 +230,7 @@ module fft_cross #(
             for (i = 0; i < R; i = i + 1) begin
                 b_re[i]  <= {AW{1'b0}};  b_im[i] <= {AW{1'b0}};
                 h_re[i]  <= {AW{1'b0}};  h_im[i] <= {AW{1'b0}};
+                x_re[i]  <= {AW{1'b0}};  x_im[i] <= {AW{1'b0}};
             end
             dout_re <= {R*OW{1'b0}};
             dout_im <= {R*OW{1'b0}};
@@ -238,6 +245,7 @@ module fft_cross #(
             pd3  <= pd2;
             pd4  <= pd3;
             pd5  <= pd4;
+            pd6  <= pd5;
 
             v1 <= 1'b1;
 
@@ -268,24 +276,30 @@ module fft_cross #(
             end
             v2 <= v1;
 
-            // stage 3: second layer (R=4) or identity (R=2), fused
-            // rounding shift, rescale and saturate
+            // stage 3a: second DFT layer (R=4) or identity (R=2),
+            // fused s_x rounding shift -- registered so the carry
+            // chain from the layer adders ends here
             if (R == 2) begin
-                dout_re[0*OW +: OW] <= rescale_sat(rshift(h_re[0], SX));
-                dout_im[0*OW +: OW] <= rescale_sat(rshift(h_im[0], SX));
-                dout_re[1*OW +: OW] <= rescale_sat(rshift(h_re[1], SX));
-                dout_im[1*OW +: OW] <= rescale_sat(rshift(h_im[1], SX));
+                x_re[0] <= rshift(h_re[0], SX);
+                x_im[0] <= rshift(h_im[0], SX);
+                x_re[1] <= rshift(h_re[1], SX);
+                x_im[1] <= rshift(h_im[1], SX);
             end else begin
                 // C0 = H0 + H2 ; C2 = H0 - H2
-                dout_re[0*OW+:OW] <= rescale_sat(rshift(ext(h_re[0]) + ext(h_re[2]), SX));
-                dout_im[0*OW+:OW] <= rescale_sat(rshift(ext(h_im[0]) + ext(h_im[2]), SX));
-                dout_re[2*OW+:OW] <= rescale_sat(rshift(ext(h_re[0]) - ext(h_re[2]), SX));
-                dout_im[2*OW+:OW] <= rescale_sat(rshift(ext(h_im[0]) - ext(h_im[2]), SX));
+                x_re[0] <= rshift(ext(h_re[0]) + ext(h_re[2]), SX);
+                x_im[0] <= rshift(ext(h_im[0]) + ext(h_im[2]), SX);
+                x_re[2] <= rshift(ext(h_re[0]) - ext(h_re[2]), SX);
+                x_im[2] <= rshift(ext(h_im[0]) - ext(h_im[2]), SX);
                 // C1 = H1 - j*H3 ; C3 = H1 + j*H3
-                dout_re[1*OW+:OW] <= rescale_sat(rshift(ext(h_re[1]) + ext(h_im[3]), SX));
-                dout_im[1*OW+:OW] <= rescale_sat(rshift(ext(h_im[1]) - ext(h_re[3]), SX));
-                dout_re[3*OW+:OW] <= rescale_sat(rshift(ext(h_re[1]) - ext(h_im[3]), SX));
-                dout_im[3*OW+:OW] <= rescale_sat(rshift(ext(h_im[1]) + ext(h_re[3]), SX));
+                x_re[1] <= rshift(ext(h_re[1]) + ext(h_im[3]), SX);
+                x_im[1] <= rshift(ext(h_im[1]) - ext(h_re[3]), SX);
+                x_re[3] <= rshift(ext(h_re[1]) - ext(h_im[3]), SX);
+                x_im[3] <= rshift(ext(h_im[1]) + ext(h_re[3]), SX);
+            end
+            // stage 3b: rescale Q(od+td) -> Q(od), saturate to OW
+            for (i = 0; i < R; i = i + 1) begin
+                dout_re[i*OW +: OW] <= rescale_sat(x_re[i]);
+                dout_im[i*OW +: OW] <= rescale_sat(x_im[i]);
             end
             vlast <= v2;
             // frame-sync latch: first mature frame-start word starts

@@ -15,6 +15,9 @@ def s(val, bits):
     v = val & (m - 1)
     return v - m if v >= (m >> 1) else v
 
+CB_LAT_PY = 6
+
+
 class CrossbarRTL:
     def __init__(self, N, R, ow=16, td=17, tw=18):
         self.N, self.R, self.M = N, R, N // R
@@ -31,7 +34,7 @@ class CrossbarRTL:
                    for r in range(R)]
         # registers (reset state)
         self.p = 0
-        self.pd = [ (1 << self.MW) - 1 ] * 5      # pd..pd5 all-ones
+        self.pd = [ (1 << self.MW) - 1 ] * 6      # pd..pd6 all-ones
         self.scnt = 0
         self.synced = False
         self.wq = [(0, 0)] * R
@@ -39,6 +42,7 @@ class CrossbarRTL:
         self.pp = [(0, 0, 0, 0)] * R              # pp1..pp4 per lane
         self.b = [(0, 0)] * R
         self.h = [(0, 0)] * R
+        self.x = [(0, 0)] * R
         self.dout = [(0, 0)] * R
         self.v1 = self.v2 = self.vlast = False
 
@@ -79,7 +83,7 @@ class CrossbarRTL:
                                s(pi * qi, self.PW)))
         # ---- main block ----
         p_new = (self.p + 1) % (1 << self.MW)
-        pd_new = [self.p] + self.pd[:4]
+        pd_new = [self.p] + self.pd[:5]
         scnt_new = self.scnt + 1
         b_new, h_new, dout_new = [], [], []
         for i in range(R):
@@ -90,20 +94,20 @@ class CrossbarRTL:
                       s(self.b[0][1] + self.b[1][1], self.AW)),
                      (s(self.b[0][0] - self.b[1][0], self.AW),
                       s(self.b[0][1] - self.b[1][1], self.AW))]
-            for q in range(2):
-                dout_new.append((self.rescale_sat(self.rshift(self.h[q][0], self.SX)),
-                                 self.rescale_sat(self.rshift(self.h[q][1], self.SX))))
+            # stage 3a: s_x rounding shift of PREVIOUS h
+            x_new = [(self.rshift(self.h[q][0], self.SX),
+                      self.rshift(self.h[q][1], self.SX)) for q in range(2)]
         else:
             hh = self.h
-            dout_new = [
-                (self.rescale_sat(self.rshift(hh[0][0] + hh[2][0], self.SX)),
-                 self.rescale_sat(self.rshift(hh[0][1] + hh[2][1], self.SX))),
-                (self.rescale_sat(self.rshift(hh[1][0] + hh[3][1], self.SX)),
-                 self.rescale_sat(self.rshift(hh[1][1] - hh[3][0], self.SX))),
-                (self.rescale_sat(self.rshift(hh[0][0] - hh[2][0], self.SX)),
-                 self.rescale_sat(self.rshift(hh[0][1] - hh[2][1], self.SX))),
-                (self.rescale_sat(self.rshift(hh[1][0] - hh[3][1], self.SX)),
-                 self.rescale_sat(self.rshift(hh[1][1] + hh[3][0], self.SX))),
+            x_new = [
+                (self.rshift(hh[0][0] + hh[2][0], self.SX),
+                 self.rshift(hh[0][1] + hh[2][1], self.SX)),
+                (self.rshift(hh[1][0] + hh[3][1], self.SX),
+                 self.rshift(hh[1][1] - hh[3][0], self.SX)),
+                (self.rshift(hh[0][0] - hh[2][0], self.SX),
+                 self.rshift(hh[0][1] - hh[2][1], self.SX)),
+                (self.rshift(hh[1][0] - hh[3][1], self.SX),
+                 self.rshift(hh[1][1] + hh[3][0], self.SX)),
             ]
             h_new = [(s(self.b[0][0] + self.b[2][0], self.AW),
                       s(self.b[0][1] + self.b[2][1], self.AW)),
@@ -113,19 +117,22 @@ class CrossbarRTL:
                       s(self.b[1][1] + self.b[3][1], self.AW)),
                      (s(self.b[1][0] - self.b[3][0], self.AW),
                       s(self.b[1][1] - self.b[3][1], self.AW))]
+        # stage 3b: rescale/sat of PREVIOUS x
+        dout_new = [(self.rescale_sat(xv[0]), self.rescale_sat(xv[1]))
+                    for xv in self.x]
         # valid chain -- mirror RTL combinational/sequential split:
         #   out_phase0(T) = mature(T) && pd5(T)==0      (comb, current regs)
         #   synced(T+1)   <= synced(T) || (v2(T) && out_phase0(T))
         #   out_valid(T+1)= vlast(T+1) && (synced(T+1) || out_phase0(T+1))
-        op_T = (self.scnt > (5 + 1)) and (self.pd[4] == 0)
+        op_T = (self.scnt > (CB_LAT_PY) ) and (self.pd[5] == 0)
         syncedn = self.synced or (self.v2 and op_T)
         out_valid = self.v2 and (syncedn or
-                                 ((scnt_new > (5 + 1)) and (pd_new[4] == 0)))
+                                 ((scnt_new > (CB_LAT_PY)) and (pd_new[5] == 0)))
         v1n, v2n, vlastn = True, self.v1, self.v2
         # commit
         self.wq, self.d, self.pp = wq_new, d_new, pp_new
         self.p, self.pd, self.scnt = p_new, pd_new, scnt_new
-        self.b, self.h, self.dout = b_new, h_new, dout_new
+        self.b, self.h, self.x, self.dout = b_new, h_new, x_new, dout_new
         self.v1, self.v2, self.vlast = v1n, v2n, vlastn
         self.synced = syncedn
         return out_valid, self.dout
