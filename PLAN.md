@@ -201,16 +201,33 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
   runs use the ssr_timing_wrap timing vehicle (internal LFSR stimulus
   + checksum sink; only {clk,rst,done} on the boundary) on the real
   target part. Same die => identical internal critical paths.
-* **Wide-N R=1 sweep (N up to 16384):**
-  * N=1024..8192 bit-exact after two preload-width fixes (pack macro
-    was hardcoded 512b; stage `PRELOAD_I` parameter was [7:0]).
-  * N=16384 residual bug: every stage's output is delayed exactly one
-    tick at each PASS->COMPUTE FSM transition (flag-entry timing:
-    golden puts in_compute at pipe[0] same-tick, RTL delays one
-    cycle). The delay persists one FSM period and re-syncs at the
-    next transition; the accumulated skew corrupts the tail quarter
-    of every frame (~5-30 LSB). Reproducer:
-    `PYTHONPATH=src python3 -c "from config import FFTConfig; from fft_gen import generate; print(generate(FFTConfig(num_points=16384),'build/w16k',num_frames=1,seed=3)['rc'])"`
+* **Wide-N R=1 sweep (N up to 16384) — CLOSED:**
+  * Two preload-width fixes (hardcoded 512b pack macro; stage
+    `PRELOAD_I` parameter was [7:0]) brought N=1024..8192 green.
+  * The N=16384 "residual" (and SSR R=2 N=1024) shared ONE real root
+    cause: the butterfly pre-adder path was WIDTH bits wide, but two
+    full-scale stage outputs can sum/differ to WIDTH+1 bits before
+    the per-stage >>SHIFT. Product-path outputs legitimately reach
+    +-65k (multiply runs on the butterfly diff), so a rare collision
+    of two large same-sign values wrapped mod 2^WIDTH; the single
+    bit-16 error then doubled through each downstream butterfly
+    (~N/4 bad words, tail-quarter concentration). Fixed by carrying
+    pre-adder -> ADREG -> cascade -> combine at BW = WIDTH+1 (18b =
+    DSP48E2 B-port native); see commit "widen butterfly pre-adder".
+    R=1 now bit-exact through N=16384. The earlier "flag-entry
+    timing" theory was a probe-alignment artifact.
+**R=1 KU5P OOC synth sweep @2ns (post-synth estimates):**
+  * DSPs = 4 x num_stages exactly (512->36 ... 8192->52); BRAM/URAM 0.
+  * LUTRAM grows ~linearly with N: 1.8k (512), 3.1k (1024), 5.8k
+    (2048), 11.1k (4096), 21.6k LUT (8192) -> P5 memory policy needed
+    before N>=16384 is practical on KU5P.
+  * WNS -0.020 ns constant across all N (critical path is intra-DSP:
+    A/B-reg -> preadd -> mult -> ALU on the cascade hop, independent
+    of transform size). Same path closed post-route at +0.090 on the
+    N=64 PR vehicle; a mid-size PR confirmation run is cheap insurance.
+**SSR R=2 ladder:** forward N=64..4096 and inverse N=512 bit-exact
+(after the dynamic preload-pack width fix in generate_ssr -- it still
+emitted a hardcoded 512'h macro).
 
 **Debug lessons** (see also §"Convention traps"):
   - a Python cycle-exact replica of the RTL pipeline
