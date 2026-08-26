@@ -225,9 +225,27 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
     A/B-reg -> preadd -> mult -> ALU on the cascade hop, independent
     of transform size). Same path closed post-route at +0.090 on the
     N=64 PR vehicle; a mid-size PR confirmation run is cheap insurance.
-**SSR R=2 ladder:** forward N=64..4096 and inverse N=512 bit-exact
-(after the dynamic preload-pack width fix in generate_ssr -- it still
-emitted a hardcoded 512'h macro).
+**DSP reduction experiment (3-mult Gauss complex product) — REJECTED
+for now, evidence kept:**
+  * Rewrote fft_stage's complex multiply as k1=t_re*(d_re+d_im),
+    k2=d_re*(t_im-t_re), k3=d_im*(t_re+t_im); re=k1-k3, im=k1+k2.
+    Integer-exact vs golden; full suite + wide ladder green.
+    DSPs drop 4->3 per stage (52->39 at N=8192).
+  * BUT synthesis shows the DSP48E2 pre-adder sits IN SERIES with the
+    multiplier (PREADD->MULT->ALU): intra-DSP path grows 1.85 -> 2.61 ns,
+    WNS -0.78 at 2 ns. Fabric pre-adds are worse (the original Karatsuba
+    lesson). Closing it requires +1 pipeline layer on the product path
+    (NLAYERS 7->8: register pre-add results, multiply next cycle), which
+    changes the golden contract, preload pack layout and every bit-exact
+    baseline. Parked unless DSP area becomes the binding constraint.
+  * Implementation traps worth remembering if revived: (1) replicate-
+    concat "sign extension" with a NEGATIVE count silently truncates --
+    PAW must be max(BW,TWIDDLE_WIDTH)+1, not BW+1; (2) extending BOTH
+    multiplier operands to PAW puts a >18b value on the DSP48E2 B port
+    and splits one multiply into two DSPs -- keep the raw-width operand
+    natural so it lands on B; (3) plain signed add wires get context
+    widening for free -- hand-rolled extensions just add fabric glue
+    that blocks AREG/DREG absorption.
 
 **Debug lessons** (see also §"Convention traps"):
   - a Python cycle-exact replica of the RTL pipeline
