@@ -27,7 +27,7 @@ All implementation phases (P0–P6) are complete; see the phase table in
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors.
-- Test suite: 105 tests green (unit + golden + Verilator RTL).
+- Test suite: 109 tests green (unit + golden + Verilator RTL).
 
 Current numbers: [doc/datasheet.md](doc/datasheet.md) (N × R synthesis sweep,
 KU5P @ 500 MHz).

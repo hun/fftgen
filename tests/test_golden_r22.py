@@ -17,7 +17,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "src"))
 
 from config import FFTConfig
-from golden import fft_fixed_batch, fft_fixed_batch_r22, fft_float_radix2
+from golden import (fft_fixed_batch, fft_fixed_batch_dit,
+                    fft_fixed_batch_r22, fft_fixed_batch_r22_dit,
+                    fft_float_radix2)
 from twiddles import canonical_twiddles
 
 
@@ -114,6 +116,84 @@ class TestR22BatchContract(unittest.TestCase):
         samples = _rand_frame(2, cfg.sample_width, rng)
         self.assertEqual(fft_fixed_batch(samples, cfg),
                          fft_fixed_batch_r22(samples, cfg))
+
+
+class TestR22BatchContractDit(unittest.TestCase):
+    """DIT radix-2^2 contract (mirror topology, bitrev-in / native-out)."""
+
+    @staticmethod
+    def _bitrev_order(N, n):
+        return [int(format(k, "0%db" % n)[::-1], 2) for k in range(N)]
+
+    def _check(self, cfg, seed=9):
+        from golden import fft_fixed_batch_dit
+        rng = random.Random(seed)
+        br = self._bitrev_order(cfg.num_points, cfg.num_stages)
+        raw = _rand_frame(cfg.num_points, cfg.sample_width, rng)
+        samples = [raw[br[j]] for j in range(cfg.num_points)]
+        plain = fft_fixed_batch_dit(samples, cfg)
+        r22 = fft_fixed_batch_r22_dit(samples, cfg)
+        md = max(max(abs(p[k] - r[k]) for k in range(2))
+                 for p, r in zip(plain, r22))
+        bound = max(2, 1 << max(0, cfg.sample_width - 15),
+                    1 << max(0, 18 - cfg.twiddle_width))
+        self.assertLessEqual(md, bound, f"{cfg}: |delta|={md} > {bound}")
+        fref = fft_float_radix2([complex(r, i) for r, i in raw])
+        scale = 1 << cfg.sample_decimal
+        sp = _sqnr(plain, fref, cfg.num_points, scale)
+        sr = _sqnr(r22, fref, cfg.num_points, scale)
+        self.assertLessEqual(abs(sp - sr), 0.5,
+                             f"{cfg}: SQNR plain={sp:.2f} r22={sr:.2f}")
+
+    def test_sizes_fwd_inv(self):
+        for N in (4, 8, 16, 32, 64, 128, 256):
+            for inv in (False, True):
+                with self.subTest(N=N, inv=inv):
+                    self._check(FFTConfig(num_points=N, inverse=inv,
+                                          input_order="bitreversed",
+                                          output_order="native"))
+
+    def test_odd_stage_count(self):
+        for N in (8, 32, 128):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N,
+                                      input_order="bitreversed",
+                                      output_order="native"))
+
+    def test_dif_dit_consistency(self):
+        """DIF-R2^2 (natural-in, bitrev-out) and DIT-R2^2 (bitrev-in,
+        natural-out) compute the same transform: values agree within the
+        contract noise after the output permutation."""
+        rng = random.Random(11)
+        for N in (8, 32, 128):
+            for inv in (False, True):
+                raw = _rand_frame(N, 16, rng)
+                cfg_dif = FFTConfig(num_points=N, inverse=inv,
+                                    input_order="native",
+                                    output_order="bitreversed")
+                cfg_dit = FFTConfig(num_points=N, inverse=inv,
+                                    input_order="bitreversed",
+                                    output_order="native")
+                out_dif = fft_fixed_batch_r22(raw, cfg_dif)
+                br = self._bitrev_order(N, cfg_dit.num_stages)
+                out_dit = fft_fixed_batch_r22_dit([raw[br[j]]
+                                                   for j in range(N)],
+                                                  cfg_dit)
+                md = max(max(abs(out_dif[br[k]][c] - out_dit[k][c])
+                             for c in range(2)) for k in range(N))
+                # two independent contracts (DIF and DIT R2^2) on the same
+                # transform: agree within the rounding-placement noise
+                self.assertLessEqual(md, 4, f"N={N} inv={inv}: |delta|={md}")
+
+    def test_n2_edge(self):
+        cfg = FFTConfig(num_points=2, input_order="bitreversed",
+                        output_order="native")
+        rng = random.Random(1)
+        br = self._bitrev_order(2, cfg.num_stages)
+        raw = _rand_frame(2, cfg.sample_width, rng)
+        samples = [raw[br[j]] for j in range(2)]
+        self.assertEqual(fft_fixed_batch_dit(samples, cfg),
+                         fft_fixed_batch_r22_dit(samples, cfg))
 
 
 if __name__ == "__main__":

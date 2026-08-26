@@ -257,6 +257,112 @@ def fft_fixed_batch_r22(samples: Sequence[Complex], cfg: FFTConfig,
             for re, im in x]
 
 
+def fft_fixed_batch_r22_dit(samples: Sequence[Complex], cfg: FFTConfig,
+                            twiddles: Optional[Sequence[Complex]] = None
+                            ) -> List[Complex]:
+    """Fixed-point DIT batch reference, radix-2² contract (P7).
+
+    Mirror of :func:`fft_fixed_batch_r22`: the DIT pair (n−2−2m',
+    n−1−2m') merges into one 4-sample group with THREE products applied
+    to the inputs BEFORE the F₄ combine (DIT: multiply-then-combine):
+
+        t1 = cmul(a1, T[2j·4^m']);  t2 = cmul(a2, T[j·4^m'])
+        t3 = cmul(a3, T[3j·4^m'])                      (exact)
+        v0 = a0 << td;   S = td + s_{A} + s_{B}
+        y0 = round(v0 + t1 + t2 + t3, S)        # pos j
+        y2 = round(v0 + t1 − t2 − t3, S)        # pos j+2H
+        y1 = round(v0 − t1 + j·t2 − j·t3, S)    # pos j+H   (j = ±j,
+        y3 = round(v0 − t1 − j·t2 + j·t3, S)    # pos j+3H   fwd/inv)
+
+    The ±j rotations are exact (rotation identity T[i+N/4] = ∓j·T[i],
+    spikes/S5_r22/). The a3 terms differ from the two-stage DIT (which
+    computes (a3·T[2j·4^m'])·T[j·4^m'] — product-of-products) by the
+    rounding placement of a3·T[3j·4^m']: the contracts agree to a few
+    LSB with identical SQNR. Odd stage counts leave DIT stage 0 (the
+    trivial ±1 stage) as plain radix-2.
+    """
+    if cfg.ssr != 1:
+        raise NotImplementedError("batch reference supports ssr=1 only")
+    if not cfg.is_dit:
+        raise NotImplementedError("batch R2² DIT requires is_dit")
+    N = cfg.num_points
+    n = cfg.num_stages
+    shifts = cfg.shifts
+    td = cfg.twiddle_decimal
+    if twiddles is None:
+        twiddles = canonical_twiddles(N, cfg.twiddle_width,
+                                      cfg.twiddle_decimal, cfg.inverse)
+    js = -1 if not cfg.inverse else 1     # W^{N/4} = -j fwd, +j inv
+
+    def rot(z):                           # js*j * z
+        return (-js * z[1], js * z[0])
+
+    x: List[List[int]] = [[re, im] for re, im in samples]
+
+    # DIT processes stages in input-to-output order: for odd n, stage 0
+    # (the trivial ±1 stage) runs first as plain radix-2, then the pairs
+    # (lo+2k, lo+2k+1) with lo = 1 (odd n) or 0 (even n).
+    lo = 0 if n % 2 == 0 else 1
+    for s in range(0, lo):
+        half = 1 << s
+        step = 2 * half
+        sig = shifts[s]
+        for start in range(0, N, step):
+            for j in range(half):
+                i1 = start + j
+                i2 = i1 + half
+                k = (j << (n - s - 1)) % N
+                cr, ci = twiddles[k]
+                tr, ti = complex_multiply_karatsuba(x[i2][0], x[i2][1],
+                                                    cr, ci)
+                sr = (x[i1][0] << td) + tr
+                si = (x[i1][1] << td) + ti
+                dr = (x[i1][0] << td) - tr
+                di = (x[i1][1] << td) - ti
+                sh = td + sig
+                x[i1] = [round_shift(sr, sh), round_shift(si, sh)]
+                x[i2] = [round_shift(dr, sh), round_shift(di, sh)]
+
+    k = 0
+    while lo + 2 * k + 1 < n:
+        A = lo + 2 * k
+        sA, sB = shifts[A], shifts[A + 1]
+        H = 1 << A                        # group depth 2^A
+        base = 4 ** ((n - 2 - A) // 2)    # twiddle stride 4^{m'}
+        for b in range(base):             # base blocks of size 4H
+            off = b * (4 * H)
+            for j in range(H):
+                a0r, a0i = x[off + j]
+                a1r, a1i = x[off + j + H]
+                a2r, a2i = x[off + j + 2 * H]
+                a3r, a3i = x[off + j + 3 * H]
+                cr, ci = twiddles[(2 * j * base) % N]
+                t1r, t1i = complex_multiply_karatsuba(a1r, a1i, cr, ci)
+                cr, ci = twiddles[(j * base) % N]
+                t2r, t2i = complex_multiply_karatsuba(a2r, a2i, cr, ci)
+                cr, ci = twiddles[(3 * j * base) % N]
+                t3r, t3i = complex_multiply_karatsuba(a3r, a3i, cr, ci)
+                v0r, v0i = a0r << td, a0i << td
+                S = td + sA + sB
+                # y0 / y2: real rows of F₄
+                x[off + j] = [round_shift(v0r + t1r + t2r + t3r, S),
+                              round_shift(v0i + t1i + t2i + t3i, S)]
+                x[off + j + 2 * H] = [round_shift(v0r + t1r - t2r - t3r, S),
+                                      round_shift(v0i + t1i - t2i - t3i, S)]
+                # y1 / y3: ±j rows
+                r2r, r2i = rot((t2r, t2i))
+                r3r, r3i = rot((t3r, t3i))
+                x[off + j + H] = [round_shift(v0r - t1r + r2r - r3r, S),
+                                  round_shift(v0i - t1i + r2i - r3i, S)]
+                x[off + j + 3 * H] = [round_shift(v0r - t1r - r2r + r3r, S),
+                                      round_shift(v0i - t1i - r2i + r3i, S)]
+        k += 1
+
+    return [quantize_output(re, im, cfg.sample_decimal,
+                            cfg.output_width, cfg.output_decimal)
+            for re, im in x]
+
+
 # ----------------------------------------------------------------------
 # L1b: cycle-accurate streaming SDF model
 # ----------------------------------------------------------------------
