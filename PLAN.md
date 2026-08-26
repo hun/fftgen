@@ -225,6 +225,40 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
     A/B-reg -> preadd -> mult -> ALU on the cascade hop, independent
     of transform size). Same path closed post-route at +0.090 on the
     N=64 PR vehicle; a mid-size PR confirmation run is cheap insurance.
+**BRAM->DSP pipelining (NLAYERS 7->10) — CLOSED (this is the layer
+    increase the DSP-reduction experiment parked):**
+  * Golden `_SDFStage` rewritten to NLAYERS=10 mirroring the RTL register
+    chain exactly: L0 BRAM output reg + input + twiddle; L1/L2 two DSP
+    input registers (AREG/DREG/BREG); L3 butterfly (pre-adder -> ADREG);
+    L4 im-path products (MREG) + freeze of re operands; L5 C-port regs
+    (CREG) + re-path products; L6 post-adder (ALU P -/+ C -> PREG); L7
+    fabric combine; L8 shift staging; L9 out + product-FIFO write.
+    The BRAM read-address register (raddr) is modeled explicitly (always
+    wptr - D; adds no data latency, matches the RTL's registered address).
+  * The C-port pairing requires the im-path products one cycle ahead of
+    the re-path (im MREG routes to the re DSP's C port, CREG at L5), so
+    the re operands are frozen at L4 into hold registers. Validated
+    bit-exact vs batch for N=8..16384, DIF+DIT, fwd+inv.
+  * Preload pack grew 71->74 bits/stage (pipe 6->9 bits); the phase gates
+    follow the validated layer-k = pipe_comp[k-1] pattern.
+  * DSP inference (N=64 KU5P OOC, dsp_audit): the im-path product DSPs
+    absorb AREG=2 BREG=2 DREG=1 ADREG=1 MREG=1 CREG=1 PREG=1 -- the full
+    register budget; the re-path combine DSPs use AREG=1/BREG=1 plus the
+    C-port. The butterfly diff is computed in the DSP pre-adder (no
+    fabric carries on the multiply path). Making the butterfly UNGATED
+    (PASS values unused downstream) was the key that let Vivado map
+    D-A into PREADD instead of fabric CARRY8s.
+  * R=1 KU5P OOC @2ns: all sizes MET -- 64: +0.700, 1024: +0.605,
+    2048: +0.563, 4096: +0.184, 8192: +0.163. Critical path is now the
+    product-FIFO LUTRAM read (wptr -> pfifo -> out), not the DSP.
+  * SSR R=2 N=8192 @2ns: WNS -0.144, critical path is the CROSSBAR
+    input (reorder BRAM -> crossbar DSP B input), not the stage
+    pipeline -- a separate register-staging task (CB_LAT + golden_ssr).
+  * Open items: the pfifo read register is muxed (sum_out vs DOB) so the
+    deep pfifos stay LUTRAM; a dedicated DOB_REG restructure was tried
+    and reverted (subtle read-window off-by-one; redo carefully with a
+    golden-side pfifo_dout layer if the pfifo read becomes binding).
+
 **DSP reduction experiment (3-mult Gauss complex product) — REJECTED
 for now, evidence kept:**
   * Rewrote fft_stage's complex multiply as k1=t_re*(d_re+d_im),

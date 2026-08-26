@@ -165,16 +165,16 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     pl_pack = 0
     for i, pl in enumerate(_gm.stage_preloads):
         pipe_bits = int("".join("1" if b else "0"
-                                for b in reversed(pl["pipe"][:6])), 2) & 0x3F
+                                for b in reversed(pl["pipe"][:9])), 2) & 0x1FF
         stage = ((pl["wptr"] & 0xFFFF)
                  | ((pl["pwp"] & 0xFFFF) << 16)
                  | ((pl["raddr"] & 0xFFFF) << 32)
                  | (pipe_bits << 48)
-                 | ((pl["phase_i"] & 0xFFFF) << 54)
-                 | ((1 if pl["compute"] else 0) << 70))
-        pl_pack |= stage << (71 * i)
-    # same dynamic-width emission as generate(): 71 bits per lane stage
-    preload_bits = 71 * len(_gm.stage_preloads)
+                 | ((pl["phase_i"] & 0xFFFF) << 57)
+                 | ((1 if pl["compute"] else 0) << 73))
+        pl_pack |= stage << (74 * i)
+    # same dynamic-width emission as generate(): 74 bits per lane stage
+    preload_bits = 74 * len(_gm.stage_preloads)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
         f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
                 % (preload_bits, pl_pack))
@@ -195,7 +195,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GTWIDDLE_DECIMAL={cfg.twiddle_decimal}",
         f"-GSCALING_PACK=32'h{pack_m:08x}",
         f"-GINTERN_WIDTH={intern_m}",
-        "-GPIPE_DEPTH=7",
+        "-GPIPE_DEPTH=10",
         f"-GINVERSE={1 if cfg.inverse else 0}",
     ]
     cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
@@ -349,17 +349,17 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     pl_pack = 0
     for i, pl in enumerate(_gm.stage_preloads):
         pipe_bits = int("".join("1" if b else "0"
-                                for b in reversed(pl["pipe"][:6])), 2) & 0x3F
+                                for b in reversed(pl["pipe"][:9])), 2) & 0x1FF
         stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
                 | ((pl["raddr"] & 0xFFFF) << 32) \
                 | (pipe_bits << 48) \
-                | ((pl["phase_i"] & 0xFFFF) << 54) \
-                | ((1 if pl["compute"] else 0) << 70)
-        pl_pack |= stage << (71 * i)
+                | ((pl["phase_i"] & 0xFFFF) << 57) \
+                | ((1 if pl["compute"] else 0) << 73)
+        pl_pack |= stage << (74 * i)
     # per-stage preloads travel via a generated header (the -G parser
     # caps parameter values at 32 bits); width grows with stage count:
-    # 63 bits/stage, so N=16384 (14 stages) needs 882 bits
-    preload_bits = 71 * len(_gm.stage_preloads)
+    # 74 bits/stage, so N=16384 (14 stages) needs 1036 bits
+    preload_bits = 74 * len(_gm.stage_preloads)
     with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
         f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
                 % (preload_bits, pl_pack))
@@ -375,6 +375,7 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GTWIDDLE_DECIMAL={cfg.twiddle_decimal}",
         f"-GSCALING_PACK=32'h{pack:08x}",
         f"-GINTERN_WIDTH={intern}",
+        "-GPIPE_DEPTH=10",
         f"-GTOPOLOGY={'1' if cfg.is_dit else '0'}",
         f"-GREORDER_OUT={'1' if reorder_out else '0'}",
     ]

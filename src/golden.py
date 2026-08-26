@@ -171,14 +171,21 @@ class _SDFStage:
     """
 
     # pipeline register layers (mirrors the pipelined RTL stage):
-    #   R2 read-data regs  -> R3 butterfly  -> R4 multiply (MREG)
-    #   -> R5 combine -> R6 shift+out
-    NLAYERS = 7   # register hops from R2 capture to R8 output
-                  # (R3 DSP operand regs ~ AREG/BREG/DREG, R4 butterfly =
-                  # pre-adder + ADREG, R6a/R6b = the complex multiply as a
-                  # two-DSP cascade: sender products in PREG, receiver
-                  # accumulate via PCIN one cycle later, R7 combine on the
-                  # C-port ALU + PREG)
+    #   L0 capture (BRAM output register d_bram / DOA_REG)
+    #   L1 first  DSP input register  (AREG[0]/DREG[0]/BREG[0])
+    #   L2 second DSP input register  (AREG[1]/DREG[1]/BREG[1])
+    #   L3 butterfly (pre-adder -> ADREG) + twiddle third hop
+    #   L4 products (multiplier -> MREG)
+    #   L5 cross products into the C-port registers (CREG)
+    #   L6 post-adder (ALU P -/+ C -> PREG)
+    #   L7 combine (fabric, aligns sum path with product path)
+    #   L8 shift + product-FIFO write
+    #   L9 output register
+    # The BRAM read-address register (raddr) is modeled explicitly as
+    # part of the memory (always wptr - D), matching the RTL's registered
+    # address; it adds no data latency (the golden reads at wptr - D, the
+    # same cycle the RTL's DOA_REG captures).
+    NLAYERS = 10  # register hops from the BRAM address to the output
 
     def __init__(self, s: int, N: int, sigma: int, td: int,
                  stage_twiddles: Sequence[Complex], dit: bool = False):
@@ -198,147 +205,195 @@ class _SDFStage:
         self.pwp = 0
         self.in_compute = False                # reset state = PASS/FILL
         self.i = 0                             # pair index within phase
-        # pipeline registers
-        self.d_reg = (0, 0)                    # R2: memory read data
-        self.a_reg = (0, 0)                    # R2: input sample
-        self.tw_reg = (0, 0)                   # R2: twiddle
-        self.x_reg = (0, 0)                    # R3: d side operand (DSP D/A)
-        self.y_reg = (0, 0)                    # R3: a side operand (DSP B)
-        self.tw_a = (0, 0)                     # R3: twiddle first hop
-        self.tw_b = (0, 0)                     # R4: twiddle second hop
-        self.bfly_sum = (0, 0)                 # R4: butterfly sum path
-        self.bfly_diff = (0, 0)                # R4: butterfly diff (=ADREG)
-        self.lane_re = (0, 0)                  # R6a: first products (PREG)
-        self.lane_im = (0, 0)
-        self.mul_a_re = 0                      # R6a: delayed A operand
-        self.mul_a_im = 0                      #       (receiver DSP regs)
-        self.mul_t_re = 0                      # R6a: delayed twiddle
-        self.mul_t_im = 0
-        self.mreg = (0, 0)                     # R6b: cascade accumulate
-        self.comb_sum = (0, 0)                 # R5: combine (sum path)
-        self.comb_prod = (0, 0)                # R5: combine (product path)
-        self.out_reg = (0, 0)                  # R6: stage output
+        self.raddr = 0                         # BRAM read-address register
+        # pipeline registers (10 layers, see NLAYERS docstring)
+        self.d_bram = (0, 0)                   # L0: BRAM output register
+        self.a_reg = (0, 0)                    # L0: input sample
+        self.t_reg = (0, 0)                    # L0: twiddle
+        self.d1 = (0, 0)                       # L1: DSP input reg 1 (A/D)
+        self.a1 = (0, 0)
+        self.t1 = (0, 0)                       # L1: twiddle (B first hop)
+        self.d2 = (0, 0)                       # L2: DSP input reg 2 (A/D)
+        self.a2 = (0, 0)
+        self.t2 = (0, 0)                       # L2: twiddle (B second hop)
+        self.bfly_d = (0, 0)                   # L3: pre-adder diff (ADREG)
+        self.bfly_s = (0, 0)                   # L3: pre-adder sum (fabric)
+        self.t3 = (0, 0)                       # L3: twiddle third hop
+        self.prod1 = 0                         # L4/L5: products (MREG)
+        self.prod2 = 0
+        self.prod3 = 0
+        self.prod4 = 0
+        self.bfly_h = (0, 0)                   # L4: frozen re-path operands
+        self.t3h = (0, 0)
+        self.s1 = (0, 0)                       # L4: sum-path delay
+        self.c1 = 0                            # L5: C-port regs (CREG)
+        self.c2 = 0
+        self.s2 = (0, 0)                       # L5: sum-path delay
+        self.p = (0, 0)                        # L6: post-adder out (PREG)
+        self.s3 = (0, 0)                       # L6: sum-path delay
+        self.comb_s = (0, 0)                   # L7: combine (sum path)
+        self.comb_p = (0, 0)                   # L7: combine (product path)
+        self.shift_s = (0, 0)                  # L8: rounded sum path
+        self.shift_p = (0, 0)                  # L8: rounded product path
+        self.out_reg = (0, 0)                  # L9: stage output
         self.pipe_comp = [False] * self.NLAYERS  # phase flags riding the pipe
-        self.sum_dly = (0, 0)                  # R4: sum-path delay register
-        self.a_dly = (0, 0)                    # R4: a reaches the multiply (DIT)
-        self.d_dly = (0, 0)                    # R3: d first hop
-        self.d_dly2 = (0, 0)                   # R4: d reaches the combine (DIT)
-        self.d_dly3 = (0, 0)                   # R5: d third hop (cascade depth)
-        self.sum_dly2 = (0, 0)                 # sum-path second/third taps
-        self.sum_dly3 = (0, 0)
         self._ctor = (s, N, sigma, td, list(stage_twiddles), dit)
 
     def step(self, ar: int, ai: int) -> Complex:
-        """Advance one enabled cycle (pipelined RTL mirror).
+        """Advance one enabled cycle (10-layer pipelined RTL mirror).
 
-        FIFO depth D+K, write at w, read at w-D. The twiddle and the
-        sum/a/d operands travel delay registers alongside the datapath so
-        the multiply (R4) and combine (R5) see their pair's values.
+        Register chain (all reads through the pre-edge snapshot S):
+          L0 d_bram/a_reg/t_reg   (BRAM output register + input + twiddle)
+          L1 d1/a1/t1             (first DSP input register)
+          L2 d2/a2/t2             (second DSP input register)
+          L3 bfly_d/bfly_s/t3     (pre-adder + ADREG)
+          L4 prod1..4, s1         (multiplier -> MREG)
+          L5 c1/c2, s2            (cross products -> CREG)
+          L6 p, s3                (post-adder P -/+ C -> PREG)
+          L7 comb_s/comb_p        (fabric combine)
+          L8 shift_s/shift_p      (round + product-FIFO write)
+          L9 out_reg              (output register)
+
+        The phase flags ride the pipe (pipe_comp[k] = in_compute(t-k));
+        gates follow the validated RTL pattern (layer k gated by the flag
+        carried one cycle earlier, see fft_sdf.v).
         """
         result = self.out_reg
+        S = dict(self.__dict__)
         w = self.wptr
-        r = (w - self.D) % (2 * self.D)
+        # BRAM read-address register: the read lags the write by D. The
+        # registered address is (w + 1 - D) updated at the end of the
+        # step; at the start of the NEXT step it equals w - D (the read
+        # captures the current pointer's lag, exactly like the RTL's
+        # raddr_r -> DOA_REG path).
+        r = (w + 1 - self.D) % (2 * self.D)
         pr = (self.pwp - self.D) % (2 * self.D)
-        d_val = self.ram[r]
         cur = self.in_compute
         flags = [cur] + self.pipe_comp[:-1]
-        f_out, f_comb, f_m2, f_m1, f_bfly = (flags[6], flags[5],
-                                             flags[4], flags[3], flags[2])
+        f_bfly, f_mul, f_creg, f_preg, f_comb, f_out = (
+            flags[3], flags[4], flags[5], flags[6], flags[7], flags[9])
 
-        # R7: shift + out; product write-back to the product FIFO
         sh_sum = self.sigma if not self.dit else self.td + self.sigma
         sh_prod = self.td + self.sigma
-        if f_out:
-            out_val = (round_shift(self.comb_sum[0], sh_sum),
-                       round_shift(self.comb_sum[1], sh_sum))
-            prod_val = (round_shift(self.comb_prod[0], sh_prod),
-                        round_shift(self.comb_prod[1], sh_prod))
-            self.pfifo[self.pwp] = prod_val
-        else:
-            out_val = self.pfifo[pr]           # product output (D later)
-        self.out_reg = out_val
 
-        # R7: combine (COMPUTE) or passthrough -- C-port ALU + PREG
+        # L9: output register + product-FIFO write-back (COMPUTE writes
+        # the rounded product at pwp; PASS reads the product written D
+        # cycles earlier at pr = pwp - D). Write and read share the f_out
+        # layer so the read/write windows align (validated RTL pattern).
+        if f_out:
+            self.out_reg = S['shift_s']
+            self.pfifo[self.pwp] = S['shift_p']
+        else:
+            self.out_reg = self.pfifo[pr]
+
+        # L8: round + shift staging (ungated -- always recomputed; the
+        # values are only consumed by the f_out layer)
+        self.shift_s = (round_shift(S['comb_s'][0], sh_sum),
+                        round_shift(S['comb_s'][1], sh_sum))
+        self.shift_p = (round_shift(S['comb_p'][0], sh_prod),
+                        round_shift(S['comb_p'][1], sh_prod))
+
+        # L7: combine (COMPUTE) or passthrough -- aligns the sum path
+        # (delayed butterfly sum / DIT d) with the product path (PREG).
         if f_comb:
             if not self.dit:
-                self.comb_prod = self.mreg
-                self.comb_sum = self.sum_dly2
+                self.comb_s = S['s3']
+                self.comb_p = S['p']
             else:
-                tr, ti = self.mreg
-                # d_dly captures the NEW butterfly diff, so its tap that
-                # aligns with the cascade-delayed MREG is one deeper than
-                # the sum path's
-                self.comb_sum = ((self.d_dly3[0] << self.td) + tr,
-                                 (self.d_dly3[1] << self.td) + ti)
-                self.comb_prod = ((self.d_dly3[0] << self.td) - tr,
-                                  (self.d_dly3[1] << self.td) - ti)
+                dr, di = S['s3']          # delayed d (DIT rides d to comb)
+                tr, ti = S['p']           # a * W
+                self.comb_s = ((dr << self.td) + tr,
+                               (di << self.td) + ti)
+                self.comb_p = ((dr << self.td) - tr,
+                               (di << self.td) - ti)
         else:
-            self.comb_prod = self.d_dly2
-            self.comb_sum = self.d_dly2
+            self.comb_s = S['s3']
+            self.comb_p = S['s3']
 
-        # R6b: cascade accumulate -- the receiver DSP's ALU forms
-        # PCIN -/+ its own product; results land in MREG (its PREG).
-        # Idle values are never consumed by the combine during PASS.
-        if f_m2:
-            self.mreg = (
-                (self.lane_re[0]
-                 - self.mul_a_im * self.mul_t_im,
-                 self.lane_im[0]
-                 + self.mul_a_im * self.mul_t_re))
+        # L6: post-adder (PREG): re = prod1 - c1, im = prod3 + c2.
+        # DSP48E2 C-port pairing: the im-path products (prod2/prod4) run
+        # one cycle ahead; their MREGs route to the re-path DSPs' C ports
+        # (CREG at L5), so the ALU sees same-pair P (prod1/prod3 computed
+        # at L5) and C (prod2/prod4 captured at L5).
+        if f_preg:
+            self.p = (S['prod1'] - S['c1'],
+                      S['prod3'] + S['c2'])
         else:
-            self.mreg = (0, 0)
+            self.p = (0, 0)
+        self.s3 = S['s2']
 
-        # R6a: sender DSPs -- first products into PREG, and the receiver
-        # operand registers capture this cycle's operands
-        if f_m1:
-            ar_, ai_ = (self.bfly_diff if not self.dit else self.a_dly)
-            self.lane_re = (ar_ * self.tw_b[0],)
-            self.lane_im = (ar_ * self.tw_b[1],)
-            self.mul_a_re, self.mul_a_im = ar_, ai_
-            self.mul_t_re, self.mul_t_im = self.tw_b
+        # L5: C-port registers (CREG) + the re-path products (one cycle
+        # behind the im-path). The re operands were frozen at L4 into the
+        # hold registers (bfly_h/t3h), so the pair matches the CREG value.
+        if f_creg:
+            self.c1 = S['prod2']
+            self.c2 = S['prod4']
+            mr, mi = S['bfly_h']
+            tr, ti = S['t3h']
+            self.prod1 = mr * tr
+            self.prod3 = mr * ti
         else:
-            self.lane_re = (0,)
-            self.lane_im = (0,)
-        self.sum_dly2 = self.sum_dly
-        self.sum_dly = self.bfly_sum     # old value: butterfly runs later
-        self.d_dly3 = self.d_dly2
-        self.d_dly2 = self.d_dly         # old value
+            self.c1 = 0
+            self.c2 = 0
+            self.prod1 = 0
+            self.prod3 = 0
+        self.s2 = S['s1']
 
-        # R4: butterfly from the DSP operand registers -- maps onto the
-        # pre-adder (diff) with its output register (ADREG); the sum is
-        # computed alongside in fabric
+        # L4: im-path products (multiplier -> MREG) + freeze of the
+        # re-path operands (the re multiply runs one cycle later so the
+        # DSP C-port pairing P - C sees the same pair). DIF multiplies
+        # the butterfly diff (pre-adder output); DIT multiplies 'a'.
+        if f_mul:
+            mr, mi = S['bfly_d'] if not self.dit else S['bfly_s']
+            tr, ti = S['t3']
+            self.prod2 = mi * ti
+            self.prod4 = mi * tr
+            self.bfly_h = S['bfly_d'] if not self.dit else S['bfly_s']
+            self.t3h = S['t3']
+        else:
+            self.prod2 = 0
+            self.prod4 = 0
+            self.bfly_h = (0, 0)
+            self.t3h = (0, 0)
+        # sum path: DIF carries the butterfly sum; DIT carries d
+        self.s1 = S['bfly_s'] if not self.dit else S['bfly_d']
+
+        # L3: butterfly (pre-adder -> ADREG) + twiddle third hop
         if f_bfly:
             if not self.dit:
-                self.bfly_diff = (self.x_reg[0] - self.y_reg[0],
-                                  self.x_reg[1] - self.y_reg[1])
-                self.bfly_sum = (self.x_reg[0] + self.y_reg[0],
-                                 self.x_reg[1] + self.y_reg[1])
+                self.bfly_d = (S['d2'][0] - S['a2'][0],
+                               S['d2'][1] - S['a2'][1])
+                self.bfly_s = (S['d2'][0] + S['a2'][0],
+                               S['d2'][1] + S['a2'][1])
             else:
-                self.bfly_diff = self.x_reg
-                self.bfly_sum = self.y_reg
+                self.bfly_d = S['d2']     # d rides to the combine
+                self.bfly_s = S['a2']     # a rides to the multiply
         else:
-            self.bfly_diff = self.x_reg
-            self.bfly_sum = self.x_reg
-        self.tw_b = self.tw_a                  # twiddle second hop
-        self.d_dly = self.bfly_diff
-        if self.dit:
-            self.a_dly = self.bfly_sum         # a rides to the multiply
+            self.bfly_d = S['d2']
+            self.bfly_s = S['d2']
+        self.t3 = S['t2']
 
-        # R3: DSP operand registers (ungated passthrough; candidates for
-        # AREG/BREG/DREG absorption by inference)
-        self.x_reg = self.d_reg
-        self.y_reg = self.a_reg
-        self.tw_a = self.tw_reg                # twiddle first hop
+        # L2: second DSP input register (passthrough)
+        self.d2 = S['d1']
+        self.a2 = S['a1']
+        self.t2 = S['t1']
 
-        # R2: first-half RAM write (PASS only) + read capture
+        # L1: first DSP input register (passthrough)
+        self.d1 = S['d_bram']
+        self.a1 = S['a_reg']
+        self.t1 = S['t_reg']
+
+        # L0: capture -- BRAM output register (registered read), input,
+        # twiddle; first-half RAM write (PASS only)
         if not cur:
-            self.ram[w] = (ar, ai)             # PASS: first half, read-first
-        self.d_reg = d_val
+            self.ram[w] = (ar, ai)
+        self.d_bram = self.ram[self.raddr]
         self.a_reg = (ar, ai)
-        self.tw_reg = self.T[self.i]
+        self.t_reg = self.T[self.i]
         self.pipe_comp = flags
 
         # FSM advance (both pointers free-run, read lags write by D)
+        self.raddr = r
         self.wptr = (w + 1) % (2 * self.D)
         self.pwp = (self.pwp + 1) % (2 * self.D)
         self.i += 1

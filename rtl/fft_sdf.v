@@ -28,14 +28,14 @@ module fft_sdf #(
     // internal growth headroom, generator-derived:
     // SAMPLE_WIDTH + max(0, num_stages - total_shift) + 1
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
-    // datapath pipeline layers per stage (golden model NLAYERS=7)
-    parameter integer PIPE_DEPTH     = 7,
+    // datapath pipeline layers per stage (golden model NLAYERS=10)
+    parameter integer PIPE_DEPTH     = 10,
     // per-stage post-warm reset preloads, packed: for stage g (LSB first)
-    //   {wptr(16), pwp(16), raddr(16), pipe(6), phase_i(16), compute(1)}
-    // = 71 bits per stage (phase_i must cover DEPTH up to N/2 = 13 bits)
+    //   {wptr(16), pwp(16), raddr(16), pipe(9), phase_i(16), compute(1)}
+    // = 74 bits per stage (phase_i must cover DEPTH up to N/2 = 13 bits)
     // supplied by the generator via a macro (the -G parser caps at 32 bits)
-    // width must cover the largest supported transform (63 bits/stage;
-    // N=16384 -> 14 stages -> 882 bits); narrower macros zero-extend
+    // width must cover the largest supported transform (74 bits/stage;
+    // N=16384 -> 14 stages -> 1036 bits); narrower macros zero-extend
     parameter [4095:0] PRELOAD_PACK  = `FFTGEN_PRELOAD_PACK
 )(
     input  wire                      clk,
@@ -133,13 +133,13 @@ module fft_sdf #(
             localparam        PRELOAD_C = (WARM >= DEPTH) ? 1 : 0;
             // slice this stage's preload from the pack (63 bits each)
             localparam [4159:0] PRE_SLICE =
-                {{64{1'b0}}, PRELOAD_PACK} >> (71 * g);
+                {{64{1'b0}}, PRELOAD_PACK} >> (74 * g);
             localparam [15:0] WPTR_PRE = PRE_SLICE[15:0];
             localparam [15:0] PWP_PRE  = PRE_SLICE[31:16];
             localparam [15:0] RADDR_PRE= PRE_SLICE[47:32];
-            localparam [5:0]  PIPE_PRE = PRE_SLICE[53:48];
-            localparam [15:0] PRE_I   = PRE_SLICE[69:54];
-            localparam        PRE_C    = PRE_SLICE[70];
+            localparam [8:0]  PIPE_PRE = PRE_SLICE[56:48];
+            localparam [15:0] PRE_I   = PRE_SLICE[72:57];
+            localparam        PRE_C    = PRE_SLICE[73];
 
             wire signed [TWIDDLE_WIDTH*2-1:0] rom_word;
             wire [AROM_W-1:0]                 rom_addr_w;
@@ -275,7 +275,7 @@ module fft_stage #(
     parameter [15:0]  WPTR_PRE       = 16'h0, // post-warm pointer state
     parameter [15:0]  PWP_PRE        = 16'h0,
     parameter [15:0]  RADDR_PRE      = 16'h0,
-    parameter [5:0]   PIPE_PRE       = 6'h0,
+    parameter [8:0]   PIPE_PRE       = 9'h0,
     parameter integer TOPOLOGY       = 0     // 0 = DIF, 1 = DIT
 )(
     input  wire             clk,
@@ -347,53 +347,72 @@ module fft_stage #(
     reg [RAMW-1:0] wptr /*verilator public_flat*/;                      // first-half write pointer
     reg [RAMW-1:0] pwp /*verilator public_flat*/;                       // product FIFO write pointer
     reg [RAMW-1:0] raddr_r /*verilator public_flat*/;                   // registered RAM read address
-    wire [RAMW-1:0] pr = pwp - DEPTH[RAMW-1:0]; // product FIFO read ptr (lag D)
+    // registered product-FIFO read address. Tracks pwp - D via the
+    // +1 (next-cycle) form so the read timing is identical to a direct
+    // combinational pr = pwp - D, but the address is registered for the
+    // BRAM/LUTRAM address input (breaks the pointer->memory->out path).
+    reg [RAMW-1:0] pr_r /*verilator public_flat*/;
+    wire [RAMW-1:0] pr = pwp - DEPTH[RAMW-1:0]; // (combinational, debug)
 
     // FSM
     reg          in_compute /*verilator public_flat*/;                  // 0 = PASS/FILL, 1 = COMPUTE
     reg [AW-1:0] phase_i /*verilator public_flat*/;                     // pair index within phase
-    reg [5:0]    pipe_comp /*verilator public_flat*/;                   // phase flags riding the pipe
+    reg [8:0]    pipe_comp /*verilator public_flat*/;                   // phase flags riding the pipe
 
-    // R2: read capture
-    reg signed [WIDTH-1:0] d_reg_re /*verilator public_flat*/, d_reg_im;
-    reg signed [WIDTH-1:0] a_reg_re /*verilator public_flat*/, a_reg_im;
-    reg signed [TWIDDLE_WIDTH-1:0] tw_reg_re, tw_reg_im;
-    // R3: DSP operand registers (AREG/BREG/DREG candidates)
-    reg signed [WIDTH-1:0] x_reg_re /*verilator public_flat*/, x_reg_im;
-    reg signed [WIDTH-1:0] y_reg_re /*verilator public_flat*/, y_reg_im;
-    reg signed [TWIDDLE_WIDTH-1:0] tw_a_re, tw_a_im;
-    reg signed [TWIDDLE_WIDTH-1:0] tw_b_re, tw_b_im;
-    // Butterfly pre-adder width: the d-a / d+a results are consumed
-    // AFTER the per-stage scaling shift, so they need one bit more than
-    // the stage datapath (two WIDTH-bit inputs can differ/sum to
-    // WIDTH+1 bits). Everything from the pre-adder through the product
-    // accumulate rides at BW; the >>SHIFT at R8 brings values back to
-    // WIDTH. BW=18 also matches the DSP48E2 B-port natively.
+    // ------------------------------------------------------------------
+    // 10-layer datapath (mirrors golden _SDFStage step(), NLAYERS=10):
+    //   L0 d_bram/a_reg/t_reg      BRAM output register + input + twiddle
+    //   L1 d1/a1/t1                first DSP input register (A/D, B)
+    //   L2 d2/a2/t2                second DSP input register (A/D, B)
+    //   L3 bfly_d/bfly_s/t3        pre-adder -> ADREG (diff), sum in fabric
+    //   L4 prod2/prod4 + freeze    im-path products (MREG) + re operands
+    //   L5 c1/c2 + prod1/prod3     C-port regs (CREG) + re-path products
+    //   L6 p                       post-adder (ALU P -/+ C -> PREG)
+    //   L7 comb_s/comb_p           fabric combine (aligns sum/product)
+    //   L8 shift_s/shift_p         round-half-up shift staging (ungated)
+    //   L9 out_re/out_im           output register + product-FIFO write
+    // Butterfly pre-adder width: d-a/d+a need one bit more than the
+    // stage datapath (WIDTH+1). Everything from the pre-adder through
+    // the products rides at BW; the >>SHIFT at L8 brings values back.
     localparam integer BW = WIDTH + 1;
-    // R4: butterfly (pre-adder + ADREG)
-    reg signed [BW-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im, bfly_s_re, bfly_s_im;
-    reg signed [BW-1:0] d_dly_re, d_dly_im;
-    reg signed [BW-1:0] a_dly_re, a_dly_im;    // DIT
-    // R4: multiply (operands BW x TWIDDLE_WIDTH, +/- accumulation)
     localparam integer MWB = BW + TWIDDLE_WIDTH + 1;
-    reg signed [MWB-1:0] mreg_re /*verilator public_flat*/, mreg_im;
-    // four partial products, one DSP each (see R6a below)
-    reg signed [MWB-1:0] prod1, prod2, prod3, prod4;
-    // multiplier operand source: DIF multiplies the butterfly diff,
-    // DIT rides 'a' to the multiply
-    wire signed [BW-1:0] pr_re = (TOPOLOGY == 0) ? bfly_d_re : a_dly_re;
-    wire signed [BW-1:0] pr_im = (TOPOLOGY == 0) ? bfly_d_im : a_dly_im;
-    // sign-extended mreg at consumption width
-    wire signed [PW-1:0] mregx_re = {{(PW-MWB){mreg_re[MWB-1]}}, mreg_re};
-    wire signed [PW-1:0] mregx_im = {{(PW-MWB){mreg_im[MWB-1]}}, mreg_im};
-    reg signed [BW-1:0] sum_dly_re, sum_dly_im;
-    reg signed [BW-1:0] sum_dly2_re, sum_dly2_im;
-    reg signed [BW-1:0] d_dly2_re, d_dly2_im;
-    reg signed [BW-1:0] d_dly3_re, d_dly3_im;
-    // R5: combine
+
+    // L0: BRAM output register + input + twiddle
+    reg signed [WIDTH-1:0] d_bram_re /*verilator public_flat*/, d_bram_im;
+    reg signed [WIDTH-1:0] a_reg_re /*verilator public_flat*/, a_reg_im;
+    reg signed [TWIDDLE_WIDTH-1:0] t_reg_re, t_reg_im;
+    // L1: first DSP input register
+    reg signed [WIDTH-1:0] d1_re, d1_im, a1_re, a1_im;
+    reg signed [TWIDDLE_WIDTH-1:0] t1_re, t1_im;
+    // L2: second DSP input register
+    reg signed [WIDTH-1:0] d2_re, d2_im, a2_re, a2_im;
+    reg signed [TWIDDLE_WIDTH-1:0] t2_re, t2_im;
+    // L3: butterfly (pre-adder -> ADREG) + twiddle third hop
+    reg signed [BW-1:0] bfly_d_re /*verilator public_flat*/, bfly_d_im;
+    reg signed [BW-1:0] bfly_s_re /*verilator public_flat*/, bfly_s_im;
+    reg signed [TWIDDLE_WIDTH-1:0] t3_re, t3_im;
+    // L4: im-path products (MREG) + frozen re-path operands
+    reg signed [MWB-1:0] prod2, prod4;
+    reg signed [BW-1:0] bfly_h_re, bfly_h_im;
+    reg signed [TWIDDLE_WIDTH-1:0] t3h_re, t3h_im;
+    // L5: C-port registers (CREG) + re-path products
+    reg signed [MWB-1:0] c1, c2;
+    reg signed [MWB-1:0] prod1, prod3;
+    // L6: post-adder (PREG)
+    reg signed [MWB-1:0] p_re /*verilator public_flat*/, p_im;
+    // sum-path delay chain (matches the product path depth)
+    reg signed [BW-1:0] s1_re, s1_im, s2_re, s2_im, s3_re, s3_im;
+    // L7: combine
     reg signed [PW-1:0] comb_s_re /*verilator public_flat*/, comb_s_im;
     reg signed [PW-1:0] comb_p_re /*verilator public_flat*/, comb_p_im;
-    // R6: output (out_re/out_im are the output ports)
+    // L8: shift staging
+    reg signed [PW-1:0] shift_s_re, shift_s_im, shift_p_re, shift_p_im;
+    // L9: output (out_re/out_im are the output ports)
+
+    // multiplier operand source: DIF multiplies the butterfly diff
+    // (pre-adder output), DIT rides 'a' to the multiply
+    wire signed [BW-1:0] pr_re = (TOPOLOGY == 0) ? bfly_d_re : bfly_s_re;
+    wire signed [BW-1:0] pr_im = (TOPOLOGY == 0) ? bfly_d_im : bfly_s_im;
 
     // twiddle decode + address (combinational, from the current pair index)
     wire signed [TWIDDLE_WIDTH-1:0] t_re = rom_data[TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
@@ -415,15 +434,13 @@ module fft_stage #(
     endfunction
 
     // next-value temps
-    reg signed [BW-1:0] nxt_bf_d_re, nxt_bf_d_im, nxt_bf_s_re, nxt_bf_s_im;
     // WIDTH->BW sign extensions for the pre-adder operands (the add
     // itself must be evaluated at BW or the carry out of bit WIDTH-1
     // is lost before the scaling shift ever sees it)
-    wire signed [BW-1:0] x_ext_re = {{(BW-WIDTH){x_reg_re[WIDTH-1]}}, x_reg_re};
-    wire signed [BW-1:0] x_ext_im = {{(BW-WIDTH){x_reg_im[WIDTH-1]}}, x_reg_im};
-    wire signed [BW-1:0] y_ext_re = {{(BW-WIDTH){y_reg_re[WIDTH-1]}}, y_reg_re};
-    wire signed [BW-1:0] y_ext_im = {{(BW-WIDTH){y_reg_im[WIDTH-1]}}, y_reg_im};
-    reg signed [PW-1:0] nxt_out_s, nxt_out_p;
+    wire signed [BW-1:0] d2_ext_re = {{(BW-WIDTH){d2_re[WIDTH-1]}}, d2_re};
+    wire signed [BW-1:0] d2_ext_im = {{(BW-WIDTH){d2_im[WIDTH-1]}}, d2_im};
+    wire signed [BW-1:0] a2_ext_re = {{(BW-WIDTH){a2_re[WIDTH-1]}}, a2_re};
+    wire signed [BW-1:0] a2_ext_im = {{(BW-WIDTH){a2_im[WIDTH-1]}}, a2_im};
     reg signed [PW-1:0] se_d_re, se_d_im;
 
     always @(posedge clk) begin
@@ -431,152 +448,170 @@ module fft_stage #(
             wptr        <= WPTR_PRE[RAMW-1:0];
             pwp         <= PWP_PRE[RAMW-1:0];
             raddr_r     <= RADDR_PRE[RAMW-1:0];
-            pipe_comp   <= PIPE_PRE[5:0];
+            pr_r        <= PWP_PRE[RAMW-1:0] - DEPTH[RAMW-1:0];
+            pipe_comp   <= PIPE_PRE[8:0];
             in_compute  <= (PRELOAD_C != 0);
             phase_i     <= PRELOAD_I[AW-1:0];
             out_re      <= {WIDTH{1'b0}};
             out_im      <= {WIDTH{1'b0}};
         end else if (ce) begin
-            // R8: shift + out; product FIFO write
-            if (pipe_comp[5]) begin
-                nxt_out_s = round_shift(comb_s_re, SHIFT_SUM);
-                nxt_out_p = round_shift(comb_s_im, SHIFT_SUM);
-                out_re <= nxt_out_s[WIDTH-1:0];
-                out_im <= nxt_out_p[WIDTH-1:0];
-                nxt_out_p = round_shift(comb_p_re, TD_PLUS_SHIFT);
-                nxt_out_s = round_shift(comb_p_im, TD_PLUS_SHIFT);
-                g_mem.pfifo_re[pwp] <= nxt_out_p[WIDTH-1:0];
-                g_mem.pfifo_im[pwp] <= nxt_out_s[WIDTH-1:0];
+            // L9: output register + product-FIFO write-back. Write and
+            // read share this layer (COMPUTE writes the rounded product
+            // at pwp; PASS reads the product written D cycles earlier at
+            // pr = pwp - D), so the read/write windows align.
+            if (pipe_comp[8]) begin
+                g_mem.pfifo_re[pwp] <= shift_p_re[WIDTH-1:0];
+                g_mem.pfifo_im[pwp] <= shift_p_im[WIDTH-1:0];
+                out_re <= shift_s_re[WIDTH-1:0];
+                out_im <= shift_s_im[WIDTH-1:0];
             end else begin
-                out_re <= g_mem.pfifo_re[pr];
-                out_im <= g_mem.pfifo_im[pr];
+                out_re <= g_mem.pfifo_re[pr_r];
+                out_im <= g_mem.pfifo_im[pr_r];
             end
 
-            // R7: combine (or passthrough) -- C-port ALU + PREG
-            if (pipe_comp[4]) begin
+            // L8: round + shift staging (ungated; only consumed by L9)
+            shift_s_re <= round_shift(comb_s_re, SHIFT_SUM);
+            shift_s_im <= round_shift(comb_s_im, SHIFT_SUM);
+            shift_p_re <= round_shift(comb_p_re, TD_PLUS_SHIFT);
+            shift_p_im <= round_shift(comb_p_im, TD_PLUS_SHIFT);
+
+            // L7: combine (or passthrough) -- aligns the sum path
+            // (delayed butterfly sum / DIT d) with the product path (PREG)
+            if (pipe_comp[6]) begin
                 if (TOPOLOGY == 0) begin
-                    comb_p_re <= mregx_re;
-                    comb_p_im <= mregx_im;
-                    comb_s_re <= {{(PW-BW){sum_dly2_re[BW-1]}}, sum_dly2_re};
-                    comb_s_im <= {{(PW-BW){sum_dly2_im[BW-1]}}, sum_dly2_im};
+                    comb_p_re <= {{(PW-MWB){p_re[MWB-1]}}, p_re};
+                    comb_p_im <= {{(PW-MWB){p_im[MWB-1]}}, p_im};
+                    comb_s_re <= {{(PW-BW){s3_re[BW-1]}}, s3_re};
+                    comb_s_im <= {{(PW-BW){s3_im[BW-1]}}, s3_im};
                 end else begin
                     // DIT: (d << td) +- t at 2^td scale
-                    se_d_re = {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
-                    se_d_im = {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
-                    comb_s_re <= (se_d_re <<< TWIDDLE_DECIMAL) + mregx_re;
-                    comb_s_im <= (se_d_im <<< TWIDDLE_DECIMAL) + mregx_im;
-                    comb_p_re <= (se_d_re <<< TWIDDLE_DECIMAL) - mregx_re;
-                    comb_p_im <= (se_d_im <<< TWIDDLE_DECIMAL) - mregx_im;
+                    se_d_re = {{(PW-BW){s3_re[BW-1]}}, s3_re};
+                    se_d_im = {{(PW-BW){s3_im[BW-1]}}, s3_im};
+                    comb_s_re <= (se_d_re <<< TWIDDLE_DECIMAL)
+                                 + {{(PW-MWB){p_re[MWB-1]}}, p_re};
+                    comb_s_im <= (se_d_im <<< TWIDDLE_DECIMAL)
+                                 + {{(PW-MWB){p_im[MWB-1]}}, p_im};
+                    comb_p_re <= (se_d_re <<< TWIDDLE_DECIMAL)
+                                 - {{(PW-MWB){p_re[MWB-1]}}, p_re};
+                    comb_p_im <= (se_d_im <<< TWIDDLE_DECIMAL)
+                                 - {{(PW-MWB){p_im[MWB-1]}}, p_im};
                 end
             end else begin
-                comb_s_re <= {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
-                comb_s_im <= {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
-                comb_p_re <= {{(PW-BW){d_dly3_re[BW-1]}}, d_dly3_re};
-                comb_p_im <= {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
+                comb_s_re <= {{(PW-BW){s3_re[BW-1]}}, s3_re};
+                comb_s_im <= {{(PW-BW){s3_im[BW-1]}}, s3_im};
+                comb_p_re <= {{(PW-BW){s3_re[BW-1]}}, s3_re};
+                comb_p_im <= {{(PW-BW){s3_im[BW-1]}}, s3_im};
             end
 
-            // R6b: fabric combine of the four registered partial
-            // products. Idle values are never consumed by R7 during PASS.
-            if (pipe_comp[3]) begin
-                mreg_re <= prod1 - prod2;
-                mreg_im <= prod3 + prod4;
+            // L6: post-adder (PREG): re = prod1 - c1, im = prod3 + c2.
+            // The im-path products ran one cycle ahead (L4); their MREGs
+            // route to the re-path DSPs' C ports (CREG at L5), so the
+            // ALU sees same-pair P (prod1/prod3, L5) and C (c1/c2, L5).
+            if (pipe_comp[5]) begin
+                p_re <= prod1 - c1;
+                p_im <= prod3 + c2;
             end else begin
-                mreg_re <= {MWB{1'b0}};
-                mreg_im <= {MWB{1'b0}};
+                p_re <= {MWB{1'b0}};
+                p_im <= {MWB{1'b0}};
             end
+            s3_re <= s2_re;
+            s3_im <= s2_im;
 
-            // R6a: all four partial products into DSP registers (plain
-            // A*B -> MREG, no PCIN cascade). The cascade forced the
-            // receiver DSP through A_B_DATA->MULT->ALU->PREG in ONE
-            // cycle -- an intra-DSP ~1.85 ns path that misses 500 MHz
-            // once routing is congested (R=2 N>=4096 post-route WNS
-            // -0.29). Splitting multiply (this layer, ends at MREG) and
-            // combine (next layer, fabric adds) keeps both hops short;
-            // layer count, values and cycles are unchanged vs the
-            // cascade form, so the golden model needs no edit.
-            if (pipe_comp[2]) begin
-                prod1 <= pr_re * tw_b_re;   // d_re*t_re
-                prod2 <= pr_im * tw_b_im;   // d_im*t_im
-                prod3 <= pr_re * tw_b_im;   // d_re*t_im
-                prod4 <= pr_im * tw_b_re;   // d_im*t_re
+            // L5: C-port registers (CREG) + re-path products (one cycle
+            // behind the im-path, from the frozen L4 operands)
+            if (pipe_comp[4]) begin
+                c1 <= prod2;
+                c2 <= prod4;
+                prod1 <= bfly_h_re * t3h_re;
+                prod3 <= bfly_h_re * t3h_im;
             end else begin
+                c1 <= {MWB{1'b0}};
+                c2 <= {MWB{1'b0}};
                 prod1 <= {MWB{1'b0}};
-                prod2 <= {MWB{1'b0}};
                 prod3 <= {MWB{1'b0}};
-                prod4 <= {MWB{1'b0}};
             end
-            sum_dly2_re <= sum_dly_re;
-            sum_dly2_im <= sum_dly_im;
-            sum_dly_re  <= bfly_s_re;
-            sum_dly_im  <= bfly_s_im;
-            d_dly3_re   <= d_dly2_re;
-            d_dly3_im   <= d_dly2_im;
-            d_dly2_re   <= d_dly_re;
-            d_dly2_im   <= d_dly_im;
+            s2_re <= s1_re;
+            s2_im <= s1_im;
 
-            // R4: butterfly from the DSP operand registers -- the diff is
-            // the pre-adder (A-D/B) with ADREG absorbing this register.
-            // NB: golden model lets a_dly/d_dly capture the NEWLY computed
-            // butterfly values (their assignment follows the R4 update),
-            // while sum_dly/d_dly2/tw_b hold the previous ones.
-            if (pipe_comp[1]) begin
-                if (TOPOLOGY == 0) begin
-                    nxt_bf_d_re = x_ext_re - y_ext_re;
-                    nxt_bf_d_im = x_ext_im - y_ext_im;
-                    nxt_bf_s_re = x_ext_re + y_ext_re;
-                    nxt_bf_s_im = x_ext_im + y_ext_im;
-                end else begin
-                    nxt_bf_d_re = x_reg_re;     // d rides to the combine
-                    nxt_bf_d_im = x_reg_im;
-                    nxt_bf_s_re = y_reg_re;     // a rides to the multiply
-                    nxt_bf_s_im = y_reg_im;
-                end
+            // L4: im-path products (MREG) + freeze of the re-path
+            // operands (the re multiply runs one cycle later so the DSP
+            // C-port pairing P - C sees the same pair)
+            if (pipe_comp[3]) begin
+                prod2 <= pr_im * t3_im;
+                prod4 <= pr_im * t3_re;
+                bfly_h_re <= pr_re;
+                bfly_h_im <= pr_im;
+                t3h_re <= t3_re;
+                t3h_im <= t3_im;
             end else begin
-                nxt_bf_d_re = x_reg_re;
-                nxt_bf_d_im = x_reg_im;
-                nxt_bf_s_re = x_reg_re;
-                nxt_bf_s_im = x_reg_im;
+                prod2 <= {MWB{1'b0}};
+                prod4 <= {MWB{1'b0}};
+                bfly_h_re <= {BW{1'b0}};
+                bfly_h_im <= {BW{1'b0}};
+                t3h_re <= {TWIDDLE_WIDTH{1'b0}};
+                t3h_im <= {TWIDDLE_WIDTH{1'b0}};
             end
-            bfly_d_re <= nxt_bf_d_re;
-            bfly_d_im <= nxt_bf_d_im;
-            bfly_s_re <= nxt_bf_s_re;
-            bfly_s_im <= nxt_bf_s_im;
-            tw_b_re <= tw_a_re;
-            tw_b_im <= tw_a_im;
-            d_dly_re <= nxt_bf_d_re;   // golden: d_dly = new bfly_diff
-            d_dly_im <= nxt_bf_d_im;
-            if (TOPOLOGY == 1) begin
-                a_dly_re <= nxt_bf_s_re;  // golden: a_dly = new bfly_sum
-                a_dly_im <= nxt_bf_s_im;
+            // sum path: DIF carries the butterfly sum; DIT carries d
+            s1_re <= (TOPOLOGY == 0) ? bfly_s_re : bfly_d_re;
+            s1_im <= (TOPOLOGY == 0) ? bfly_s_im : bfly_d_im;
+
+            // L3: butterfly (pre-adder -> ADREG) + twiddle third hop.
+            // UNGATED: the PASS-phase values are never consumed (the
+            // products and combine are phase-gated downstream), and an
+            // unconditional D-A expression lets Vivado map the diff into
+            // the DSP48E2 pre-adder (ADREG) instead of fabric carries.
+            if (TOPOLOGY == 0) begin
+                bfly_d_re <= d2_ext_re - a2_ext_re;
+                bfly_d_im <= d2_ext_im - a2_ext_im;
+                bfly_s_re <= d2_ext_re + a2_ext_re;
+                bfly_s_im <= d2_ext_im + a2_ext_im;
+            end else begin
+                bfly_d_re <= d2_ext_re;        // d rides to the combine
+                bfly_d_im <= d2_ext_im;
+                bfly_s_re <= a2_ext_re;        // a rides to the multiply
+                bfly_s_im <= a2_ext_im;
             end
+            t3_re <= t2_re;
+            t3_im <= t2_im;
 
-            // R3: DSP operand registers (ungated passthrough)
-            x_reg_re <= d_reg_re;
-            x_reg_im <= d_reg_im;
-            y_reg_re <= a_reg_re;
-            y_reg_im <= a_reg_im;
-            tw_a_re  <= tw_reg_re;
-            tw_a_im  <= tw_reg_im;
+            // L2: second DSP input register (passthrough)
+            d2_re <= d1_re;
+            d2_im <= d1_im;
+            a2_re <= a1_re;
+            a2_im <= a1_im;
+            t2_re <= t1_re;
+            t2_im <= t1_im;
 
-            // R2: first-half RAM write (PASS only) + read capture
+            // L1: first DSP input register (passthrough)
+            d1_re <= d_bram_re;
+            d1_im <= d_bram_im;
+            a1_re <= a_reg_re;
+            a1_im <= a_reg_im;
+            t1_re <= t_reg_re;
+            t1_im <= t_reg_im;
+
+            // L0: capture -- first-half RAM write (PASS only) + BRAM
+            // output register (registered read) + input + twiddle
             if (!in_compute) begin
-                g_mem.ram_re[wptr] <= in_re;          // PASS: first half
+                g_mem.ram_re[wptr] <= in_re;
                 g_mem.ram_im[wptr] <= in_im;
             end
-            d_reg_re <= g_mem.ram_re[raddr_r];        // sync read (addr reg'd)
-            d_reg_im <= g_mem.ram_im[raddr_r];
+            d_bram_re <= g_mem.ram_re[raddr_r];      // BRAM output register
+            d_bram_im <= g_mem.ram_im[raddr_r];
             a_reg_re <= in_re;
             a_reg_im <= in_im;
-            tw_reg_re <= t_re;
-            tw_reg_im <= t_im;
+            t_reg_re <= t_re;
+            t_reg_im <= t_im;
 
             // FSM advance (subtract FULL depth: DEPTH[AW-1:0] would
             // truncate a power-of-two depth to zero)
             raddr_r <= (wptr + {{(RAMW-1){1'b0}}, 1'b1}
                         - DEPTH[RAMW-1:0]);     // next cycle's read addr
+            pr_r    <= (pwp + {{(RAMW-1){1'b0}}, 1'b1}
+                        - DEPTH[RAMW-1:0]);     // next cycle's pfifo read addr
             wptr <= wptr + {{(RAMW-1){1'b0}}, 1'b1};
             pwp  <= pwp + {{(RAMW-1){1'b0}}, 1'b1};
-            pipe_comp <= {pipe_comp[4:0], in_compute};
+            pipe_comp <= {pipe_comp[7:0], in_compute};
             phase_i <= phase_i + {{(AW-1){1'b0}}, 1'b1};
             if (phase_i == DEPTH[AW-1:0] - 1'b1) begin
                 phase_i    <= {AW{1'b0}};
@@ -584,6 +619,7 @@ module fft_stage #(
             end
         end
     end
+
 endmodule
 
 `default_nettype wire

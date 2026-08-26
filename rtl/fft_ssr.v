@@ -28,7 +28,7 @@ module fft_ssr #(
     parameter integer TWIDDLE_DECIMAL = TWIDDLE_WIDTH - 1,
     parameter integer SCALING_PACK   = 32'h01010101,
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
-    parameter integer PIPE_DEPTH     = 7,
+    parameter integer PIPE_DEPTH     = 10,
     parameter         WN_FILE        = "fft_wn.mem",
     parameter         INVERSE        = 0
 )(
