@@ -82,6 +82,38 @@ def write_wn_mem(cfg: FFTConfig, path: str) -> None:
                 f.write(_hex(packed, cfg.twiddle_width * 2) + "\n")
 
 
+def write_preload_pack_vh(stage_preloads, path: str) -> int:
+    """Pack golden-model post-warm stage preloads into ``fft_preloads.vh``.
+
+    Field layout per stage (LSB first), 74 bits/stage — must match the
+    PRE_SLICE slicing in rtl/fft_sdf.v:
+      wptr(16) | pwp(16) | raddr(16) | pipe(9) | phase_i(16) | compute(1)
+    The -G parser caps parameter values at 32 bits, so the pack travels
+    via this generated header (width = 74 bits x stage count; N=16384
+    with 14 stages needs 1036 bits). Returns the pack width in bits.
+    """
+    pl_pack = 0
+    for i, pl in enumerate(stage_preloads):
+        pipe_bits = int("".join("1" if b else "0"
+                                for b in reversed(pl["pipe"][:9])), 2) & 0x1FF
+        stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
+                | ((pl["raddr"] & 0xFFFF) << 32) \
+                | (pipe_bits << 48) \
+                | ((pl["phase_i"] & 0xFFFF) << 57) \
+                | ((1 if pl["compute"] else 0) << 73)
+        pl_pack |= stage << (74 * i)
+    preload_bits = 74 * len(stage_preloads)
+    # guarded so an include from the generated wrapper AND the
+    # +define+FFTGEN_PRELOADS flow (fft_sdf includes it too) never
+    # double-defines the macro
+    with open(path, "w") as f:
+        f.write("`ifndef FFTGEN_PRELOAD_PACK\n")
+        f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
+                % (preload_bits, pl_pack))
+        f.write("`endif\n")
+    return preload_bits
+
+
 def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                  seed: int = 1, quiet: bool = True,
                  pad_frames: int = None) -> dict:
@@ -162,22 +194,9 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                                     input_order="native",
                                     output_order="bitreversed")
     _gm = SDFGoldenModel(lane_full, dit=False)
-    pl_pack = 0
-    for i, pl in enumerate(_gm.stage_preloads):
-        pipe_bits = int("".join("1" if b else "0"
-                                for b in reversed(pl["pipe"][:9])), 2) & 0x1FF
-        stage = ((pl["wptr"] & 0xFFFF)
-                 | ((pl["pwp"] & 0xFFFF) << 16)
-                 | ((pl["raddr"] & 0xFFFF) << 32)
-                 | (pipe_bits << 48)
-                 | ((pl["phase_i"] & 0xFFFF) << 57)
-                 | ((1 if pl["compute"] else 0) << 73))
-        pl_pack |= stage << (74 * i)
     # same dynamic-width emission as generate(): 74 bits per lane stage
-    preload_bits = 74 * len(_gm.stage_preloads)
-    with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
-        f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
-                % (preload_bits, pl_pack))
+    write_preload_pack_vh(_gm.stage_preloads,
+                          os.path.join(outdir, "fft_preloads.vh"))
 
     tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                       "tb", "tb_fft_ssr.cpp")
@@ -346,23 +365,11 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     _gm = SDFGoldenModel(
         dataclasses.replace(cfg, input_order=nat_in, output_order=nat_out),
         dit=cfg.is_dit)
-    pl_pack = 0
-    for i, pl in enumerate(_gm.stage_preloads):
-        pipe_bits = int("".join("1" if b else "0"
-                                for b in reversed(pl["pipe"][:9])), 2) & 0x1FF
-        stage = (pl["wptr"] & 0xFFFF) | ((pl["pwp"] & 0xFFFF) << 16) \
-                | ((pl["raddr"] & 0xFFFF) << 32) \
-                | (pipe_bits << 48) \
-                | ((pl["phase_i"] & 0xFFFF) << 57) \
-                | ((1 if pl["compute"] else 0) << 73)
-        pl_pack |= stage << (74 * i)
     # per-stage preloads travel via a generated header (the -G parser
     # caps parameter values at 32 bits); width grows with stage count:
     # 74 bits/stage, so N=16384 (14 stages) needs 1036 bits
-    preload_bits = 74 * len(_gm.stage_preloads)
-    with open(os.path.join(outdir, "fft_preloads.vh"), "w") as f:
-        f.write("`define FFTGEN_PRELOAD_PACK %d'h%0x\n"
-                % (preload_bits, pl_pack))
+    write_preload_pack_vh(_gm.stage_preloads,
+                          os.path.join(outdir, "fft_preloads.vh"))
     gargs = [
         "+define+FFTGEN_PRELOADS",
         "+incdir+.",
