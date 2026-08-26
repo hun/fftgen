@@ -66,23 +66,24 @@ block floating point (listed as future work), runtime-twiddle reload.
 
 ## 2. Architecture
 
-### 2.1 Baseline core (R = 1): fully pipelined radix-2² single-path delay feedback (SDF), DIF
+### 2.1 Baseline core (R = 1): fully pipelined single-path delay feedback (SDF), DIF
 
 **Decision:** a *fully pipelined streaming* core — not a buffered/macro
 engine that ingests a frame, computes, and emits. The chosen topology is the
-classic radix-2² DIF-SDF pipeline (Takala/Baas style), selected over the
+classic DIF-SDF pipeline (Takala/Baas style), **implemented as plain
+radix-2** (the radix-2² folding is deferred — Appendix A), selected over the
 alternatives on resource grounds:
 
 | Topology | Multipliers | Memory | Streaming? |
 |---|---|---|---|
-| **SDF (chosen)** | ~N/4 complex | ~N delay | yes, continuous |
+| **SDF (chosen)** | ≈ N complex (plain radix-2; ~N/4 with the deferred R2² folding) | ~N delay | yes, continuous |
 | MDC / R2²SDF variants | same order | ~2–3× more (commutators) | yes |
 | Buffered/burst (in-place array) | few, time-multiplexed | full frame RAM ×2 + controller | no — dead cycles between frames |
 | Fully parallel | O(N log N) | minimal | yes but absurd area for large N |
 
-SDF gives the minimum-multiplier *and* near-minimum-memory continuous-stream
-design; MDC only wins when R > 1 needs multiple streams anyway (§2.4 covers
-that case by composing SDF engines).
+SDF is the minimum-delay-memory continuous-stream design (one delay line
+per stage, one multiply per butterfly); MDC only wins when R > 1 needs
+multiple streams anyway (§2.4 covers that case by composing SDF engines).
 
 **Streaming contract** (pinned, tested): one complex sample accepted per
 clock, forever — frames may be fed back-to-back with no gap; outputs emerge
@@ -95,16 +96,19 @@ change under stall; no sample is lost or altered.
 - **Decimation-in-frequency**: natural-order input → bit-reversed-order output
   *by construction*. This makes the "native output" case an explicit, testable
   reorder buffer instead of hidden shuffling inside the datapath.
-- `log2(N)` pipeline stages. Each radix-2² stage contains one complex
-  butterfly pair and **at most one** complex multiply (vs. one per radix-2
-  stage) — roughly N complex multiplies saved per transform vs. plain
-  radix-2 SDF, at identical delay-line cost.
-- Per-stage feedback delay line of depth `N/(4·stage)` realized as an SRL/FF
-  shift register (BRAM variant only if long-N becomes a real use case — same
-  trade-off study as firgen's BRAM delay line).
-- Twiddles stored in quarter-wave-compressed ROMs sized `~N/4` total
-  (decision §7.6; exact ROM partitioning is a twiddle-module detail,
-  documented in `twiddle_map.txt`).
+- `log2(N)` pipeline stages, **plain radix-2 as implemented**: every pair
+  multiplies (uniform datapath, Appendix A), delay depth `D_s = N/2^(s+1)`
+  (DIF) or `2^s` (DIT). The radix-2² folding that would cut multiplies to
+  ~N/4 is deferred: it changes *which cycles* carry multipliers and must be
+  re-proven numerically equivalent to the pinned per-stage shift schedule
+  before any RTL may use it (Appendix A).
+- Per-stage feedback delay line of depth `D_s`, realized per the decided
+  memory cutoffs (LUTRAM ≤ 1 kbit, BRAM < 256 kbit, URAM above —
+  `doc/mem_cutoffs.md`), always with synchronous read lagging the write.
+- Twiddles: the canonical table is quarter-wave compressed (N/4 + 1
+  entries, decision §7.6); the generated `.mem` expands it into per-stage
+  slices (one N-word file, stage `s` reads `[BASE_s .. BASE_s + D_s − 1]`).
+  Exact layout and quantization contract: `twiddle_map.txt`.
 - Pipelining mirrors firgen discipline: fabric registers around the ROM /
   multiplier paths so DSP blocks infer AREG/BREG/MREG/PREG; timing closure is
   a design requirement, not an afterthought.
@@ -398,17 +402,22 @@ Consequences baked into the datapath:
   post-multiplier accumulator with headroom, so **products are never
   quantized internally** — the only quantization points remain the per-stage
   scaling shifts and the final output (simplifies both RTL and golden model).
-- **Complex multiply = 3 DSPs (Karatsuba, decided §7.5)** via the identity
-  `m1 = c·a`, `m2 = d·b`, `m3 = (a+b)·(c+d)` →
-  `re = m1 − m2`, `im = m3 − m1 − m2` (numerically verified). The `a±b`/
-  `c+d` terms come free from the DSP pre-adders (E1/E2). DSP conservation
-  beats the extra accumulation layer; P5 still measures the timing impact,
-  but there is no 4-DSP variant planned.
+- **Complex multiply = 4 DSPs** (4-product split with DSP C-port chaining,
+  *implemented; supersedes the earlier 3-DSP Karatsuba decision*): the
+  im-path products `diff·t_re` / `diff·t_im` run one cycle ahead (L4), their
+  MREGs route to the re-path DSPs' C ports (CREG, L5), and the ALU forms
+  `re = P − C` / `im = P + C` (L6) — 4 DSPs per stage, exactly 4·log2(N)
+  per R=1 core (measured: datasheet sweep). The 3-multiplier Karatsuba/Gauss
+  forms were measured and **rejected on timing**: on the DSP48E2 the
+  pre-adder sits in series with the multiplier, so the extra pre-add term
+  grew the intra-DSP cascade hop 1.85 → 2.61 ns (WNS −0.78 @ 2 ns) — it
+  misses the 500 MHz goal (evidence kept in the P5a notes of §2.4).
 - Pipeline registers follow the hard macro: A/B/AREG/BREG/MREG/PREG, matching
   firgen's proven floorplaining-free closure approach.
 - DSP count formula (reported by the generator, asserted by a resource test):
-  `3 · Σ_stage(multiplies in stage)` — for radix-2² SDF ≈ `3N/4` per
-  transform for R=1 (radix-2² halves the multiplies vs. plain radix-2).
+  `4 · num_stages` — audited netlist-level: the im-path product DSPs absorb
+  the full DSP48E2 register budget (AREG=2 BREG=2 DREG=1 ADREG=1 MREG=1
+  CREG=1 PREG=1); the re-path DSPs add AREG/BREG + C port (P5a dsp_audit).
 
 ### 2.7 Memory hierarchy — twiddle ROMs and delay lines
 
@@ -642,7 +651,7 @@ fftgen/
 │   ├── fft_gen.py           artifact generation + verify_verilator/verify_icarus drivers
 │   └── export_core.py       headless CLI export of the full deliverable set
 ├── rtl/
-│   ├── fft_sdf.v            R=1 radix-2² SDF core (all stages, parameterized)
+│   ├── fft_sdf.v            R=1 SDF core, plain radix-2 (all stages, parameterized)
 │   ├── fft_cross.v          SSR cross-lane R-point combiner + lane permute
 │   ├── fft_reorder.v        native ↔ bit-reversed reorder buffer
 │   └── fft_top.v            wrapper assembling sdf×R + cross + reorder
@@ -692,7 +701,7 @@ late because it composes already-verified pieces.
 
 | Config | Complex mults | RAM/registers | Throughput |
 |---|---|---|---|
-| N=1024, R=1 | ~N (radix-2²) | ~1.5N stage delay FFs + ROM | 1 frame / 1024 clk |
+| N=1024, R=1 | ~N (plain radix-2) | stage delay lines + ROMs per mem cutoffs | 1 frame / 1024 clk |
 | N=1024, R=4 | 4× sub-FFT + R-point net | 4× smaller delay lines | 1 frame / 256 clk |
 
 Exact DSP counts depend on family presets (25×18 / 27×24 / 18×18), reused
@@ -700,8 +709,10 @@ conceptually from firgen's DSP tables.
 
 ## 7. Decisions (all questions resolved)
 
-1. **Stage algorithm**: fully pipelined radix-2² DIF-SDF (see §2.1); plain
-   radix-2 kept as a possible debug fallback only.
+1. **Stage algorithm**: fully pipelined SDF, **plain radix-2 as implemented**
+   (see §2.1). Radix-2² folding deferred: it changes which cycles carry
+   multipliers and must be re-proven numerically equivalent to the pinned
+   per-stage shift schedule before any RTL may use it (Appendix A).
 2. **Framing**: data is **AXI4-Stream-encoded minus `tready`** (§2.8);
    `tuser(0) = '1'` marks start-of-frame and `tlast = '1'` marks
    end-of-frame, **on both input and output**. Sidebands ride at fixed
@@ -712,9 +723,14 @@ conceptually from firgen's DSP tables.
    available via explicit override for exotic use cases.
 4. **Rounding per stage**: round-half-up at scaling shifts, truncate at
    products.
-5./11. **Complex multiply**: 3-DSP Karatsuba form (`m3 = (c+d)·(a−b)` via
-   the pre-adder) — DSP conservation wins over the extra accumulation layer;
-   timing is still measured in P5 but there is no 4-DSP variant planned.
+5./11. **Complex multiply**: **4-product split with DSP C-port chaining**
+   (4 DSPs/stage), implemented and swept (datasheet: exactly 4 × log2 N DSPs
+   at R=1). 3-multiplier Karatsuba/Gauss forms **rejected on timing**: the
+   DSP48E2 pre-adder is in series with the multiplier; the extra pre-add
+   term grew the intra-DSP cascade hop 1.85 → 2.61 ns (WNS −0.78 @ 2 ns)
+   and misses the 500 MHz goal (P5a evidence: §2.4). The C-port pairing
+   requires the im-path one cycle ahead, absorbed by the 10-layer pipeline
+   (Appendix A).
 6. **Twiddle ROM**: quarter-wave compression, ±1-LSB-deterministic
    quantization contract documented in `twiddle_map.txt`.
 7. **Max R**: `R ∈ {1, 2, 4, 8}` for v1.
@@ -729,8 +745,8 @@ conceptually from firgen's DSP tables.
 10. ~~Target families~~ **decided**: Xilinx only for v1 — Artix-7 @250 MHz
     + UltraScale+ @500 MHz as synthesis gates; other fabrics postponed
     (presets make adding them cheap later).
-11. **Complex-multiply form**: default 3-DSP (pre-adder) with 4-DSP as
-    fallback/timing escape — or measure first and pick per preset?
+11. ~~Complex-multiply form~~ **resolved by measurement**: 4-product split
+   ships; see 5./11. above (Karatsuba did not meet the 500 MHz gate).
 12. **RTL style**: **inference only, with `ram_style`/`uram_style` hints** —
     no primitive instantiation, no XPM macros. This keeps the RTL portable to
     any synthesis engine including those without attribute support. Spike S1
