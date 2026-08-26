@@ -240,7 +240,10 @@ to the old shared array, which Vivado replicated per reader anyway.
    twiddle path is nowhere near critical in either style.
 
 **Decision.** `auto` -> block when `N * TWIDDLE_WIDTH * 2 >= 8192`
-bits, i.e. **N >= 256** for 18-bit twiddles. N <= 128 stays
+bits, i.e. **N >= 256** for 18-bit twiddles. Consistent with prior
+experience on another project where the useful crossover sat between
+6000 and 7000 bits; 8192 is the same neighborhood, rounded to a power
+of two. N <= 128 stays
 distributed (wash at that size; avoids spending RAMB18s on tiny
 ROMs). SSR lane engines inherit the same cutoff through their M-point
 `TWIDDLE_MEM=auto` default. Verified bit-exact vs golden in all three
