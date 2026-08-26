@@ -15,13 +15,13 @@ class TestSSRRtl(unittest.TestCase):
                          f"first_bad={r.get('first_bad')}")
 
     def test_r2_sizes(self):
-        for N in (8, 16, 32):
+        for N in (8, 16, 32, 64):
             with self.subTest(N=N):
                 self._check(FFTConfig(num_points=N, ssr=2,
                                       output_order="native"))
 
     def test_inverse_r2(self):
-        for N in (8, 16):
+        for N in (8, 16, 32):
             with self.subTest(N=N):
                 self._check(FFTConfig(num_points=N, ssr=2, inverse=True,
                                       output_order="native"))

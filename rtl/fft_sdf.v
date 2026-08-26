@@ -298,16 +298,51 @@ module fft_stage #(
     // native complex-multiply accumulate width: 17b data x 18b twiddle
     // products (35b) plus one guard bit for the +/- accumulation
 
-    // first-half delay RAM (2D slots, sync read, read lags write by D)
-    (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
-    (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
-    // product FIFO (2D slots, output D cycles after write)
-    (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
-    (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+    // ------------------------------------------------------------------
+    // memory style policy (decided cutoffs, see doc/mem_cutoffs.md S3):
+    //   array bits <= 1024      -> distributed (LUTRAM; a RAMB36 would
+    //                              sit >97% empty)
+    //   array bits <  262144    -> block (RAMB36/E2; up to 8 tiles, still
+    //                              cheaper than one URAM288)
+    //   else                    -> ultra (URAM288)
+    // All three shapes are SDP-compatible by construction: sync reads
+    // through d_reg/out_reg, read address structurally disjoint from the
+    // write address (lag D >= 1). The output register doubles as the RAM
+    // output register so BRAM clock-to-out stays off the critical path.
+    // ------------------------------------------------------------------
+    localparam integer MEM_BITS = 2 * DEPTH * WIDTH;
+    localparam integer MEM_STYLE = (MEM_BITS <= 1024) ? 0 :
+                                   (MEM_BITS < 262144) ? 1 : 2;
+    generate
+        if (MEM_STYLE == 0) begin : g_mem
+            (* ram_style = "distributed" *)
+            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
+            (* ram_style = "distributed" *)
+            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
+            (* ram_style = "distributed" *)
+            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
+            (* ram_style = "distributed" *)
+            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+        end else if (MEM_STYLE == 1) begin : g_mem
+            (* ram_style = "block" *)
+            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
+            (* ram_style = "block" *)
+            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
+            (* ram_style = "block" *)
+            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
+            (* ram_style = "block" *)
+            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+        end else begin : g_mem
+            (* ram_style = "ultra" *)
+            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
+            (* ram_style = "ultra" *)
+            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
+            (* ram_style = "ultra" *)
+            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
+            (* ram_style = "ultra" *)
+            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+        end
+    endgenerate
 
     reg [RAMW-1:0] wptr /*verilator public_flat*/;                      // first-half write pointer
     reg [RAMW-1:0] pwp /*verilator public_flat*/;                       // product FIFO write pointer
@@ -331,7 +366,7 @@ module fft_stage #(
     // Butterfly pre-adder width: the d-a / d+a results are consumed
     // AFTER the per-stage scaling shift, so they need one bit more than
     // the stage datapath (two WIDTH-bit inputs can differ/sum to
-    // WIDTH+1 bits). Everything from the pre-adder through the cascade
+    // WIDTH+1 bits). Everything from the pre-adder through the product
     // accumulate rides at BW; the >>SHIFT at R8 brings values back to
     // WIDTH. BW=18 also matches the DSP48E2 B-port natively.
     localparam integer BW = WIDTH + 1;
@@ -342,11 +377,12 @@ module fft_stage #(
     // R4: multiply (operands BW x TWIDDLE_WIDTH, +/- accumulation)
     localparam integer MWB = BW + TWIDDLE_WIDTH + 1;
     reg signed [MWB-1:0] mreg_re /*verilator public_flat*/, mreg_im;
-    // first-lane product registers (DSP PREG candidates feeding PCOUT)
-    reg signed [MWB-1:0] lane_hi_re, lane_hi_im;
-    // receiver DSP operand registers (its A/B input regs)
-    reg signed [BW-1:0] mul_a_re, mul_a_im;
-    reg signed [TWIDDLE_WIDTH-1:0] mul_t_re, mul_t_im;
+    // four partial products, one DSP each (see R6a below)
+    reg signed [MWB-1:0] prod1, prod2, prod3, prod4;
+    // multiplier operand source: DIF multiplies the butterfly diff,
+    // DIT rides 'a' to the multiply
+    wire signed [BW-1:0] pr_re = (TOPOLOGY == 0) ? bfly_d_re : a_dly_re;
+    wire signed [BW-1:0] pr_im = (TOPOLOGY == 0) ? bfly_d_im : a_dly_im;
     // sign-extended mreg at consumption width
     wire signed [PW-1:0] mregx_re = {{(PW-MWB){mreg_re[MWB-1]}}, mreg_re};
     wire signed [PW-1:0] mregx_im = {{(PW-MWB){mreg_im[MWB-1]}}, mreg_im};
@@ -409,11 +445,11 @@ module fft_stage #(
                 out_im <= nxt_out_p[WIDTH-1:0];
                 nxt_out_p = round_shift(comb_p_re, TD_PLUS_SHIFT);
                 nxt_out_s = round_shift(comb_p_im, TD_PLUS_SHIFT);
-                pfifo_re[pwp] <= nxt_out_p[WIDTH-1:0];
-                pfifo_im[pwp] <= nxt_out_s[WIDTH-1:0];
+                g_mem.pfifo_re[pwp] <= nxt_out_p[WIDTH-1:0];
+                g_mem.pfifo_im[pwp] <= nxt_out_s[WIDTH-1:0];
             end else begin
-                out_re <= pfifo_re[pr];
-                out_im <= pfifo_im[pr];
+                out_re <= g_mem.pfifo_re[pr];
+                out_im <= g_mem.pfifo_im[pr];
             end
 
             // R7: combine (or passthrough) -- C-port ALU + PREG
@@ -439,39 +475,35 @@ module fft_stage #(
                 comb_p_im <= {{(PW-BW){d_dly3_im[BW-1]}}, d_dly3_im};
             end
 
-            // R6b: cascade accumulate -- receiver DSP ALU forms
-            // PCIN -/+ its own product; result lands in MREG (its PREG).
-            // Idle values are never consumed by R7 during PASS.
+            // R6b: fabric combine of the four registered partial
+            // products. Idle values are never consumed by R7 during PASS.
             if (pipe_comp[3]) begin
-                mreg_re <= lane_hi_re - mul_a_im * mul_t_im;
-                mreg_im <= lane_hi_im + mul_a_im * mul_t_re;
+                mreg_re <= prod1 - prod2;
+                mreg_im <= prod3 + prod4;
             end else begin
                 mreg_re <= {MWB{1'b0}};
                 mreg_im <= {MWB{1'b0}};
             end
 
-            // R6a: sender DSPs -- first products into PREG (PCOUT), and
-            // the receiver operand registers capture this cycle's pair.
-            // Products run at RAW operand widths so each maps to exactly
-            // one DSP48E2 (Karatsuba's fabric pre-adds and serial subtract
-            // chain sat on the critical path for one saved multiplier).
+            // R6a: all four partial products into DSP registers (plain
+            // A*B -> MREG, no PCIN cascade). The cascade forced the
+            // receiver DSP through A_B_DATA->MULT->ALU->PREG in ONE
+            // cycle -- an intra-DSP ~1.85 ns path that misses 500 MHz
+            // once routing is congested (R=2 N>=4096 post-route WNS
+            // -0.29). Splitting multiply (this layer, ends at MREG) and
+            // combine (next layer, fabric adds) keeps both hops short;
+            // layer count, values and cycles are unchanged vs the
+            // cascade form, so the golden model needs no edit.
             if (pipe_comp[2]) begin
-                if (TOPOLOGY == 0) begin
-                    lane_hi_re <= bfly_d_re * tw_b_re;
-                    lane_hi_im <= bfly_d_re * tw_b_im;
-                    mul_a_re   <= bfly_d_re;
-                    mul_a_im   <= bfly_d_im;
-                end else begin
-                    lane_hi_re <= a_dly_re * tw_b_re;
-                    lane_hi_im <= a_dly_re * tw_b_im;
-                    mul_a_re   <= a_dly_re;
-                    mul_a_im   <= a_dly_im;
-                end
-                mul_t_re <= tw_b_re;
-                mul_t_im <= tw_b_im;
+                prod1 <= pr_re * tw_b_re;   // d_re*t_re
+                prod2 <= pr_im * tw_b_im;   // d_im*t_im
+                prod3 <= pr_re * tw_b_im;   // d_re*t_im
+                prod4 <= pr_im * tw_b_re;   // d_im*t_re
             end else begin
-                lane_hi_re <= {MWB{1'b0}};
-                lane_hi_im <= {MWB{1'b0}};
+                prod1 <= {MWB{1'b0}};
+                prod2 <= {MWB{1'b0}};
+                prod3 <= {MWB{1'b0}};
+                prod4 <= {MWB{1'b0}};
             end
             sum_dly2_re <= sum_dly_re;
             sum_dly2_im <= sum_dly_im;
@@ -528,11 +560,11 @@ module fft_stage #(
 
             // R2: first-half RAM write (PASS only) + read capture
             if (!in_compute) begin
-                ram_re[wptr] <= in_re;          // PASS: first half
-                ram_im[wptr] <= in_im;
+                g_mem.ram_re[wptr] <= in_re;          // PASS: first half
+                g_mem.ram_im[wptr] <= in_im;
             end
-            d_reg_re <= ram_re[raddr_r];        // sync read (addr reg'd)
-            d_reg_im <= ram_im[raddr_r];
+            d_reg_re <= g_mem.ram_re[raddr_r];        // sync read (addr reg'd)
+            d_reg_im <= g_mem.ram_im[raddr_r];
             a_reg_re <= in_re;
             a_reg_im <= in_im;
             tw_reg_re <= t_re;
