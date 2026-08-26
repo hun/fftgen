@@ -200,8 +200,10 @@ it adds no data latency and matches the registered address in the RTL.
 ### 3.3 Complex multiply
 
 The stage multiply is a **4-product split** with DSP48E2 C-port chaining,
-giving exactly **4 DSPs per stage** (`4 × log2(N)` per core, matching the
-datasheet sweep):
+giving **4 DSPs per stage** (P6: `4 × (log2(N) − 2)` per core for N ≥ 8 —
+the DIF last two stages / DIT first two stages multiply only by
+single-component twiddles (W^0, ±j) and emit exact fabric products via
+`trivial_prod`, no DSPs):
 
 ```
 im path  (L4, one cycle ahead):  prod2 = diff·t_re      prod4 = diff·t_im

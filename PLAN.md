@@ -98,7 +98,10 @@ change under stall; no sample is lost or altered.
   reorder buffer instead of hidden shuffling inside the datapath.
 - `log2(N)` pipeline stages, **plain radix-2 as implemented**: every pair
   multiplies (uniform datapath, Appendix A), delay depth `D_s = N/2^(s+1)`
-  (DIF) or `2^s` (DIT). The radix-2² folding that would cut multiplies to
+  (DIF) or `2^s` (DIT). P6 exception: the DIF LAST TWO stages (DIT first
+  two) multiply only by single-component twiddles (W^0 real, W^{N/4} = ±j)
+  and emit the product as exact fabric shift/subtract logic — no DSPs
+  (§5 P6). The radix-2² folding that would cut multiplies to
   ~N/4 is deferred: it changes *which cycles* carry multipliers and must be
   re-proven numerically equivalent to the pinned per-stage shift schedule
   before any RTL may use it (Appendix A).
@@ -681,6 +684,8 @@ suite per push.
 | **P4 — SSR** ✅ **done (Verilator)** | golden model for the R·M composition first, then `fft_cross.v` + top wiring; bit-exact | R ∈ {2, 4, 8} verified like P2: R=4/R=8 lane-DFT networks, sigma-signed Q, split scalar multiply, 10-stage crossbar pipeline — all bit-exact fwd+inv (96 tests total). All three SSR configs closed 500 MHz post-route on KU5P (R=2 N=8 +0.075 / 24 DSPs; R=4 N=16 +0.021 / 44; R=8 N=16 +0.037 / 64). |
 | **P5a — timing & memory sweeps** ✅ **done** | memory-style policy with decided cutoffs (`<=1k LUTRAM < 256kb BRAM <= URAM`, `doc/mem_cutoffs.md`), split-MREG stage multiply, NLAYERS 7→10 BRAM→DSP register absorption, crossbar input staging | KU5P @2ns post-synth MET across the R=1 ladder (N=64..8192, worst +0.163); SSR R=2 N=8192 post-route −0.021/TNS −0.152 (skew-dominated synth estimate, accepted). DSP inference audited: im-path DSPs absorb AREG=2/BREG=2/DREG=1/ADREG=1/MREG=1/CREG=1/PREG=1 |
 | **P5b — export & packaging** ✅ **done** | `export_core.py` CLI (firgen-style), `fft_core.v` generated wrapper with baked parameters, `fft_params.vh`, `params.txt`, `twiddle_map.txt`, TB vectors, Vivado OOC scripts, README manifest | deliverable set complete and self-verifying: exported trees build under Verilator from the README command alone — R=1 bit-exact (both order corners, incl. the generated reorder path), SSR within documented R/2+1 tolerance with vectors identical to the suite flow; exported `synth.tcl` closes OOC on KU5P (N=32 +0.700). Suite 99 tests |
+| **P6 — trivial-twiddle stages (DSP reduction)** ✅ **done** | `TRIVIAL` stage flag in `fft_sdf.v`: the DIF last two stages / DIT first two stages multiply only by W^0 (real) and W^{N/4} (±j) — single-component twiddles — and compute the product exactly in fabric (`trivial_prod`: `x·(2^td−1) = (x<<td) − x` + zero/sign select) instead of 4 DSP48s. Golden model UNCHANGED (products are exact integer arithmetic; value-identical). | bit-exact across the whole matrix (99 tests green, no skips); KU5P OOC: R=1 N=2048 44→**36** DSPs (WNS +0.113), R=2 N=2048 84→**68** (WNS −0.020, unchanged), N=64 R=1 24→16, N=4 → 0 DSPs; SSR lane engines inherit it per-engine. |
+| **P7 — radix-2² folding (next DSP lever, ~2×)** ⏳ **in progress — milestone 1 done** | merge each DIF stage pair (2m, 2m+1) into one R2² stage with a single general complex multiplier (3 products per 4-group instead of 4); twiddle ROM slices re-layout (stride 4^m); SSR lane engines inherit. **S5 outcome (spikes/S5_r22/): the rotation identity T[i+N/4] = ∓j·T[i] holds bit-exactly** (magnitude-first quantization), so the ±j diff combine is free and exact; **but the merged product paths change the rounding points** — the plain golden and the R2² contract differ by a few LSB (rounding placement, width-dependent) with **identical SQNR** (verified N=8..1024, fwd+inv). Appendix A's "bit-identical" claim is therefore corrected to "re-pin the golden". | **Done:** `fft_fixed_batch_r22` promoted into `golden.py` (DIF, batch, fused-shift products, odd-n leftover stage plain) + `tests/test_golden_r22.py` (rotation identity exhaustive, ≤bounded delta vs radix-2 golden, SQNR equivalence; 6 tests). **Next:** (2) DIT R2² contract + streaming R2² SDF model; (3) `fft_stage_r22` RTL (one complex mult time-multiplexed per group, ±j combine + P6 trivial_prod in fabric); (4) twiddle ROM re-layout; (5) bit-exact verify + timing sweep. Projected: R=1 N=2048 36→**~20**, R=2 N=2048 68→**~36** (Spiral: 40). |
 
 **Known-open items (non-blocking):**
 - Deep product-FIFOs infer as LUTRAM because the output register is muxed
@@ -724,8 +729,9 @@ conceptually from firgen's DSP tables.
 4. **Rounding per stage**: round-half-up at scaling shifts, truncate at
    products.
 5./11. **Complex multiply**: **4-product split with DSP C-port chaining**
-   (4 DSPs/stage), implemented and swept (datasheet: exactly 4 × log2 N DSPs
-   at R=1). 3-multiplier Karatsuba/Gauss forms **rejected on timing**: the
+   (4 DSPs/stage), implemented and swept (datasheet: 4 × (log2 N − 2) DSPs
+   at R=1 for N ≥ 8 — the last two stages are single-component-trivial,
+   P6). 3-multiplier Karatsuba/Gauss forms **rejected on timing**: the
    DSP48E2 pre-adder is in series with the multiplier; the extra pre-add
    term grew the intra-DSP cascade hop 1.85 → 2.61 ns (WNS −0.78 @ 2 ns)
    and misses the 500 MHz goal (P5a evidence: §2.4). The C-port pairing
@@ -803,10 +809,15 @@ layer-k = pipe_comp[k−1] pattern; preload pack is 74 bits/stage
 (pipe 9 bits). FSM warm preset: `warm_s = −(Σ D_t, t<s + NLAYERS·s)
 mod 2D_s` — generalized unchanged from the 7-layer derivation.
 
-**Every stage multiplies** (uniform datapath). An earlier draft of this
+**Every GENERAL-twiddle stage multiplies.** An earlier draft of this
 appendix claimed stage 0 needs no multiplier -- that holds only for the
-radix-2^2 folding, NOT for the plain radix-2 schedule implemented here;
-caught by the batch cross-check (negated odd slots).
+radix-2^2 folding, NOT for the plain radix-2 schedule; caught by the
+batch cross-check (negated odd slots). P6 additionally removes the DSPs
+of the stages whose twiddles are all single-component (DIF s = n−2, n−1
+/ DIT s = 0, 1: the k = 0 and k = N/2^(s+2) pairs, i.e. W^0 real and
+W^{N/4} = ±j only): their products are computed bit-exactly in fabric as
+`x·(2^td−1) = (x<<td) − x` with a zero/sign select (RTL `trivial_prod`,
+value-identical to the golden's exact cmul — the golden is unchanged).
 
 **Latency:** first valid output after exactly `L = N` enabled cycles
 (sum of D_s plus one phase-alignment cycle of the last stage -- verified
@@ -825,15 +836,21 @@ DIF output permutation (bit-reversal).
   then ONE combined `round_shift(., twiddle_decimal + sigma_s)`
   (twiddle Q-format normalization fused with stage scaling -- this is
   the post-DSP48P shift)
-- all stages multiply unconditionally (uniform datapath decision); the
-  radix-2^2 folding that removes trivial multiplies must be re-proven
-  numerically equivalent before any RTL uses it
+- every general-twiddle stage multiplies (P6: the last two stages'
+  single-component twiddles map to exact fabric products — `trivial_prod`);
+  the radix-2^2 folding that removes more trivial multiplies must be
+  re-proven numerically equivalent before any RTL uses it
 - datapath stays Q(sample_decimal) end-to-end; with the conservative
   schedule the reported spectrum is X_true/N (amplitude-preserving)
 - final output rescale + saturate via `quantize_output`
 
-**Equivalence assumption for radix-2^2:** the R2^2 folding changes only
-WHICH cycles carry general multipliers, never the recursion or the rounding
-points (same butterflies, same per-stage shifts). Any R2^2 RTL computing the
-same recursion with the same per-stage shift points is bit-identical to this
-model; pinned by the batch/stream cross-checks.
+**Equivalence assumption for radix-2^2 (CORRECTED by spike S5):** the
+R2^2 folding changes WHICH cycles carry general multipliers AND the
+product rounding points (the ±j diff combine moves before the multiply).
+The rotation identity T[i+N/4] = ∓j·T[i] holds bit-exactly in the
+canonical table, so the combine itself is exact; but round_shift is not
+rotation-invariant, so the merged contract differs from this model by
+exactly **1 LSB** with **identical SQNR** (measured, spikes/S5_r22/).
+P7 therefore RE-PINS the golden to the R2^2 contract
+(`fft_fixed_batch_r22`, spike reference) rather than claiming bit-identity
+with this one.

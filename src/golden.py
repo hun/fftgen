@@ -154,6 +154,109 @@ def fft_fixed_batch(samples: Sequence[Complex], cfg: FFTConfig,
             for re, im in x]
 
 
+def fft_fixed_batch_r22(samples: Sequence[Complex], cfg: FFTConfig,
+                        twiddles: Optional[Sequence[Complex]] = None
+                        ) -> List[Complex]:
+    """Fixed-point DIF batch reference, **radix-2² contract** (P7).
+
+    The radix-2² folding merges each stage pair (2m, 2m+1) into one
+    4-sample group with THREE products instead of four:
+
+        b0 = round(a0+a2, s_{2m});   b1 = round(a1+a3, s_{2m})
+        d0 = a0-a2;                  d1 = a1-a3          (exact)
+        y0 = round(b0+b1, s_{2m+1})
+        y2 = round(cmul(b0-b1, T[2j·4^m]),  td + s_{2m+1})
+        y1 = round(cmul(d0 -/+ j·d1, T[j·4^m]),   td + s_{2m}+s_{2m+1})
+        y3 = round(cmul(d0 +/- j·d1, T[3j·4^m]),  td + s_{2m}+s_{2m+1})
+
+    The ±j diff combine is EXACT in the canonical table (rotation
+    identity T[i+N/4] = ∓j·T[i] holds bit-exactly, magnitude-first
+    quantization -- verified in spikes/S5_r22/). The product paths use
+    ONE fused rounding at td+s_{2m}+s_{2m+1}; the sum paths keep the two
+    sub-stage roundings. This contract differs from
+    :func:`fft_fixed_batch` by at most 1 LSB (rounding placement) with
+    identical SQNR -- it is the RE-PINNED golden for the R2² RTL (P7).
+
+    Group geometry: 4^m blocks of size N/4^m, each split into groups
+    (j, j+D, j+2D, j+3D), D = N/4^{m+1}, twiddle stride 4^m. Odd stage
+    counts leave the last stage as plain radix-2.
+    """
+    if cfg.ssr != 1:
+        raise NotImplementedError("batch reference supports ssr=1 only")
+    if cfg.is_dit:
+        raise NotImplementedError("batch R2² reference is DIF-only")
+    N = cfg.num_points
+    n = cfg.num_stages
+    shifts = cfg.shifts
+    td = cfg.twiddle_decimal
+    if twiddles is None:
+        twiddles = canonical_twiddles(N, cfg.twiddle_width,
+                                      cfg.twiddle_decimal, cfg.inverse)
+    js = -1 if not cfg.inverse else 1     # W^{N/4} = -j fwd, +j inv
+
+    x: List[List[int]] = [[re, im] for re, im in samples]
+
+    m = 0
+    while 2 * m + 1 < n:
+        s0, s1 = shifts[2 * m], shifts[2 * m + 1]
+        D = N >> (2 * m + 2)              # group depth N/4^{m+1}
+        base = 4 ** m                     # twiddle stride 4^m
+        for b in range(base):             # 4^m blocks of size N/4^m
+            off = b * (N // base)
+            for j in range(D):
+                a0r, a0i = x[off + j]
+                a1r, a1i = x[off + j + D]
+                a2r, a2i = x[off + j + 2 * D]
+                a3r, a3i = x[off + j + 3 * D]
+                # sub-stage 2m: sums rounded at s_{2m}, diffs exact
+                b0 = [round_shift(a0r + a2r, s0),
+                      round_shift(a0i + a2i, s0)]
+                b1 = [round_shift(a1r + a3r, s0),
+                      round_shift(a1i + a3i, s0)]
+                d0r, d0i = a0r - a2r, a0i - a2i
+                d1r, d1i = a1r - a3r, a1i - a3i
+                # sub-stage 2m+1: three products, one rounding each
+                x[off + j] = [round_shift(b0[0] + b1[0], s1),
+                              round_shift(b0[1] + b1[1], s1)]
+                cr, ci = twiddles[(2 * j * base) % N]
+                pr, pi = complex_multiply_karatsuba(
+                    b0[0] - b1[0], b0[1] - b1[1], cr, ci)
+                x[off + j + D] = [round_shift(pr, td + s1),
+                                  round_shift(pi, td + s1)]
+                cr, ci = twiddles[(j * base) % N]
+                pr, pi = complex_multiply_karatsuba(
+                    d0r - js * d1i, d0i + js * d1r, cr, ci)
+                x[off + j + 2 * D] = [round_shift(pr, td + s0 + s1),
+                                      round_shift(pi, td + s0 + s1)]
+                cr, ci = twiddles[(3 * j * base) % N]
+                pr, pi = complex_multiply_karatsuba(
+                    d0r + js * d1i, d0i - js * d1r, cr, ci)
+                x[off + j + 3 * D] = [round_shift(pr, td + s0 + s1),
+                                      round_shift(pi, td + s0 + s1)]
+        m += 1
+    # leftover last stage (odd stage count): plain radix-2
+    for s in range(2 * m, n):
+        D = N >> (s + 1)
+        sig = shifts[s]
+        for start in range(0, N, 2 * D):
+            for j in range(D):
+                i1 = start + j
+                i2 = i1 + D
+                ar, ai = x[i1]
+                br, bi = x[i2]
+                x[i1] = [round_shift(ar + br, sig),
+                         round_shift(ai + bi, sig)]
+                dr, di = ar - br, ai - bi
+                cr, ci = twiddles[(j << s) % N]
+                pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
+                sh = td + sig
+                x[i2] = [round_shift(pr, sh), round_shift(pi, sh)]
+
+    return [quantize_output(re, im, cfg.sample_decimal,
+                            cfg.output_width, cfg.output_decimal)
+            for re, im in x]
+
+
 # ----------------------------------------------------------------------
 # L1b: cycle-accurate streaming SDF model
 # ----------------------------------------------------------------------

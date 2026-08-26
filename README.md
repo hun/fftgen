@@ -13,18 +13,21 @@ result is verified bit-exact against that model.
 
 ## Status
 
-All implementation phases (P0–P5b) are complete; see the phase table in
+All implementation phases (P0–P6) are complete; see the phase table in
 [PLAN.md](PLAN.md) §5.
 
 - **R = 1 (SDF)**: bit-exact N = 2…128 (all four input/output order corners,
   fwd/inv, widths 8…25, `ce`-freeze suites); 500 MHz met post-synth on KU5P
   for N = 64…8192 (worst WNS +0.158).
+- **DSP reduction (P6)**: the DIF last two / DIT first two stages multiply
+  only by W^0/±j and emit exact fabric products — R=1 N=2048 uses **36 DSPs**
+  (was 44), R=2 N=2048 **68** (was 84), N=4 **0**; timing unchanged.
 - **SSR (R = 2, 4, 8)**: bit-exact fwd+inv; R = 2 N = 8192 and the R = 4 / R = 8
   corner configs close 500 MHz post-route on KU5P.
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors.
-- Test suite: 99 tests green (unit + golden + Verilator RTL).
+- Test suite: 105 tests green (unit + golden + Verilator RTL).
 
 Current numbers: [doc/datasheet.md](doc/datasheet.md) (N × R synthesis sweep,
 KU5P @ 500 MHz).

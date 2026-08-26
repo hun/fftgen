@@ -140,6 +140,13 @@ module fft_sdf #(
             localparam integer DEPTH     = (TOPOLOGY == 1) ? (1 << g)
                                                            : (N >> (g + 1));
             localparam integer SHIFT     = (SCALING_PACK >> (2*g)) & 3;
+            // trivial-twiddle stage: the DIF LAST TWO stages and the DIT
+            // FIRST TWO stages multiply only by single-component twiddles
+            // (W^0 real, W^{N/4} = +/-j -- the k = 0 and k = N/2^(s+2)
+            // pairs of the DIF schedule). The product path is exact fabric
+            // shift/subtract logic -- no DSPs.
+            localparam integer TRIVIAL   = (TOPOLOGY == 1) ? (g <= 1)
+                                                           : (g >= NSTAGES - 2);
             // sum of delay depths of stages t < g (ROM base)
             localparam integer SUM_D     = (TOPOLOGY == 1) ? ((1 << g) - 1)
                                                            : (N - (N >> g));
@@ -175,6 +182,7 @@ module fft_sdf #(
                 .RADDR_PRE      (RADDR_PRE),
                 .PIPE_PRE       (PIPE_PRE),
                 .TOPOLOGY       (TOPOLOGY),
+                .TRIVIAL        (TRIVIAL),
                 .TWIDDLE_MEM    (TW_MODE_EFF),
                 .TWIDDLE_FILE   (TWIDDLE_FILE)
             ) u_stage (
@@ -281,6 +289,9 @@ module fft_stage #(
     parameter [15:0]  RADDR_PRE      = 16'h0,
     parameter [8:0]   PIPE_PRE       = 9'h0,
     parameter integer TOPOLOGY       = 0,    // 0 = DIF, 1 = DIT
+    // 1 = trivial-twiddle stage (W^0 = (1,0) only): the product path is
+    // an exact pass-through -- no DSPs. DIF stage n-1 / DIT stage 0.
+    parameter integer TRIVIAL        = 0,
     // block-mode twiddle ROM: local per-stage replica, read fused into
     // the L0 capture (t_reg doubles as the BRAM output register)
     parameter integer TWIDDLE_MEM    = 0,    // 0=auto 1=distributed 2=block
@@ -299,6 +310,13 @@ module fft_stage #(
     localparam RAMW = $clog2(2 * DEPTH);       // 2D slots
     localparam integer TD_PLUS_SHIFT = TWIDDLE_DECIMAL + SHIFT;
     localparam integer SHIFT_SUM = (TOPOLOGY == 1) ? TD_PLUS_SHIFT : SHIFT;
+    // W^0 quantizes to (2^td - 1, 0) (the Q-format encoding of +1.0,
+    // saturated -- see twiddles.py _mag_table). The trivial-stage product
+    // path must therefore compute pr * (2^td - 1) = (pr << td) - pr
+    // EXACTLY (a fabric shift+subtract, no DSP); the -pr correction only
+    // applies when 2^td saturates (td == width-1, the default).
+    localparam integer TRIVIAL_SUB = (TWIDDLE_DECIMAL >= TWIDDLE_WIDTH - 1)
+                                     ? 1 : 0;
     localparam integer PW = WIDTH + TWIDDLE_WIDTH + 4;
     // native complex-multiply accumulate width: 17b data x 18b twiddle
     // products (35b) plus one guard bit for the +/- accumulation
@@ -437,6 +455,27 @@ module fft_stage #(
     wire signed [BW-1:0] pr_re = (TOPOLOGY == 0) ? bfly_d_re : bfly_s_re;
     wire signed [BW-1:0] pr_im = (TOPOLOGY == 0) ? bfly_d_im : bfly_s_im;
 
+    // single-component twiddle product (TRIVIAL stages only):
+    //   f(x, w) = x * w,  w in {0, +/-c},  c = 2^td (saturated to
+    //   2^td - 1 when td == width-1, the default -- twiddles.py sat)
+    // computed as exact fabric logic:  x*c = (x << td) - x, then a
+    // zero/sign select -- NO DSP. Value-identical to the golden's
+    // exact cmul products (the full stage computes the same value on
+    // DSP48s; here the twiddle's zero component simply forces 0).
+    function signed [MWB-1:0] trivial_prod;
+        input signed [BW-1:0] x;
+        input signed [TWIDDLE_WIDTH-1:0] w;
+        reg signed [MWB-1:0] se_x;
+        reg signed [MWB-1:0] xc;
+        begin
+            se_x = {{(MWB-BW){x[BW-1]}}, x};
+            xc = (se_x <<< TWIDDLE_DECIMAL)
+                 - (TRIVIAL_SUB ? se_x : {MWB{1'b0}});
+            trivial_prod = (w == {TWIDDLE_WIDTH{1'b0}}) ? {MWB{1'b0}}
+                          : (w[TWIDDLE_WIDTH-1] ? -xc : xc);
+        end
+    endfunction
+
     // twiddle decode + address (combinational, from the current pair index)
     // twiddle read address (stage-local ROM): base + pair index
     wire [$clog2(NPTS)-1:0] rom_addr;
@@ -541,12 +580,21 @@ module fft_stage #(
             s3_im <= s2_im;
 
             // L5: C-port registers (CREG) + re-path products (one cycle
-            // behind the im-path, from the frozen L4 operands)
+            // behind the im-path, from the frozen L4 operands). TRIVIAL:
+            // single-component twiddles (W^0 / +/-j): exact fabric
+            // shift/subtract products, no DSP.
             if (pipe_comp[4]) begin
-                c1 <= prod2;
-                c2 <= prod4;
-                prod1 <= bfly_h_re * t3h_re;
-                prod3 <= bfly_h_re * t3h_im;
+                if (TRIVIAL) begin
+                    c1 <= prod2;
+                    c2 <= prod4;
+                    prod1 <= trivial_prod(bfly_h_re, t3h_re);
+                    prod3 <= trivial_prod(bfly_h_re, t3h_im);
+                end else begin
+                    c1 <= prod2;
+                    c2 <= prod4;
+                    prod1 <= bfly_h_re * t3h_re;
+                    prod3 <= bfly_h_re * t3h_im;
+                end
             end else begin
                 c1 <= {MWB{1'b0}};
                 c2 <= {MWB{1'b0}};
@@ -558,10 +606,19 @@ module fft_stage #(
 
             // L4: im-path products (MREG) + freeze of the re-path
             // operands (the re multiply runs one cycle later so the DSP
-            // C-port pairing P - C sees the same pair)
+            // C-port pairing P - C sees the same pair). TRIVIAL stages
+            // multiply by single-component twiddles (W^0 / +/-j):
+            // prod2 = im*ti, prod4 = im*tr -- exact fabric
+            // shift/subtract logic, no DSP (value-identical to the
+            // golden's exact cmul(pr, tw[k])).
             if (pipe_comp[3]) begin
-                prod2 <= pr_im * t3_im;
-                prod4 <= pr_im * t3_re;
+                if (TRIVIAL) begin
+                    prod2 <= trivial_prod(pr_im, t3_im);
+                    prod4 <= trivial_prod(pr_im, t3_re);
+                end else begin
+                    prod2 <= pr_im * t3_im;
+                    prod4 <= pr_im * t3_re;
+                end
                 bfly_h_re <= pr_re;
                 bfly_h_im <= pr_im;
                 t3h_re <= t3_re;

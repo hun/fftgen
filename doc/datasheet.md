@@ -41,6 +41,14 @@ Regenerate with:
 | 256 | 8 | 12506 | 22007 | 5243 | 204 | 0 | 0 | -0.165 | 724 | 32 |
 | 1024 | 8 | 16662 | 29598 | 6769 | 268 | 24 | 0 | -0.165 | 724 | 128 |
 
+> **P6 note (DSP column):** this sweep predates the trivial-twiddle-stage
+> reduction; the measured DSP counts were 4 × stages per engine. Post-P6 the
+> last two stages per engine are exact fabric products, so the DSP column
+> is 8 lower per engine (4 lower per stage × 2 stages). Re-measured anchors:
+> N=64 R=1 24→**16**, N=2048 R=1 44→**36** (WNS +0.113), N=2048 R=2 84→**68**
+> (WNS −0.020, unchanged). LUTs/FFs rise slightly (fabric products replace
+> DSPs); re-run `datasheet_sweep.py` for a full post-P6 table.
+
 
 ### Reading the table
 
@@ -48,9 +56,12 @@ Regenerate with:
   opt_design trimming).
 - **LUTRAM** -- LUTs carrying distributed RAM (delay lines, product
   FIFOs, crossbar WN table).
-- **DSP** -- R=1: exactly 4 x num_stages (4-product complex multiply +
-  C-port combine per stage). SSR: R lanes x 4 x stages(N/R) plus the
-  crossbar network (R-point lane DFT + pre-twiddle products).
+- **DSP** -- R=1: 4 x (num_stages - 2) for N >= 8 (4-product complex
+  multiply + C-port combine per general-twiddle stage; the last two
+  stages' W^0/±j products are exact fabric logic, P6). Edge cases:
+  N=2/4 -> 0 DSPs, N=8 -> 4 (stage 0 only). SSR: R lanes x 4 x
+  (stages(N/R) - 2) plus the crossbar network (R-point lane DFT +
+  pre-twiddle products).
 - **clk/frame** -- clocks per output frame at steady state (= N/R;
   one sample-group per clock while ce is high).
 
