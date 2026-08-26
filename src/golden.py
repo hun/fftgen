@@ -267,19 +267,26 @@ class _R22DIFStage:
 
     Group depth D = N/4^{m+1}, twiddle stride 4^m, block size 4D. Per
     4D-clock block the stream carries D groups (a0..a3 at positions
-    g, g+D, g+2D, g+3D). All four of group g's values complete at clock
-    3D+g; outputs are staged so position p's value emerges at clock
-    p + 3D (stage latency contribution 3D):
+    g, g+D, g+2D, g+3D).
 
-      k in [0, D):   out = q2 read (y2 of the previous block)
-      k in [D, 2D):  out = q1 read (y1)
-      k in [2D, 3D): out = q3 read (y3)
-      k in [3D, 4D): out = y0     (a3 arrives -> s1; s0/d0 from the
-                     lag-D lines; combine + exact +/-j products staged)
+      k in [0, 2D):    a0/a1 raw store into ram (lag-2D ring)
+      k in [2D, 3D):   a2 arrives -> (a0,a2): s0/d0 into sram/dram
+      k in [3D, 4D):   a3 arrives -> (a1,a3): s1/d1; s0,s1 meet ->
+                       y0 out; y2 product -> pfifo; d1 into dline
 
-    Sub-stage-2m butterfly fires at positions [2D, 3D) (a2 pairs a0 via
-    the lag-2D ram; s0/d0 stored in the lag-D sram/dram), sub-stage-2m+1
-    at [3D, 4D) (a3 pairs a1; s0,s1 and d0,d1 meet via the lag-D lines).
+    ONE shared complex multiplier computes the three products at
+    staggered clocks (consecutive groups would collide otherwise):
+
+      k in [3D, 4D):  y2 = cmul(s0-s1, T[2g*4^m])   (data ready now)
+      k in [0, D):    y1 = cmul(d0 -j*d1, T[g*4^m])  (next block, +D)
+      k in [D, 2D):   y3 = cmul(d0 +j*d1, T[3g*4^m]) (next block, +2D)
+
+    The d0/d1 operands are re-read from dram/dline at the staggered
+    clocks: the read-old at the current sp returns d0(g)/d1(g) for all
+    three clocks (the next write to that address is the next block's).
+    Each product is staged D clocks in the pfifo (lag D), so position
+    p's value emerges at clock p + 3D (stage latency 3D): the output
+    mux emits y0 at k in [3D, 4D) and the pfifo read otherwise.
     """
 
     def __init__(self, m: int, N: int, sigma0: int, sigma1: int,
@@ -295,19 +302,17 @@ class _R22DIFStage:
         self.ram = [(0, 0)] * (2 * self.D)
         self.sram = [(0, 0)] * self.D
         self.dram = [(0, 0)] * self.D
-        self.q2 = [(0, 0)] * self.D
-        self.q1 = [(0, 0)] * (2 * self.D)
-        self.q3 = [(0, 0)] * (3 * self.D)
+        self.dline = [(0, 0)] * self.D
+        self.pfifo = [(0, 0)] * (2 * self.D)
         self.out = (0, 0)
         self.rp = 0
         self.sp = 0
-        self.q2p = 0
-        self.q1p = 0
-        self.q3p = 0
+        self.pwp = 0
+        self.pr_r = 0               # registered pfifo read address
 
     @property
     def latency(self) -> int:
-        return 3 * self.D
+        return 3 * self.D + 1       # +1: the registered output register
 
     def _prod(self, z: Complex, t: Complex, sh: int) -> Complex:
         pr, pi = complex_multiply_karatsuba(z[0], z[1], t[0], t[1])
@@ -315,54 +320,55 @@ class _R22DIFStage:
 
     def step(self, x: Complex, pos: int) -> Complex:
         D = self.D
-        out = self.out
+        ret = self.out              # registered output: value of LAST clock
         r, i = x
         k = pos % (4 * D)
         g = pos % D
+        cur = (0, 0)
 
-        if k >= 3 * D:
+        if k < 2 * D:
+            # a0/a1 raw store; staggered products y1 (k<D) / y3 (k>=D)
+            self.ram[self.rp] = (r, i)
+            d0 = self.dram[self.sp]
+            d1 = self.dline[self.sp]
+            S = self.td + self.sigma0 + self.sigma1
+            if k < D:
+                cm = (d0[0] - self.js * d1[1], d0[1] + self.js * d1[0])
+                y = self._prod(cm, self.tw[(g * self.base) % self.N], S)
+            else:
+                cp = (d0[0] + self.js * d1[1], d0[1] - self.js * d1[0])
+                y = self._prod(cp, self.tw[(3 * g * self.base) % self.N], S)
+            self.pfifo[self.pwp] = y
+            cur = self.pfifo[self.pr_r]
+        elif k < 3 * D:
+            # a2 arrives: (a0, a2) -> s0/d0 into the lag-D lines
+            a0 = self.ram[self.rp]
+            self.sram[self.sp] = (round_shift(a0[0] + r, self.sigma0),
+                                  round_shift(a0[1] + i, self.sigma0))
+            self.dram[self.sp] = (a0[0] - r, a0[1] - i)
+            cur = self.pfifo[self.pr_r]
+        else:
+            # a3 arrives: (a1, a3) -> s1/d1; s0,s1 meet -> y0, y2
             a1 = self.ram[self.rp]
             s1 = (round_shift(a1[0] + r, self.sigma0),
                   round_shift(a1[1] + i, self.sigma0))
             d1 = (a1[0] - r, a1[1] - i)
             s0 = self.sram[self.sp]
-            d0 = self.dram[self.sp]
             y0 = (round_shift(s0[0] + s1[0], self.sigma1),
                   round_shift(s0[1] + s1[1], self.sigma1))
             y2 = self._prod((s0[0] - s1[0], s0[1] - s1[1]),
                             self.tw[(2 * g * self.base) % self.N],
                             self.td + self.sigma1)
-            cm = (d0[0] - self.js * d1[1], d0[1] + self.js * d1[0])
-            cp = (d0[0] + self.js * d1[1], d0[1] - self.js * d1[0])
-            S = self.td + self.sigma0 + self.sigma1
-            y1 = self._prod(cm, self.tw[(g * self.base) % self.N], S)
-            y3 = self._prod(cp, self.tw[(3 * g * self.base) % self.N], S)
-            self.q2[self.q2p] = y2
-            self.q1[self.q1p] = y1
-            self.q3[self.q3p] = y3
-            out = y0
-        else:
-            if k < D:
-                out = self.q2[self.q2p]
-            elif k < 2 * D:
-                out = self.q1[self.q1p]
-            else:
-                out = self.q3[self.q3p]
-            if k >= 2 * D:
-                a0 = self.ram[self.rp]
-                self.sram[self.sp] = (round_shift(a0[0] + r, self.sigma0),
-                                      round_shift(a0[1] + i, self.sigma0))
-                self.dram[self.sp] = (a0[0] - r, a0[1] - i)
-            else:
-                self.ram[self.rp] = (r, i)
+            self.pfifo[self.pwp] = y2
+            self.dline[self.sp] = d1
+            cur = y0
 
         self.rp = (self.rp + 1) % (2 * D)
         self.sp = (self.sp + 1) % D
-        self.q2p = (self.q2p + 1) % D
-        self.q1p = (self.q1p + 1) % (2 * self.D)
-        self.q3p = (self.q3p + 1) % (3 * self.D)
-        self.out = out
-        return out
+        self.pwp = (self.pwp + 1) % (2 * D)
+        self.pr_r = (self.pwp - D) % (2 * D)
+        self.out = cur
+        return ret
 
 
 class R22SDFGoldenModel:
@@ -418,8 +424,13 @@ class R22SDFGoldenModel:
             return False, 0, 0, 0, 0
         cur = (re, im)
         pos = self._cycles
+        up = 0
         for st in self.stages:
-            cur = st.step(cur, pos)
+            # each stage's schedule is aligned to ITS input stream, which
+            # is delayed by the upstream stages' latencies (the plain
+            # model's warmup presets do the same alignment)
+            cur = st.step(cur, pos - up)
+            up += st.latency
         self._cycles += 1
         self._sb.append((tuser, tlast))
         valid = self._cycles > self.latency
@@ -469,8 +480,10 @@ class R22SDFGoldenModel:
         for pos in range(T + self.latency):
             src = samples[pos] if pos < T else (0, 0)
             cur = src[:2]
+            up = 0
             for st in self.stages:
-                cur = st.step(tuple(cur), pos)
+                cur = st.step(tuple(cur), pos - up)
+                up += st.latency
             raw.append(cur)
         raw = raw[self.latency:]
         assert len(raw) == T

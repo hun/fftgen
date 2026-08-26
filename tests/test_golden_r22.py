@@ -243,9 +243,9 @@ class TestR22StreamingModel(unittest.TestCase):
     def test_latency(self):
         from golden import R22SDFGoldenModel
         m = R22SDFGoldenModel(FFTConfig(num_points=64))
-        # 6 stages -> pairs (0,1),(2,3),(4,5): 3D_0+3D_1+3D_2
-        # D_0=16, D_1=4, D_2=1 -> 48+12+3 = 63
-        self.assertEqual(m.latency, 63)
+        # 6 stages -> pairs (0,1),(2,3),(4,5): each contributes 3D+1
+        # (one output register): 3*16+1 + 3*4+1 + 3*1+1 = 49+13+4 = 66
+        self.assertEqual(m.latency, 66)
 
 
 if __name__ == "__main__":
