@@ -36,7 +36,12 @@ module fft_sdf #(
     // supplied by the generator via a macro (the -G parser caps at 32 bits)
     // width must cover the largest supported transform (74 bits/stage;
     // N=16384 -> 14 stages -> 1036 bits); narrower macros zero-extend
-    parameter [4095:0] PRELOAD_PACK  = `FFTGEN_PRELOAD_PACK
+    parameter [4095:0] PRELOAD_PACK  = `FFTGEN_PRELOAD_PACK,
+    // twiddle ROM implementation: "auto" applies the measured cutoff
+    // (doc/mem_cutoffs.md S4), "distributed"/"block" force a style.
+    // Block mode replicates the ROM per stage (BRAM has no multi-port
+    // read) with the read fused into each stage's L0 capture register.
+    parameter integer TWIDDLE_MEM   = 0       // 0=auto 1=distributed 2=block
 )(
     input  wire                      clk,
     input  wire                      ce,
@@ -112,6 +117,19 @@ module fft_sdf #(
     assign m_axis_tlast = mk_last[LATENCY-1];
 
     // ------------------------------------------------------------------
+    // twiddle ROM style: "auto" moves the table to block RAM once one
+    // RAMB36 per stage is cheaper than the distributed LUTs (measured
+    // crossover in doc/mem_cutoffs.md S4). Block mode replicates the ROM
+    // inside every stage (one sync read port each); distributed mode
+    // keeps ONE shared async-read LUTROM for all stages.
+    // ------------------------------------------------------------------
+    localparam integer TW_ROM_BITS = N * TWIDDLE_WIDTH * 2;
+    // resolved style passed to the stages: 1 = distributed, 2 = block
+    localparam integer TW_AUTO = (TW_ROM_BITS >= 8192) ? 2 : 1;
+    localparam integer TW_MODE_EFF = (TWIDDLE_MEM == 0) ? TW_AUTO
+                                                        : TWIDDLE_MEM;
+
+    // ------------------------------------------------------------------
     // stage chain (one pipeline register per stage, inside fft_stage)
     // ------------------------------------------------------------------
     wire signed [INTERN_WIDTH-1:0] st_out_re [0:NSTAGES-1];
@@ -141,9 +159,6 @@ module fft_sdf #(
             localparam [15:0] PRE_I   = PRE_SLICE[72:57];
             localparam        PRE_C    = PRE_SLICE[73];
 
-            wire signed [TWIDDLE_WIDTH*2-1:0] rom_word;
-            wire [AROM_W-1:0]                 rom_addr_w;
-
             fft_stage #(
                 .DEPTH          (DEPTH),
                 .WIDTH          (INTERN_WIDTH),
@@ -159,7 +174,9 @@ module fft_sdf #(
                 .PWP_PRE        (PWP_PRE),
                 .RADDR_PRE      (RADDR_PRE),
                 .PIPE_PRE       (PIPE_PRE),
-                .TOPOLOGY       (TOPOLOGY)
+                .TOPOLOGY       (TOPOLOGY),
+                .TWIDDLE_MEM    (TW_MODE_EFF),
+                .TWIDDLE_FILE   (TWIDDLE_FILE)
             ) u_stage (
                 .clk      (clk),
                 .ce       (run),
@@ -173,24 +190,11 @@ module fft_sdf #(
                               s_axis_tdata_im}) :
                     $signed(st_out_im[g-1])),
                 .out_re   (st_out_re[g]),
-                .out_im   (st_out_im[g]),
-                .rom_addr (rom_addr_w),
-                .rom_data (rom_word)
+                .out_im   (st_out_im[g])
             );
 
-            assign rom_word = tw_rom[rom_addr_w];
         end
     endgenerate
-
-    // ------------------------------------------------------------------
-    // twiddle ROM (single array, async read; generator supplies contents)
-    // ------------------------------------------------------------------
-    (* ram_style = "distributed" *)
-    reg signed [TWIDDLE_WIDTH*2-1:0] tw_rom [0:N-1];
-
-    initial begin
-        $readmemh(TWIDDLE_FILE, tw_rom);
-    end
 
     // ------------------------------------------------------------------
     // output quantization: rescale Q(sd) -> Q(od), saturate to OUTPUT_WIDTH
@@ -276,7 +280,11 @@ module fft_stage #(
     parameter [15:0]  PWP_PRE        = 16'h0,
     parameter [15:0]  RADDR_PRE      = 16'h0,
     parameter [8:0]   PIPE_PRE       = 9'h0,
-    parameter integer TOPOLOGY       = 0     // 0 = DIF, 1 = DIT
+    parameter integer TOPOLOGY       = 0,    // 0 = DIF, 1 = DIT
+    // block-mode twiddle ROM: local per-stage replica, read fused into
+    // the L0 capture (t_reg doubles as the BRAM output register)
+    parameter integer TWIDDLE_MEM    = 0,    // 0=auto 1=distributed 2=block
+    parameter         TWIDDLE_FILE   = "fft_twiddles.mem"
 )(
     input  wire             clk,
     input  wire             ce,
@@ -284,10 +292,7 @@ module fft_stage #(
     input  wire signed [WIDTH-1:0] in_re,
     input  wire signed [WIDTH-1:0] in_im,
     output reg  signed [WIDTH-1:0] out_re,
-    output reg  signed [WIDTH-1:0] out_im,
-    // twiddle read port (combinational): address valid during COMPUTE
-    output wire [$clog2(NPTS)-1:0] rom_addr,
-    input  wire signed [TWIDDLE_WIDTH*2-1:0] rom_data
+    output reg  signed [WIDTH-1:0] out_im
 );
 
     localparam AW = (DEPTH > 1) ? $clog2(DEPTH) : 1;
@@ -409,14 +414,32 @@ module fft_stage #(
     reg signed [PW-1:0] shift_s_re, shift_s_im, shift_p_re, shift_p_im;
     // L9: output (out_re/out_im are the output ports)
 
+    // Twiddle ROM, one replica per stage (Vivado already replicates a
+    // multi-reader distributed ROM, so per-stage copies are physically
+    // equivalent for LUTRAM and are what makes block mode possible --
+    // a RAMB36 has one sync read port). Two style variants are declared;
+    // the unused one is unreferenced and pruned by synthesis.
+    // The read is fused into the main always block's L0 capture so the
+    // capture register maps onto the BRAM output register: identical
+    // cycle behavior to an async-read array captured at the same edge.
+    (* ram_style = "distributed" *)
+    reg signed [TWIDDLE_WIDTH*2-1:0] tw_rom_d [0:NPTS-1];
+    (* ram_style = "block" *)
+    reg signed [TWIDDLE_WIDTH*2-1:0] tw_rom_b [0:NPTS-1];
+
+    initial begin
+        $readmemh(TWIDDLE_FILE, tw_rom_d);
+        $readmemh(TWIDDLE_FILE, tw_rom_b);
+    end
+
     // multiplier operand source: DIF multiplies the butterfly diff
     // (pre-adder output), DIT rides 'a' to the multiply
     wire signed [BW-1:0] pr_re = (TOPOLOGY == 0) ? bfly_d_re : bfly_s_re;
     wire signed [BW-1:0] pr_im = (TOPOLOGY == 0) ? bfly_d_im : bfly_s_im;
 
     // twiddle decode + address (combinational, from the current pair index)
-    wire signed [TWIDDLE_WIDTH-1:0] t_re = rom_data[TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
-    wire signed [TWIDDLE_WIDTH-1:0] t_im = rom_data[TWIDDLE_WIDTH-1:0];
+    // twiddle read address (stage-local ROM): base + pair index
+    wire [$clog2(NPTS)-1:0] rom_addr;
     wire [AW-1:0] pair_i = phase_i & (DEPTH[AW-1:0] - 1'b1);
     assign rom_addr = ROM_BASE[$clog2(NPTS)-1:0]
                       + {{($clog2(NPTS)-AW){1'b0}}, pair_i};
@@ -600,8 +623,17 @@ module fft_stage #(
             d_bram_im <= g_mem.ram_im[raddr_r];
             a_reg_re <= in_re;
             a_reg_im <= in_im;
-            t_reg_re <= t_re;
-            t_reg_im <= t_im;
+            if (TWIDDLE_MEM == 2) begin
+                // block: sync read straight into the capture register --
+                // t_reg IS the BRAM output register
+                t_reg_re <= tw_rom_b[rom_addr][TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
+                t_reg_im <= tw_rom_b[rom_addr][TWIDDLE_WIDTH-1:0];
+            end else begin
+                // distributed: async read captured at the same edge as
+                // before (identical cycle behavior)
+                t_reg_re <= tw_rom_d[rom_addr][TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
+                t_reg_im <= tw_rom_d[rom_addr][TWIDDLE_WIDTH-1:0];
+            end
 
             // FSM advance (subtract FULL depth: DEPTH[AW-1:0] would
             // truncate a power-of-two depth to zero)

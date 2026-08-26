@@ -186,3 +186,62 @@ at N=256/2.0ns from -5.67 ns to -5.37 ns and cut DSPs 96 -> 80. The
 critical path is now a 3-deep DSP ALU cascade (re/im combine + round_shift)
 plus the async LUTRAM read; further closure needs datapath pipelining
 (native DSP regs, registered ROM/delay reads) -- P5 work.
+
+---
+
+## S4 — Twiddle ROM style (spike, P5a)
+
+**Question.** `tw_rom` is N words x 36 b and was always distributed
+(one shared async-read LUTROM in fft_sdf, read concurrently by every
+stage). Where does block RAM become the better implementation?
+
+**Method.** `spikes/S2_timing/twrom_sweep.py`: OOC synthesis of fft_sdf
+on KU5P @ 2 ns for N in {64..8192}, style forced via the new
+`TWIDDLE_MEM` generic (integer: 0=auto, 1=distributed, 2=block).
+
+**Structural change required.** A RAMB36 has one sync read port, so
+block mode replicates the ROM per stage *inside fft_stage* with the
+read fused into the existing L0 capture register -- the capture
+register (`t_reg`) maps onto the BRAM output register (DOB), giving
+identical cycle behavior to the async-read + same-edge-capture pattern.
+No golden-model change. Note Vivado synthesis forbids hierarchical
+references to memories, so the per-stage arrays live at fft_stage module
+scope (both style variants declared; the unused one is unreferenced and
+pruned). Distributed mode is also per-stage now -- physically equivalent
+to the old shared array, which Vivado replicated per reader anyway.
+
+**Results (KU5P, post-synth):**
+
+| N | style | LUTs | LUTRAM | BRAM tiles | WNS |
+|---:|---|---:|---:|---:|---:|
+| 64  | distributed | 1391  | 696   | 1    | +0.700 |
+| 64  | block       | 1377  | 696   | ~0   | +0.700 |
+| 256 | distributed | 2122  | 1057  | 3    | +0.660 |
+| 256 | block       | 2071  | 1057  | 3.5  | +0.579 |
+| 1024| distributed | 4160  | 2176  | 5    | +0.605 |
+| 1024| block       | 3943  | 2176  | 6    | +0.546 |
+| 2048| distributed | 6476  | 3573  | 7    | +0.563 |
+| 2048| block       | 6077  | 3573  | 9    | +0.459 |
+| 4096| distributed | 10864 | 6315  | 11   | +0.201 |
+| 4096| block       | 10190 | 6315  | 15   | +0.287 |
+| 8192| distributed | 19720 | 11746 | 19   | +0.118 |
+| 8192| block       | 17744 | 11746 | 28   | +0.118 |
+
+**Findings.**
+
+1. The distributed ROM is implemented as **LUT-as-Logic**, not
+   "LUT as Memory" (constant ROM = pure address function; Vivado
+   prefers logic mapping over LUTRAM here), which is why block mode
+   shows a flat LUTRAM delta but a large "LUT as Logic" drop.
+2. Block mode saves LUTs that scale with N x num_stages (-14 at N=64,
+   -1976 at N=8192) at a BRAM cost of roughly +1 tile per stage
+   (+9 tiles total at N=8192, on a part with 480).
+3. WNS impact is neutral-to-mixed (+/-60 ps, mapping-dependent); the
+   twiddle path is nowhere near critical in either style.
+
+**Decision.** `auto` -> block when `N * TWIDDLE_WIDTH * 2 >= 8192`
+bits, i.e. **N >= 256** for 18-bit twiddles. N <= 128 stays
+distributed (wash at that size; avoids spending RAMB18s on tiny
+ROMs). SSR lane engines inherit the same cutoff through their M-point
+`TWIDDLE_MEM=auto` default. Verified bit-exact vs golden in all three
+modes at N=64 and N=1024; full suite green.
