@@ -81,7 +81,7 @@ class SSRGoldenModel:
         lane_cfg.ssr = 1
         self.lanes = [_SSRLane(lane_cfg) for _ in range(R)]
         if R >= 8:
-            self.CB_LAT = 10    # +G/H, Q-reg, partials, split scalar
+            self.CB_LAT = 11    # +input reg, G/H, Q-reg, partials, scalar
         self.latency = self.lanes[0].latency + self.CB_LAT
 
         # crossbar twiddle tables (quantized, single source of truth)
@@ -99,7 +99,7 @@ class SSRGoldenModel:
         self._cycles = 0                     # enabled words consumed
         self._synced = False                 # waiting for p == 0
 
-    CB_LAT = 6                              # fetch+mult+combine+DFT
+    CB_LAT = 7                              # input+fetch+mult+combine+DFT
                                             # +halfshift+rescale
 
     # ------------------------------------------------------------------

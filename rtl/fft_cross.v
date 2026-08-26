@@ -59,11 +59,19 @@ module fft_cross #(
     localparam integer AW = PW + $clog2(R) + 2;
     localparam integer SX = $clog2(R);
     localparam integer RESHIFT = TWIDDLE_DECIMAL;
-    // pipeline: fetch(wq/d) -> products(pp) -> combine(b) -> DFT layer(s)
-    //   -> half-shift(x) -> rescale/sat(dout)
+    // pipeline: input(q) -> fetch(wa/wq/d) -> products(pp) -> combine(b)
+    //   -> DFT layer(s) -> half-shift(x) -> rescale/sat(dout)
     // R >= 8 inserts three more registered stages (G/H split, partial
     // layers + sqrt(2)/2 scalar products, odd-bin assembly).
-    localparam integer CB_LAT = (R >= 8) ? 10 : 6;
+    // The leading input register is load-bearing for TIMING: the lane
+    // reorder buffers are depth-cascaded RAMB36E2 whose output register
+    // has ~1.25 ns clock-to-out; with only ONE crossbar register before
+    // the multiply, that register is absorbed into the DSP A/B port and
+    // the BRAM clock-to-out shares a cycle with the DSP input setup
+    // (post-synth WNS -0.14 at R=2 N=8192). Two registers ahead of the
+    // multiply leave the first in fabric, splitting the path into two
+    // short hops.
+    localparam integer CB_LAT = (R >= 8) ? 11 : 7;
 
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
@@ -85,23 +93,30 @@ module fft_cross #(
         end
     endgenerate
 
-    // slot phase within a frame; pd..pd3 delay it through the three
-    // pipeline stages so pd3 == 0 marks an output word that is a frame
-    // start (the content word had phase p == 0)
-    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9, pd10;
+    // slot phase within a frame; pd.. delay it through the pipeline
+    // stages so the tap at CB_LAT depth marks an output word whose
+    // content word had phase p == 0
+    reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9, pd10,
+                 pd11;
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
     wire         mature = $unsigned(scnt) > (CB_LAT + 1);
     wire         out_phase0 = mature &&
-                             ((R >= 8) ? (pd10 == 0) : (pd6 == 0));
+                             ((R >= 8) ? (pd11 == 0) : (pd7 == 0));
 
     localparam integer OW = OUT_WIDTH;
 
+    // ---- stage 0: input register (see CB_LAT comment) -----------------
+    reg signed [OUT_WIDTH-1:0] q_re [0:R-1];
+    reg signed [OUT_WIDTH-1:0] q_im [0:R-1];
     // ---- stage 1a: coefficient prefetch (registered ROM output) ------
+    reg signed [TWIDDLE_WIDTH-1:0] wa_re [0:R-1];
+    reg signed [TWIDDLE_WIDTH-1:0] wa_im [0:R-1];
+    // ---- stage 1a2: coefficient second hop (pairs with d) ------------
     reg signed [TWIDDLE_WIDTH-1:0] wq_re [0:R-1];
     reg signed [TWIDDLE_WIDTH-1:0] wq_im [0:R-1];
-    // ---- stage 1b operands: din delayed one cycle --------------------
+    // ---- stage 1b operands: q delayed one cycle ----------------------
     reg signed [OUT_WIDTH-1:0] d_re [0:R-1];
     reg signed [OUT_WIDTH-1:0] d_im [0:R-1];
     // ---- stage 1b products (each maps to one DSP) --------------------
@@ -242,13 +257,19 @@ module fft_cross #(
                     // NOTE: b_* are owned exclusively by the main block
                     // (combine stage) -- do not drive them here
                 end else if (run) begin
-                    // stage 1a: coefficient prefetch -- read with the
-                    // NEXT slot phase; the registered coefficient pairs
-                    // with the NEXT word's (delayed) data
-                    wq_re[gp] <= w_re[gp];
-                    wq_im[gp] <= w_im[gp];
-                    d_re[gp]  <= din_re[gp*OW +: OW];
-                    d_im[gp]  <= din_im[gp*OW +: OW];
+                    // stage 0: input register (breaks the reorder-BRAM
+                    // -> DSP path, see CB_LAT comment)
+                    q_re[gp]  <= din_re[gp*OW +: OW];
+                    q_im[gp]  <= din_im[gp*OW +: OW];
+                    // stage 1a: coefficient prefetch -- the coefficient
+                    // rides the SAME +1 delay as the data so the pair
+                    // (word p, W^{r*p}) meets at the multiply
+                    wa_re[gp] <= w_re[gp];
+                    wa_im[gp] <= w_im[gp];
+                    wq_re[gp] <= wa_re[gp];
+                    wq_im[gp] <= wa_im[gp];
+                    d_re[gp]  <= q_re[gp];
+                    d_im[gp]  <= q_im[gp];
                     // stage 1b: partial products -- each maps to ONE
                     // DSP48E2 (registered at its MREG/PREG boundary).
                     // Lane 0 (r = 0) is the identity twiddle: a plain
@@ -288,6 +309,7 @@ module fft_cross #(
             pd8    <= {MW{1'b1}};
             pd9    <= {MW{1'b1}};
             pd10   <= {MW{1'b1}};
+            pd11   <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
             v1     <= 1'b0;
@@ -334,6 +356,7 @@ module fft_cross #(
             pd8  <= pd7;
             pd9  <= pd8;
             pd10 <= pd9;
+            pd11 <= pd10;
 
             v1 <= 1'b1;
 

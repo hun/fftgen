@@ -253,7 +253,27 @@ mirrors this composition exactly. Constraint `R | N`, both powers of two.
     product-FIFO LUTRAM read (wptr -> pfifo -> out), not the DSP.
   * SSR R=2 N=8192 @2ns: WNS -0.144, critical path is the CROSSBAR
     input (reorder BRAM -> crossbar DSP B input), not the stage
-    pipeline -- a separate register-staging task (CB_LAT + golden_ssr).
+    pipeline.
+**Crossbar input staging — CLOSED (R=2 N=8192):**
+  * Root cause: the lane reorder buffers are depth-cascaded RAMB36E2
+    (~1.25 ns clock-to-out on CASDOUT); the crossbar's single input
+    register stage (d_re/d_im) was absorbed into the product DSPs'
+    A/B ports, so the BRAM clock-to-out shared a cycle with the DSP
+    input setup (plus ~0.45 ns clock skew at synth estimates).
+  * Fix: a dedicated fabric input register (q_re/q_im) at the crossbar
+    boundary, with the twiddle riding the same +1 delay (wa -> wq) so
+    the (word p, W^{r*p}) pair still meets at the multiply. Two
+    registers ahead of the multiply leave the first in fabric: the
+    BRAM->FF and FF->DSP hops are both short. CB_LAT 6->7 (R<8) and
+    10->11 (R>=8); the frame-sync pd tap moved to pd7/pd11;
+    golden_ssr.CB_LAT updated to match.
+  * Result: post-synth WNS -0.144 -> -0.020; the critical path moved to
+    the intra-DSP cascade hop (pp A/B-reg -> preadd -> mult -> ALU ->
+    PREG, MREG=0 sender half of the PCIN cascade into b_*), the same
+    ~1.85 ns path documented in S3.
+  * Post-route (AggressiveExplore double-pass): WNS -0.021, TNS
+    -0.152, 16 failing endpoints -- effectively closed (skew-dominated
+    synth estimate; accepted as closable in an integrated design).
   * Open items: the pfifo read register is muxed (sum_out vs DOB) so the
     deep pfifos stay LUTRAM; a dedicated DOB_REG restructure was tried
     and reverted (subtle read-window off-by-one; redo carefully with a
