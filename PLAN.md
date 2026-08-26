@@ -669,8 +669,20 @@ suite per push.
 | **Spike S1 — BRAM inference** ✅ **done** | minimal OOC Vivado runs (Artix-7 + UltraScale+) comparing three ring-buffer codings: (a) SDP baseline — port A write / port B read, (b) single-port read-old/write-new same-address, (c) two independent delay lines sharing one true-dual-port RAM via (b) on both ports. Record LUTRAM/RAMB36 counts per variant | **(c) infers as exactly 1× RAMB36/E2 on both families, 0 LUTRAM** — pairing heuristic proven by pure inference. Bonus findings: `block` hint pins even 64-deep lines off LUTRAM (apply hints conditionally); same-address R/W never maps to URAM, split-pointer SDP does (`ram_style="ultra"` → URAM288) giving deep lines a second clean variant. Full data: `doc/mem_cutoffs.md` |
 | **P2 — RTL R=1** ✅ **done (Verilator)** | `rtl/fft_sdf.v`, `tb/tb_fft_sdf.cpp`, `src/fft_gen.py`; bit-exact vs `SDFGoldenModel` under Verilator; `ce`-freeze/reset suites | full L2+L3 green for the R=1 matrix: N=2..128, fwd/inv, widths 8..25, decimals, explicit/zero scaling, periodic/pseudo/bursty freeze, multi-frame (70 tests total, incl. 20-config RTL matrix). Icarus/Questa runs deferred |
 | **P3 — orders + inverse** ✅ **done (Verilator)** | DIT topology (TOPOLOGY param, mirror datapath with its own quantization contract), `fft_reorder.v` ping-pong, `fft_top.v` wrapper; all four order corners verified bit-exact N=2..128, fwd/inv, freeze, widths (RTL matrix 26/26, suite 85 tests). IFFT via conjugated twiddles already covered. |
-| **P4 — SSR** | golden model for the R·M composition first, then `fft_cross.v` + top wiring; bit-exact | R ∈ {2, 4} verified like P2 |
-| **P5 — export & sweeps** | `export_core.py` CLI, `fft_params.vh`, `twiddle_map.txt`, Vivado OOC scripts (`vivado_export.py`, firgen-style), **resource/memory-cutoff sweep → `mem_policy.py` final values**, README, CI | deliverable set complete; `doc/mem_cutoffs.md` backs every `auto` constant; timing met on Artix-7 @250 MHz and UltraScale+ @500 MHz |
+| **P4 — SSR** ✅ **done (Verilator)** | golden model for the R·M composition first, then `fft_cross.v` + top wiring; bit-exact | R ∈ {2, 4, 8} verified like P2: R=4/R=8 lane-DFT networks, sigma-signed Q, split scalar multiply, 10-stage crossbar pipeline — all bit-exact fwd+inv (96 tests total). All three SSR configs closed 500 MHz post-route on KU5P (R=2 N=8 +0.075 / 24 DSPs; R=4 N=16 +0.021 / 44; R=8 N=16 +0.037 / 64). |
+| **P5a — timing & memory sweeps** ✅ **done** | memory-style policy with decided cutoffs (`<=1k LUTRAM < 256kb BRAM <= URAM`, `doc/mem_cutoffs.md`), split-MREG stage multiply, NLAYERS 7→10 BRAM→DSP register absorption, crossbar input staging | KU5P @2ns post-synth MET across the R=1 ladder (N=64..8192, worst +0.163); SSR R=2 N=8192 post-route −0.021/TNS −0.152 (skew-dominated synth estimate, accepted). DSP inference audited: im-path DSPs absorb AREG=2/BREG=2/DREG=1/ADREG=1/MREG=1/CREG=1/PREG=1 |
+| **P5b — export & packaging** | `export_core.py` CLI, `fft_params.vh`, `twiddle_map.txt`, Vivado OOC scripts (`vivado_export.py`, firgen-style), README, CI | deliverable set complete; every `auto` constant traces to a measurement |
+
+**Known-open items (non-blocking):**
+- Deep product-FIFOs infer as LUTRAM because the output register is muxed
+  (sum path vs DOB); a dedicated DOB_REG restructure was attempted and
+  reverted for a read-window off-by-one. Revisit only if the pfifo read
+  path becomes binding (currently second to the intra-DSP cascade hop).
+- Icarus/Questa multi-simulator runs deferred since P2.
+- Corner orders with SSR (bit-reversed input lanes) not yet exercised;
+  R=1 corners all green via fft_reorder.
+- Artix-7 @250 MHz secondary gate not yet run (KU5P is the primary
+  target; the architecture is family-portable by construction).
 
 Deliberate sequencing choices: golden-before-RTL (P1) is the load-bearing
 decision — everything downstream is then mechanical comparison. SSR comes
@@ -752,6 +764,29 @@ of D_s enabled cycles each, period N:
 Reset state: all stages start in `PASS/FILL`. Warmup garbage is flushed by
 `out_valid = enabled_cycle >= L`.
 
+**Per-stage pipeline register chain (NLAYERS=10, mirrors fft_stage RTL
+register-for-register; updated from the original 7-layer draft):**
+
+| Layer | Registers | Hardware mapping |
+|---|---|---|
+| L0 | `d_bram`, `a_reg`, `t_reg`; RAM write (PASS) | BRAM output reg (DOA_REG); read address `raddr` modeled explicitly (always `wptr - D`, no added latency) |
+| L1 | `d1/a1/t1` | DSP AREG[0]/DREG[0]/BREG[0] candidate |
+| L2 | `d2/a2/t2` | DSP AREG[1]/DREG[1]/BREG[1] |
+| L3 | `bfly_d/bfly_s`, `t3` | pre-adder → ADREG (diff in-DSP; sum in fabric; UNGATED — PASS values never consumed, which is what lets Vivado map D−A into PREADD) |
+| L4 | `prod2/prod4` + freeze (`bfly_h/t3h`) | im-path products → MREG; re operands frozen one cycle |
+| L5 | `c1/c2` + `prod1/prod3` | C-port regs (CREG): im MREGs route to the re DSPs' C ports; re products one cycle behind |
+| L6 | `p`, `s3` | post-adder ALU P −/+ C → PREG |
+| L7 | `comb_s/comb_p` | fabric combine (aligns sum path with product path) |
+| L8 | `shift_s/shift_p` | round-half-up shift staging (ungated) |
+| L9 | out + product-FIFO write | COMPUTE writes rounded product at `pwp`; PASS reads at `pr = pwp − D` (write and read share the layer so the windows align) |
+
+The C-port pairing is the reason for the im/re asymmetry: the ALU sees
+same-pair P (re product computed at L5 from frozen operands) and C (im
+product captured at L5). Phase gates follow the validated
+layer-k = pipe_comp[k−1] pattern; preload pack is 74 bits/stage
+(pipe 9 bits). FSM warm preset: `warm_s = −(Σ D_t, t<s + NLAYERS·s)
+mod 2D_s` — generalized unchanged from the 7-layer derivation.
+
 **Every stage multiplies** (uniform datapath). An earlier draft of this
 appendix claimed stage 0 needs no multiplier -- that holds only for the
 radix-2^2 folding, NOT for the plain radix-2 schedule implemented here;
@@ -768,9 +803,12 @@ DIF output permutation (bit-reversal).
 
 **Quantization contract per stage:**
 - sum path: `a + b` exact, then `round_shift(., sigma_s)`
-- multiply path: exact Karatsuba products, then ONE combined
-  `round_shift(., twiddle_decimal + sigma_s)` (twiddle Q-format
-  normalization fused with stage scaling -- this is the post-DSP48P shift)
+- multiply path: exact complex-multiply partial products (Karatsuba in
+  the batch/golden reference; the RTL's 4-product split with DSP C-port
+  combine is value-identical -- all forms are exact integer arithmetic),
+  then ONE combined `round_shift(., twiddle_decimal + sigma_s)`
+  (twiddle Q-format normalization fused with stage scaling -- this is
+  the post-DSP48P shift)
 - all stages multiply unconditionally (uniform datapath decision); the
   radix-2^2 folding that removes trivial multiplies must be re-proven
   numerically equivalent before any RTL uses it
