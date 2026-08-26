@@ -461,8 +461,86 @@ consequences:
 
 | Plan | Implementation | Why |
 |---|---|---|
-| radix-2² SDF (≤ N/4 multiplies) | **plain radix-2 SDF** (`log2(N)` stages, each multiplying every pair) | the R2² folding changes which cycles carry multiplies and must be re-proven numerically equivalent to the pinned schedule before any RTL may use it; Appendix A documents this as open |
+| radix-2² SDF (≤ N/4 multiplies) | **plain radix-2 SDF** (`log2(N)` stages, each multiplying every pair) — P7 is folding this in | the R2² merge changes which cycles carry multiplies AND the product rounding points; spike S5 (spikes/S5_r22/) proved the contracts differ by a few LSB (not bit-identical, SQNR-equal) and re-pinned the golden (`fft_fixed_batch_r22` / `_r22_dit`); the R2² stage RTL is the remaining P7 work (background reading in §11) |
 | 3-DSP Karatsuba complex multiply | **4-product split with C-port chaining** (4 DSPs/stage) | 3-multiply Gauss/Karatsuba forms measured worse on timing (pre-adder in series with the multiplier, −0.78 ns WNS); evidence kept in PLAN.md P5a |
 
 Everything else in this document is register-for-register the RTL; where the
 two ever diverge, the golden model + test suite is the arbiter.
+
+## 11. Further reading: pipelined FFT architectures and radix-2²
+
+The radix-2² FFT is the "radix-4 with radix-2 butterflies" restructure: it
+keeps the same multiplicative complexity as radix-4 (log₂(N)/2 nontrivial
+complex multiplies) while using only 2-input butterflies, so it maps onto
+an SDF pipeline without changing the adder/memory topology. The references
+below are ordered from "start here" to "deeper".
+
+**The original R2²SDF** (the topology this project is folding toward):
+
+- S. He and M. Torkelson, *"Designing pipeline FFT processor for OFDM
+  (de)modulation,"* Proc. URSI Int. Symp. Signals, Systems, and
+  Electronics (ISSSE '98), Pisa, Italy, 1998, pp. 257–262.
+  The R2²SDF paper: one complex multiplier per stage PAIR, with the
+  first sub-stage's twiddles collapsed to ±1/±j via the twiddle-factor
+  restructure. This is the canonical "why half the multipliers" read.
+
+- S. He and M. Torkelson, *"A new approach to pipeline FFT processor,"*
+  Proc. 10th Int. Parallel Processing Symp. (IPPS '96), Honolulu, HI,
+  1996, pp. 766–770.
+  The earlier topology work (radix-4 SDF / SDC pipelines) that the R2²
+  paper builds on; good for the SDF vs. MDC memory/multiplier trade-offs.
+
+**Pipelined FFT topologies in general (SDF / MDC taxonomy):**
+
+- E. E. Swartzlander, Jr., W. K. W. Young, and S. J. Joseph, *"A radix 4
+  delay commutator for fast Fourier transform processor implementation,"*
+  IEEE J. Solid-State Circuits, vol. SC-19, no. 5, pp. 702–709, 1984.
+  The classic MDC (multi-path delay commutator) pipeline — the
+  alternative to SDF that Spiral-style feed-forward cores resemble.
+
+- U. Meyer-Baese, *Digital Signal Processing with Field Programmable
+  Gate Arrays*, Springer (4th ed. 2014). The FPGA-FFT textbook chapter:
+  radix-2/4 butterflies, SDF/MDC pipelines, twiddle ROM quantization.
+  Best single book for the background if you want the fixed-point
+  context for our Q-format contract.
+
+- K. K. Parhi, *VLSI Digital Signal Processing Systems: Design and
+  Implementation*, Wiley, 1999. Pipelined FFT (SDF/MDC) and CORDIC-based
+  alternatives, from the VLSI scheduling angle (why the multiplier
+  duty-cycle argument in §3.3 works).
+
+**Where the "fewer multiplies" actually comes from (algorithm side):**
+
+- P. Duhamel and H. Hollmann, *"'Split radix' FFT algorithm,"* Electronics
+  Letters, vol. 20, no. 1, pp. 14–16, 1984. The split-radix algorithm —
+  the closest relative of radix-2² in pure arithmetic complexity. Radix-2²
+  is the version that stays pipeline-friendly; split-radix's irregular
+  structure does not.
+
+**R2² in feed-forward (not feedback) form — the Spiral-style cores:**
+
+- M. Garrido, J. Grajal, M. A. Sánchez, and O. Gustafsson, *"Pipelined
+  radix-2² feedforward FFT architectures,"* IEEE Trans. Very Large Scale
+  Integr. (VLSI) Syst., vol. 21, no. 1, pp. 23–32, 2013. Radix-2² applied
+  to the feed-forward (memory-permutation) pipeline — directly relevant
+  to the Spiral-style 2-stream core we compared against (40 DSPs at
+  R=2 N=2048 vs. our 68): same multiplier count as R2²SDF, but with
+  permutation RAMs instead of feedback delay lines.
+
+- P. A. Milder, F. Franchetti, J. C. Hoe, and M. Püschel, *"Computer
+  generation of hardware for linear digital signal processing
+  transforms,"* ACM Trans. Design Autom. Electron. Syst. (TODAES),
+  vol. 17, no. 2, 2012. The Spiral HDL generator: how the feed-forward
+  streaming FFTs (including the `spiral_2048x2.v` core we examined) are
+  composed and how their schedules are derived.
+
+- P. A. Milder, F. Franchetti, J. C. Hoe, and M. Püschel, *"Formal
+  datapath representation and manipulation for implementing DSP
+  transforms,"* IEEE Trans. Comput.-Aided Design Integr. Circuits Syst.,
+  vol. 27, no. 9, pp. 1616–1630, 2008. The underlying datapath algebra
+  (multidimensional SPL-style factorization) behind the generator.
+
+Our own P7 work (spike S5, re-pinned R2² contracts) is documented in
+`spikes/S5_r22/notes.md` and PLAN.md §5 (P7 row); the one numerical
+nuance the literature skips is the fused Q-format rounding interaction
+analyzed there.

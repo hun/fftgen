@@ -196,5 +196,57 @@ class TestR22BatchContractDit(unittest.TestCase):
                          fft_fixed_batch_r22_dit(samples, cfg))
 
 
+class TestR22StreamingModel(unittest.TestCase):
+    """Cycle-accurate streaming R2² DIF model must reproduce the batch
+    contract bit-exactly (this is what the R2² RTL will be verified
+    against)."""
+
+    def _check(self, cfg, frames=2, seed=7):
+        from golden import R22SDFGoldenModel
+        rng = random.Random(seed)
+        N = cfg.num_points
+        samples = _rand_frame(N * frames, cfg.sample_width, rng)
+        got = R22SDFGoldenModel(cfg).process_stream(samples)
+        exp = []
+        for f in range(frames):
+            exp += fft_fixed_batch_r22(samples[f * N:(f + 1) * N], cfg)
+        self.assertEqual(len(got), len(exp))
+        mism = [(k, got[k], exp[k]) for k in range(len(got))
+                if got[k] != exp[k]]
+        self.assertEqual(mism, [], f"{cfg}: {len(mism)} stream/batch mismatches")
+
+    def test_sizes_fwd_inv(self):
+        for N in (8, 16, 32, 64, 128, 256):
+            for inv in (False, True):
+                with self.subTest(N=N, inv=inv):
+                    self._check(FFTConfig(num_points=N, inverse=inv))
+
+    def test_odd_stage_count(self):
+        for N in (8, 32, 128):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N))
+
+    def test_widths_and_scaling(self):
+        self._check(FFTConfig(num_points=64, sample_width=8,
+                              twiddle_width=8))
+        self._check(FFTConfig(num_points=64, sample_width=25,
+                              output_width=20))
+        self._check(FFTConfig(num_points=16, scaling=(0, 0, 0, 0),
+                              output_width=24))
+        self._check(FFTConfig(num_points=16, twiddle_width=10,
+                              twiddle_decimal=8))
+
+    def test_multi_frame(self):
+        self._check(FFTConfig(num_points=16), frames=4)
+        self._check(FFTConfig(num_points=128), frames=3)
+
+    def test_latency(self):
+        from golden import R22SDFGoldenModel
+        m = R22SDFGoldenModel(FFTConfig(num_points=64))
+        # 6 stages -> pairs (0,1),(2,3),(4,5): 3D_0+3D_1+3D_2
+        # D_0=16, D_1=4, D_2=1 -> 48+12+3 = 63
+        self.assertEqual(m.latency, 63)
+
+
 if __name__ == "__main__":
     unittest.main()

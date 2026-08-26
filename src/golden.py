@@ -257,6 +257,242 @@ def fft_fixed_batch_r22(samples: Sequence[Complex], cfg: FFTConfig,
             for re, im in x]
 
 
+# ----------------------------------------------------------------------
+# P7: cycle-accurate streaming R2² DIF model (verified vs the batch
+# contract, spikes/S5_r22/stream_model.py)
+# ----------------------------------------------------------------------
+
+class _R22DIFStage:
+    """One radix-2² DIF stage (stage pair (2m, 2m+1) merged).
+
+    Group depth D = N/4^{m+1}, twiddle stride 4^m, block size 4D. Per
+    4D-clock block the stream carries D groups (a0..a3 at positions
+    g, g+D, g+2D, g+3D). All four of group g's values complete at clock
+    3D+g; outputs are staged so position p's value emerges at clock
+    p + 3D (stage latency contribution 3D):
+
+      k in [0, D):   out = q2 read (y2 of the previous block)
+      k in [D, 2D):  out = q1 read (y1)
+      k in [2D, 3D): out = q3 read (y3)
+      k in [3D, 4D): out = y0     (a3 arrives -> s1; s0/d0 from the
+                     lag-D lines; combine + exact +/-j products staged)
+
+    Sub-stage-2m butterfly fires at positions [2D, 3D) (a2 pairs a0 via
+    the lag-2D ram; s0/d0 stored in the lag-D sram/dram), sub-stage-2m+1
+    at [3D, 4D) (a3 pairs a1; s0,s1 and d0,d1 meet via the lag-D lines).
+    """
+
+    def __init__(self, m: int, N: int, sigma0: int, sigma1: int,
+                 td: int, tw: Sequence[Complex], inverse: bool = False):
+        self.m = m
+        self.N = N
+        self.sigma0, self.sigma1 = sigma0, sigma1
+        self.td = td
+        self.D = N >> (2 * m + 2)
+        self.base = 4 ** m
+        self.js = -1 if not inverse else 1
+        self.tw = tw
+        self.ram = [(0, 0)] * (2 * self.D)
+        self.sram = [(0, 0)] * self.D
+        self.dram = [(0, 0)] * self.D
+        self.q2 = [(0, 0)] * self.D
+        self.q1 = [(0, 0)] * (2 * self.D)
+        self.q3 = [(0, 0)] * (3 * self.D)
+        self.out = (0, 0)
+        self.rp = 0
+        self.sp = 0
+        self.q2p = 0
+        self.q1p = 0
+        self.q3p = 0
+
+    @property
+    def latency(self) -> int:
+        return 3 * self.D
+
+    def _prod(self, z: Complex, t: Complex, sh: int) -> Complex:
+        pr, pi = complex_multiply_karatsuba(z[0], z[1], t[0], t[1])
+        return (round_shift(pr, sh), round_shift(pi, sh))
+
+    def step(self, x: Complex, pos: int) -> Complex:
+        D = self.D
+        out = self.out
+        r, i = x
+        k = pos % (4 * D)
+        g = pos % D
+
+        if k >= 3 * D:
+            a1 = self.ram[self.rp]
+            s1 = (round_shift(a1[0] + r, self.sigma0),
+                  round_shift(a1[1] + i, self.sigma0))
+            d1 = (a1[0] - r, a1[1] - i)
+            s0 = self.sram[self.sp]
+            d0 = self.dram[self.sp]
+            y0 = (round_shift(s0[0] + s1[0], self.sigma1),
+                  round_shift(s0[1] + s1[1], self.sigma1))
+            y2 = self._prod((s0[0] - s1[0], s0[1] - s1[1]),
+                            self.tw[(2 * g * self.base) % self.N],
+                            self.td + self.sigma1)
+            cm = (d0[0] - self.js * d1[1], d0[1] + self.js * d1[0])
+            cp = (d0[0] + self.js * d1[1], d0[1] - self.js * d1[0])
+            S = self.td + self.sigma0 + self.sigma1
+            y1 = self._prod(cm, self.tw[(g * self.base) % self.N], S)
+            y3 = self._prod(cp, self.tw[(3 * g * self.base) % self.N], S)
+            self.q2[self.q2p] = y2
+            self.q1[self.q1p] = y1
+            self.q3[self.q3p] = y3
+            out = y0
+        else:
+            if k < D:
+                out = self.q2[self.q2p]
+            elif k < 2 * D:
+                out = self.q1[self.q1p]
+            else:
+                out = self.q3[self.q3p]
+            if k >= 2 * D:
+                a0 = self.ram[self.rp]
+                self.sram[self.sp] = (round_shift(a0[0] + r, self.sigma0),
+                                      round_shift(a0[1] + i, self.sigma0))
+                self.dram[self.sp] = (a0[0] - r, a0[1] - i)
+            else:
+                self.ram[self.rp] = (r, i)
+
+        self.rp = (self.rp + 1) % (2 * D)
+        self.sp = (self.sp + 1) % D
+        self.q2p = (self.q2p + 1) % D
+        self.q1p = (self.q1p + 1) % (2 * self.D)
+        self.q3p = (self.q3p + 1) % (3 * self.D)
+        self.out = out
+        return out
+
+
+class R22SDFGoldenModel:
+    """Cycle-accurate streaming model of the R2² DIF pipeline (P7).
+
+    One :class:`_R22DIFStage` per stage pair; the leftover last stage
+    (odd stage count, the trivial W^0 stage) is applied as a per-frame
+    batch post-process (its streaming FSM/preload arrives with the R2²
+    stage RTL). Verified bit-exact against :func:`fft_fixed_batch_r22`
+    (the re-pinned contract) over N = 8..1024, fwd+inv, widths,
+    scaling schedules and multi-frame streams.
+    """
+
+    def __init__(self, cfg: FFTConfig):
+        if cfg.ssr != 1:
+            raise NotImplementedError("R22 model supports ssr=1 only")
+        if cfg.is_dit or cfg.input_order != "native" \
+                or cfg.output_order != "bitreversed":
+            raise NotImplementedError(
+                "R22 model covers native->bitreversed only")
+        self.cfg = cfg
+        N = cfg.num_points
+        self.N = N
+        n = cfg.num_stages
+        td = cfg.twiddle_decimal
+        tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
+        self.stages = []
+        m = 0
+        while 2 * m + 1 < n:
+            self.stages.append(_R22DIFStage(
+                m, N, cfg.shifts[2 * m], cfg.shifts[2 * m + 1], td, tw,
+                cfg.inverse))
+            m += 1
+        self.nleft = n - 2 * m              # leftover plain stages
+        self.latency = sum(st.latency for st in self.stages)
+        self._sb = deque()
+        self._cycles = 0
+
+    def reset(self):
+        import copy
+        for i, st in enumerate(self.stages):
+            self.stages[i] = copy.deepcopy(st.__class__(
+                st.m, self.N, st.sigma0, st.sigma1, st.td, st.tw,
+                st.js == 1))
+        self._cycles = 0
+        self._sb = deque()
+
+    def tick(self, enabled: bool, re: int = 0, im: int = 0,
+             tuser: int = 0, tlast: int = 0):
+        """One clock. The R2² stages run in lockstep; the leftover stage
+        (odd n) is applied per-frame by process_stream."""
+        if not enabled:
+            return False, 0, 0, 0, 0
+        cur = (re, im)
+        pos = self._cycles
+        for st in self.stages:
+            cur = st.step(cur, pos)
+        self._cycles += 1
+        self._sb.append((tuser, tlast))
+        valid = self._cycles > self.latency
+        if valid:
+            u, l = self._sb.popleft()
+        else:
+            u, l = 0, 0
+        return valid, cur[0], cur[1], u, l
+
+    def _apply_leftover(self, frame):
+        """Batch-style leftover last stage (odd n): plain radix-2 DIF."""
+        if self.nleft == 0:
+            return frame
+        N = self.N
+        x = [list(v) for v in frame]
+        tw = canonical_twiddles(N, self.cfg.twiddle_width,
+                                self.cfg.twiddle_decimal,
+                                self.cfg.inverse)
+        td = self.cfg.twiddle_decimal
+        for s in range(2 * len(self.stages), self.cfg.num_stages):
+            D = N >> (s + 1)
+            sig = self.cfg.shifts[s]
+            for start in range(0, N, 2 * D):
+                for j in range(D):
+                    i1 = start + j
+                    i2 = i1 + D
+                    ar, ai = x[i1]
+                    br, bi = x[i2]
+                    x[i1] = [round_shift(ar + br, sig),
+                             round_shift(ai + bi, sig)]
+                    dr, di = ar - br, ai - bi
+                    cr, ci = tw[(j << s) % N]
+                    pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
+                    sh = td + sig
+                    x[i2] = [round_shift(pr, sh), round_shift(pi, sh)]
+        return [tuple(v) for v in x]
+
+    def process_stream(self, samples, markers=None, frames=None):
+        """Run frames through the R2² chain; apply the leftover stage per
+        frame; returns one output per input (bit-exact vs the batch
+        contract)."""
+        N = self.N
+        # lockstep the whole stream (plus drain cycles) through the R2²
+        # stages; drop the warmup so positions 0..T-1 align
+        raw = []
+        T = len(samples)
+        for pos in range(T + self.latency):
+            src = samples[pos] if pos < T else (0, 0)
+            cur = src[:2]
+            for st in self.stages:
+                cur = st.step(tuple(cur), pos)
+            raw.append(cur)
+        raw = raw[self.latency:]
+        assert len(raw) == T
+        outs = []
+        for f in range(len(raw) // N):
+            frame = self._apply_leftover(raw[f * N:(f + 1) * N])
+            q = [quantize_output(re, im, self.cfg.sample_decimal,
+                                 self.cfg.output_width,
+                                 self.cfg.output_decimal)
+                 for re, im in frame]
+            if markers is not None:
+                for k, (re, im) in enumerate(q):
+                    idx = f * N + k
+                    outs.append((re, im) + tuple(markers[idx]))
+            else:
+                outs.extend(q)
+        return outs
+
+    def process_stream_simple(self, samples):
+        return self.process_stream(samples)
+
+
 def fft_fixed_batch_r22_dit(samples: Sequence[Complex], cfg: FFTConfig,
                             twiddles: Optional[Sequence[Complex]] = None
                             ) -> List[Complex]:
