@@ -27,10 +27,11 @@
 //   dram   combinational s_x/d_x)     nonblocking write cannot be seen
 //   dline                              in the same clock, so the lag-D
 //                                      lines are written at the arrival)
-//   pfifo  depth 4 (shift_p)          gate k4
-//   output mux  depth 4 (y0_r)        gate k4; pfifo lag D
+//   pfifo  depth 5 (shift_p)          gate k5 (the AREG/BREG stage)
+//   output mux  depth 5 (y0_r)        gate k5; pfifo lag D
+//   shift select                      gate k5 (the product's capture)
 //
-// Position p's value emerges at clock p + 3D + 5 (latency 3D+5).
+// Position p's value emerges at clock p + 3D + 6 (latency 3D+6).
 
 `default_nettype none
 
@@ -99,6 +100,7 @@ module fft_stage_r22 #(
     reg [KW-1:0] k2;
     reg [KW-1:0] k3;
     reg [KW-1:0] k4;
+    reg [KW-1:0] k5;
     // g = k mod DEPTH (the low clog2(D) bits -- but for D=1 that is 0
     // bits, i.e. g is always 0; a 1-bit slice would give k mod 2)
     localparam integer GBITS = (DEPTH > 1) ? $clog2(DEPTH) : 0;
@@ -205,6 +207,7 @@ module fft_stage_r22 #(
     reg [BW-1:0] y0_raw_r_re, y0_raw_r_im;
     reg [BW-1:0] y0_raw2_re, y0_raw2_im;
     reg [BW-1:0] y0_raw3_re, y0_raw3_im;
+    reg [BW-1:0] y0_raw4_re, y0_raw4_im;
 
     // ------------------------------------------------------------------
     // L2: product operand mux (by the k1 phase) + the multiplies
@@ -213,10 +216,15 @@ module fft_stage_r22 #(
                         : (k1 < ONE_D ? c1_r_re : c3_r_re);
     wire [CB-1:0] m_im = (k1 >= THREE_D) ? {{(CB-BW){sd_r_im[BW-1]}}, sd_r_im}
                         : (k1 < ONE_D ? c1_r_im : c3_r_im);
-    wire signed [MWB-1:0] m_re_w = {{(MWB-CB){m_re[CB-1]}}, m_re};
-    wire signed [MWB-1:0] m_im_w = {{(MWB-CB){m_im[CB-1]}}, m_im};
-    wire signed [MWB-1:0] tr_w = {{(MWB-TWIDDLE_WIDTH){tr_r[TWIDDLE_WIDTH-1]}}, tr_r};
-    wire signed [MWB-1:0] ti_w = {{(MWB-TWIDDLE_WIDTH){ti_r[TWIDDLE_WIDTH-1]}}, ti_r};
+    // AREG/BREG: register the multiplicand operands so the DSP can
+    // absorb them (the LUT operand mux is not registered -- the path
+    // k1 -> mux -> DSP A-input bypassed AREG/BREG, the critical path)
+    reg [CB-1:0] m_r_re, m_r_im;
+    reg [TWIDDLE_WIDTH-1:0] tr_r2, ti_r2;
+    wire signed [MWB-1:0] m_re_w = {{(MWB-CB){m_r_re[CB-1]}}, m_r_re};
+    wire signed [MWB-1:0] m_im_w = {{(MWB-CB){m_r_im[CB-1]}}, m_r_im};
+    wire signed [MWB-1:0] tr_w = {{(MWB-TWIDDLE_WIDTH){tr_r2[TWIDDLE_WIDTH-1]}}, tr_r2};
+    wire signed [MWB-1:0] ti_w = {{(MWB-TWIDDLE_WIDTH){ti_r2[TWIDDLE_WIDTH-1]}}, ti_r2};
     reg [MWB-1:0] prod_rr, prod_ri, prod_ir, prod_ii;   // the DSP MREG
 
     // ------------------------------------------------------------------
@@ -234,8 +242,8 @@ module fft_stage_r22 #(
     wire w_gate_ram = (k < TWO_D);
     wire w_gate_sd  = (k >= TWO_D && k < THREE_D);
     wire w_gate_dl  = (k >= THREE_D);
-    wire w_gate_pf  = (k4 < TWO_D || k4 >= THREE_D);
-    wire out_is_y0  = (k4 >= THREE_D);
+    wire w_gate_pf  = (k5 < TWO_D || k5 >= THREE_D);
+    wire out_is_y0  = (k5 >= THREE_D);
 
     always @(posedge clk) begin
         if (rst) begin
@@ -244,6 +252,7 @@ module fft_stage_r22 #(
             k2     <= K_PRELOAD[KW-1:0];
             k3     <= K_PRELOAD[KW-1:0];
             k4     <= K_PRELOAD[KW-1:0];
+            k5     <= K_PRELOAD[KW-1:0];
             rp     <= {AW{1'b0}};
             pwp    <= {AW{1'b0}};
             pr_r   <= {AW{1'b0}} - DEPTH[AW-1:0];
@@ -257,8 +266,11 @@ module fft_stage_r22 #(
             y0_raw_r_re <= {BW{1'b0}}; y0_raw_r_im <= {BW{1'b0}};
             y0_raw2_re <= {BW{1'b0}}; y0_raw2_im <= {BW{1'b0}};
             y0_raw3_re <= {BW{1'b0}}; y0_raw3_im <= {BW{1'b0}};
+            y0_raw4_re <= {BW{1'b0}}; y0_raw4_im <= {BW{1'b0}};
             prod_rr <= {MWB{1'b0}}; prod_ri <= {MWB{1'b0}};
             prod_ir <= {MWB{1'b0}}; prod_ii <= {MWB{1'b0}};
+            m_r_re <= {CB{1'b0}}; m_r_im <= {CB{1'b0}};
+            tr_r2 <= {TWIDDLE_WIDTH{1'b0}}; ti_r2 <= {TWIDDLE_WIDTH{1'b0}};
             p_re <= {PW{1'b0}}; p_im <= {PW{1'b0}};
             shift_p_re <= {PW{1'b0}}; shift_p_im <= {PW{1'b0}};
             y0_r_re <= {WIDTH{1'b0}}; y0_r_im <= {WIDTH{1'b0}};
@@ -271,9 +283,12 @@ module fft_stage_r22 #(
             y0_raw_r_re <= y0_raw_re;   y0_raw_r_im <= y0_raw_im;
             y0_raw2_re <= y0_raw_r_re;  y0_raw2_im <= y0_raw_r_im;
             y0_raw3_re <= y0_raw2_re;   y0_raw3_im <= y0_raw2_im;
-            k1 <= k; k2 <= k1; k3 <= k2; k4 <= k3;
+            y0_raw4_re <= y0_raw3_re;   y0_raw4_im <= y0_raw3_im;
+            k1 <= k; k2 <= k1; k3 <= k2; k4 <= k3; k5 <= k4;
 
-            // ---- L2: the products (MREG) ----
+            // ---- L2: AREG/BREG operand capture, then the products ----------------
+            m_r_re <= m_re;   m_r_im <= m_im;
+            tr_r2 <= tr_r;    ti_r2 <= ti_r;
             prod_rr <= m_re_w * tr_w;
             prod_ri <= m_re_w * ti_w;
             prod_ir <= m_im_w * tr_w;
@@ -286,15 +301,15 @@ module fft_stage_r22 #(
                   + {{(PW-MWB){prod_ir[MWB-1]}}, prod_ir};
 
             // ---- L4: the round-half-up staging ----
-            if (k3 >= THREE_D) begin
+            if (k4 >= THREE_D) begin
                 shift_p_re <= round_shift_pw(p_re, TD_PLUS_S1);
                 shift_p_im <= round_shift_pw(p_im, TD_PLUS_S1);
             end else begin
                 shift_p_re <= round_shift_pw(p_re, TD_PLUS_BOTH);
                 shift_p_im <= round_shift_pw(p_im, TD_PLUS_BOTH);
             end
-            y0_r_re <= round_shift_bw(y0_raw3_re, SIGMA1)[WIDTH-1:0];
-            y0_r_im <= round_shift_bw(y0_raw3_im, SIGMA1)[WIDTH-1:0];
+            y0_r_re <= round_shift_bw(y0_raw4_re, SIGMA1)[WIDTH-1:0];
+            y0_r_im <= round_shift_bw(y0_raw4_im, SIGMA1)[WIDTH-1:0];
 
             // ---- L5: the writes and the output ----
             if (w_gate_ram) begin
