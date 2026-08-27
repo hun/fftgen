@@ -407,10 +407,13 @@ def main():
     for n in args.r4:
         if "r2" in archs:
             configs.append((n, 4, "r2"))
-        # R=4 r22 is next (needs lane M-point r22 + 4-pt crossbar); not yet wired
+        if "r22" in archs:
+            configs.append((n, 4, "r22"))
     for n in args.r8:
         if "r2" in archs:
             configs.append((n, 8, "r2"))
+        if "r22" in archs:
+            configs.append((n, 8, "r22"))
 
     os.makedirs(args.jobs_dir, exist_ok=True)
     print(f"sweep: {len(configs)} configs ({', '.join(archs)}), {args.j} parallel -> {args.jobs_dir}")
@@ -439,7 +442,7 @@ def main():
         ns = sorted(set(n for n_, r_, a in configs if r_ == r for n in [n_]))
         for n in ns:
             for arch in archs:
-                if arch == "r22" and r not in (1, 2):
+                if arch == "r22" and r not in (1, 2, 4, 8):
                     continue
                 res = load(n, r, arch)
                 if res.get("rc") != 0:
@@ -462,44 +465,32 @@ def main():
         md += "``spikes/S5_r22`` top + ``rtl/fft_ssr_r22`` for R>1). r22 re-pins the golden rounding (few-LSB, SQNR-equal).\n\n"
     md += fmt_table(table, header) + "\n"
 
-    # side-by-side R=1 and R=2 comparisons (when both arches present)
+    # side-by-side per-R comparisons (when both arches present)
     if "r2" in archs and "r22" in archs:
         comp_header = ["N", "R", "R2 DSP", "R22 DSP", "ΔDSP", "R2 LUTs", "R22 LUTs", "ΔLUT", "R2 WNS", "R22 WNS", "R2 BRAM", "R22 BRAM"]
-        comp_rows_r1, comp_rows_r2 = [], []
-        for n in sorted(set(x for x, _, _ in [(n, r, a) for n, r, a in configs if r == 1])):
-            r2 = load(n, 1, "r2"); r22 = load(n, 1, "r22")
-            if r2.get("rc") != 0 or r22.get("rc") != 0: continue
-            u2, t2 = r2.get("util", {}), r2.get("timing", {})
-            u22, t22 = r22.get("util", {}), r22.get("timing", {})
-            dsp2, dsp22 = u2.get("DSPs", "-"), u22.get("DSPs", "-")
-            lut2, lut22 = u2.get("CLB LUTs", "-"), u22.get("CLB LUTs", "-")
-            d_dsp = f"{dsp22 - dsp2:+d}" if isinstance(dsp2, int) and isinstance(dsp22, int) else "-"
-            d_lut = f"{lut22 - lut2:+d}" if isinstance(lut2, int) and isinstance(lut22, int) else "-"
-            comp_rows_r1.append([n, 1, dsp2, dsp22, d_dsp, lut2, lut22, d_lut,
-                              f"{t2.get('wns',0):+.3f}" if "wns" in t2 else "-",
-                              f"{t22.get('wns',0):+.3f}" if "wns" in t22 else "-",
-                              u2.get("Block RAM Tile", "-"), u22.get("Block RAM Tile", "-")])
-        for n in sorted(set(x for x, _, _ in [(n, r, a) for n, r, a in configs if r == 2])):
-            r2 = load(n, 2, "r2"); r22 = load(n, 2, "r22")
-            if r2.get("rc") != 0 or r22.get("rc") != 0: continue
-            u2, t2 = r2.get("util", {}), r2.get("timing", {})
-            u22, t22 = r22.get("util", {}), r22.get("timing", {})
-            dsp2, dsp22 = u2.get("DSPs", "-"), u22.get("DSPs", "-")
-            lut2, lut22 = u2.get("CLB LUTs", "-"), u22.get("CLB LUTs", "-")
-            d_dsp = f"{dsp22 - dsp2:+d}" if isinstance(dsp2, int) and isinstance(dsp22, int) else "-"
-            d_lut = f"{lut22 - lut2:+d}" if isinstance(lut2, int) and isinstance(lut22, int) else "-"
-            comp_rows_r2.append([n, 2, dsp2, dsp22, d_dsp, lut2, lut22, d_lut,
-                              f"{t2.get('wns',0):+.3f}" if "wns" in t2 else "-",
-                              f"{t22.get('wns',0):+.3f}" if "wns" in t22 else "-",
-                              u2.get("Block RAM Tile", "-"), u22.get("Block RAM Tile", "-")])
-        if comp_rows_r1:
-            md += "\n## R=1 comparison: r2 vs r22 (DSP savings)\n\n"
-            md += fmt_table(comp_rows_r1, comp_header) + "\n"
-        if comp_rows_r2:
-            md += "\n## R=2 comparison: r2 vs r22 (SSR)\n\n"
-            md += fmt_table(comp_rows_r2, comp_header) + "\n"
-        md += "\n*ΔDSP negative = r22 saves DSPs (target ~-50%); ΔLUT shows fabric cost. R=2 r22 uses M-point r22 lanes (M=N/2) + same crossbar.*\n"
-        comp_rows = comp_rows_r1 + comp_rows_r2
+        comp_rows_all = []
+        for R in (1, 2, 4, 8):
+            comp_rows = []
+            for n in sorted(set(x for x, _, _ in [(n, r, a) for n, r, a in configs if r == R])):
+                r2 = load(n, R, "r2"); r22 = load(n, R, "r22")
+                if r2.get("rc") != 0 or r22.get("rc") != 0: continue
+                u2, t2 = r2.get("util", {}), r2.get("timing", {})
+                u22, t22 = r22.get("util", {}), r22.get("timing", {})
+                dsp2, dsp22 = u2.get("DSPs", "-"), u22.get("DSPs", "-")
+                lut2, lut22 = u2.get("CLB LUTs", "-"), u22.get("CLB LUTs", "-")
+                d_dsp = f"{dsp22 - dsp2:+d}" if isinstance(dsp2, int) and isinstance(dsp22, int) else "-"
+                d_lut = f"{lut22 - lut2:+d}" if isinstance(lut2, int) and isinstance(lut22, int) else "-"
+                comp_rows.append([n, R, dsp2, dsp22, d_dsp, lut2, lut22, d_lut,
+                                  f"{t2.get('wns',0):+.3f}" if "wns" in t2 else "-",
+                                  f"{t22.get('wns',0):+.3f}" if "wns" in t22 else "-",
+                                  u2.get("Block RAM Tile", "-"), u22.get("Block RAM Tile", "-")])
+            if comp_rows:
+                label = {1: "R=1", 2: "R=2 (SSR)", 4: "R=4 (SSR)", 8: "R=8 (SSR)"}[R]
+                md += f"\n## {label} comparison: r2 vs r22\n\n"
+                md += fmt_table(comp_rows, comp_header) + "\n"
+                comp_rows_all.extend(comp_rows)
+        md += "\n*ΔDSP negative = r22 saves DSPs (target ~-50%); ΔLUT shows fabric cost. R>1 r22 uses M=N/R-point r22 lanes + same crossbar.*\n"
+        comp_rows = comp_rows_all
     else:
         comp_rows = []
 
