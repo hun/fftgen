@@ -239,3 +239,24 @@ block boundary (D=1's combine at 3D+2 -> products @ ~3D+6+1 -> phases
 STEPS per D (the shift_p2 ready step for each of the 3D used products)
 and gate the write on the ready steps, not a fixed k-window. This is
 the last structural piece; the product VALUES are all correct.
+
+## The pfifo ring-wrap root cause (precise, D=1 trace)
+
+D=1 verified trace: the products y2/y1/y3 are in the shift_p2 after
+s9/s10/s11. The writes fire at the gate steps: y2->pfifo[0] (s10,
+k3 gate), y1->pfifo[1] (s12), y3->pfifo[1] (s13, overwriting the y1
+after its read at s12). The reads: pr=0 at s11 (y2, out s12=pos1),
+pr=1 at s12 (y1, out s13=pos2), pr=0 at s13 (read pfifo[0]=stale y2 --
+the y3 at pfifo[1] missed; its read at pr=1 lands on s14 whose mux
+selects the y0 (out s15=pos4)).
+
+ROOT: the product WRITE steps are not one-per-block-period -- there is
+one gap (s11 has no write) -- so the ring's write/read pointer parity
+drifts for the LAST product. The write steps must be the 3D USED
+products at the period-consecutive steps [W, W+1, ..., W+3D-1]. Since
+the shift_p2 holds a new product EVERY step (the L2 makes one per
+step), the write must fire on EVERY step whose shift_p2 is a USED
+product -- step 11's product (a waste-c3) must be skipped AND the step
+sequence compensated so the y3 lands at the pr=0 read. Fix options:
+(a) delay the y3's pipeline by one more (shift_p3) so its write lands
+at s14/pwfi[0]; (b) a one-shot address offset for the last product.

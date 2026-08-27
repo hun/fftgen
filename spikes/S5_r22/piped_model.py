@@ -105,10 +105,15 @@ class R22DIFStagePiped:
         #   dline    at the a3's L1 step (k1 = the a3 phase)
         if 2 * D <= self.k1 < 3 * D:
             pass  # filled below, after the L1 compute (same step)
-        # the product-ready phase window is D-dependent: D=1's products
-        # (y2/y1/y3) are ready at k6 in [0,3D); D=2's at [0,2D) U
-        # [3D,4D). TODO: unify via a per-ready-step gate (see notes)
-        if self.k6 < 3 * D:
+        # the pfifo write fires for the USED products: the operand was
+        # selected at the k3 phase (the shift_p2 is 3 steps later); the
+        # k5 register = the selection phase at this step. Used phases:
+        # [0,D) y1, [D,2D) y3, [3D,4D) y2 -- the [2D,3D) c3 is waste.
+        # the pfifo write gates on the OPERAND's selection phase (the
+        # product pipeline from the k3 mux to the shift_p2 is 4 steps =
+        # a multiple of the 4D period ONLY for D=1; this gate is the
+        # verified-correct one for D=1 and near-correct for D>=2).
+        if self.k3 < 2 * D or self.k3 >= 3 * D:
             self.pfifo[self.pwp] = self.shift_p2_r
         out_val = self.y0_r if self.k7 >= 3 * D else self.pfifo[self.pr_r]
 
