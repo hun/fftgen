@@ -53,12 +53,12 @@ class R22DIFStagePiped:
         self.k1 = 0                 # capture phase delayed to L2
         self.k2 = 0
         self.k3 = 0
-        self.k4 = 0                 # capture phase delayed to L5
+        self.k4 = 0
         self.out = (0, 0)
 
     @property
     def latency(self):
-        return 3 * self.D + 6
+        return 3 * self.D + 5
 
     def _rot(self, z):
         return (-self.js * z[1], self.js * z[0])
@@ -79,15 +79,16 @@ class R22DIFStagePiped:
         #   output mux  depth 4 (y0_r)        gate k4
         if k < 2 * D:
             self.ram[self.rp] = (r, i)
-        if self.k1 < 2 * D:
+        if self.k4 < 2 * D or self.k4 >= 3 * D:
             self.pfifo[self.pwp] = self.shift_p_r
         if 2 * D <= self.k1 < 3 * D:
-            self.sram[self.sp] = self.s0_r
-            self.dram[self.sp] = self.d0_r
+            # the write is one clock later than the read's address
+            # (sp has advanced): target (sp-1) mod D
+            wa = (self.sp - 1) % D
+            self.sram[wa] = self.s0_r
+            self.dram[wa] = self.d0_r
         if self.k1 >= 3 * D:
-            self.dline[self.sp] = self.d1_r
-        if self.k4 >= 3 * D:
-            self.pfifo[self.pwp] = self.shift_p_r
+            self.dline[(self.sp - 1) % D] = self.d1_r
         out_val = self.y0_r if self.k4 >= 3 * D else self.pfifo[self.pr_r]
 
         # ---- L0 capture (combinational reads at t) ----
@@ -128,8 +129,9 @@ class R22DIFStagePiped:
         # ---- L3: combine (from the t-1 products) ----
         p = self.prod_r
 
-        # ---- L4: round_shift (from the t-1 p and the delayed y0) ----
-        if self.k1 >= 3 * D:
+        # ---- L4: round_shift (from the t-1 p and the delayed y0).
+        # The shift select uses k3: the product's capture phase (t-3).
+        if self.k3 >= 3 * D:
             sh = self.td + self.sigma1
         else:
             sh = self.td + self.sigma0 + self.sigma1
@@ -144,21 +146,23 @@ class R22DIFStagePiped:
         self.sd_r = sd
         self.c1_r = c1; self.c3_r = c3
         self.t_r = t_r
-        self.k1 = k_r
-        self.k2 = self.k1
-        self.k3 = self.k2
+        # delay chains shift in REVERSE order (each stage captures the
+        # PREVIOUS stage's old value)
         self.k4 = self.k3
+        self.k3 = self.k2
+        self.k2 = self.k1
+        self.k1 = k_r
         self.prod_r = prod
         self.p_r = p
-        self.y0_raw_r = y0_raw
-        self.y0_raw2_r = self.y0_raw_r
         self.y0_raw3_r = self.y0_raw2_r
+        self.y0_raw2_r = self.y0_raw_r
+        self.y0_raw_r = y0_raw
         self.y0_r = y0_s
         self.shift_p_r = shift_p
         self.rp = (self.rp + 1) % (2 * D)
         self.sp = (self.sp + 1) % D
         self.pwp = (self.pwp + 1) % (2 * D)
-        self.pr_r = (self.pwp + 1 - D - 1) % (2 * D)
+        self.pr_r = (self.pwp - D) % (2 * D)
         self.out = out_val
         return ret
 
@@ -194,7 +198,7 @@ def run_piped(cfg, samples):
     for s in range(2 * len(stages), n):
         D = N >> (s + 1)
         sig = cfg.shifts[s]
-        for start in range(0, N, 2 * D):
+        for start in range(0, len(x), 2 * D):
             for j in range(D):
                 i1 = start + j
                 i2 = i1 + D
