@@ -425,3 +425,37 @@ extra read register (the model = the contract), NOT guess-and-check.
 
 Current committed state: 20/20 bit-exact, KU5P impl WNS -0.051
 (36 eps, the BRAM-DOUT->c1/c3/sd paths), 20 DSPs.
+
+## 3-DSP cmult investigation (thoughts/cmult.v) -- IN PROGRESS
+
+The reference implements the Gauss trick with a shared term:
+    common = (a-c)*d,  pr = (b-d)*a + common,  pi = (b+d)*c + common
+    (= a*b - c*d, c*b + a*d EXACTLY)
+3 multiplies instead of 4 -> the R2^2 stage drops from 4 to 3 DSPs
+(the N=2048 core: 20 -> 15).
+
+Verified:
+- identity exact at the integer level and at the MWB/PW truncation
+  level (200k random, all widths).
+- RTL prototype: N=4 (D=1) BIT-EXACT via rtl_check.
+- D=2 single stage: 40/40 identical to the 4-DSP RTL (direct RTL-vs-
+  RTL, not model-compare).
+Warnings/bugs found along the way:
+- common_r <= mult0 (nonblocking) is ONE CLOCK STALE in the p sum =>
+  the ALU must add the same-clock MREG directly (p_re = multr+mult0).
+- Verilog '*' sizes to the WIDEST OPERAND, not the product: the
+  19-bit t_diff * 18-bit m_re computes at 19 bits, losing the top;
+  all multiplicands must be pre-widened to MWB (like the original
+  m_re_w/tr_w).
+- my diagnostic harness's stim parser (f>>hex) silently zeroed the
+  input (a red herring).
+
+Open puzzle: the D=4 stage diverges from the 4-DSP at the frame-2+
+outputs with the SAME m/t operands but different p/out (D=2 is clean,
+D=4+ breaks). The 3-DSP p-arithmetic is DEPTH-independent, so the
+divergence smells like a downstream interaction (pfifo/y0 gate at the
+16-phase period) rather than the multiply arithmetic. Needs the fresh
+pass: dump the shift_p/pfifo slotting for the D=4 frame-2 in both
+versions.
+NEXT: solve the D=4 divergence, then re-verify the full sweep, then
+synthesize (expect DSPs 20 -> 15).
