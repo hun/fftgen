@@ -100,6 +100,21 @@ module fft_stage_r22 #(
     (* ram_style = "distributed" *)
     reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
     reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+    integer _i;
+    initial begin
+        for (_i = 0; _i < 2*DEPTH; _i = _i + 1) begin
+            ram_re[_i] = {WIDTH{1'b0}};   ram_im[_i] = {WIDTH{1'b0}};
+        end
+        for (_i = 0; _i < DEPTH; _i = _i + 1) begin
+            sram_re[_i] = {WIDTH{1'b0}};  sram_im[_i] = {WIDTH{1'b0}};
+            dram_re[_i] = {WIDTH{1'b0}};  dram_im[_i] = {WIDTH{1'b0}};
+            dline_re[_i] = {WIDTH{1'b0}}; dline_im[_i] = {WIDTH{1'b0}};
+        end
+        for (_i = 0; _i < 2*DEPTH; _i = _i + 1) begin
+            pfifo_re[_i] = {WIDTH{1'b0}};  pfifo_im[_i] = {WIDTH{1'b0}};
+        end
+    end
+
 
     // phase counter (free-running, aligned to the input stream by
     // K_PRELOAD = (-upstream_latency) mod 4D); the delayed chain
@@ -286,7 +301,6 @@ module fft_stage_r22 #(
     // ------------------------------------------------------------------
     reg [PW-1:0] shift_p_re, shift_p_im;
     reg [PW-1:0] shift_p2_re, shift_p2_im;   // the pfifo write value
-    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw5_re, y0_raw5_im;
     (* shreg_extract = "no" *) reg [WIDTH-1:0] y0_r_re, y0_r_im;
 
     // L5 gates

@@ -361,3 +361,36 @@ with 160 endpoints: the write-data paths (x_r -> the rounded s_x/d_x
 -> the RAMS32/D SP, ~2.09ns, route-dominated) + the BRAM-DOUT->c1
 (1.86) + the tw_dout->DSP-B. Next: the 2-cycle BRAM read (the DOUT
 CKO 1.4ns out of the L1 paths) and/or the post-route phys_opt.
+
+## 2-cycle BRAM read exploration (WIP, NOT landed)
+
+Goal: pull the BRAM DOUT CKO (~1.4ns) out of the L1 paths (the
+post-P&R WNS -0.123 is dominated by the BRAM-DOUT->c1 (1.86) and the
+x_r->write-data (2.09) paths). Attempted: a second read register
+(L0b: a_q/s_q/d_q/dl_q + x_q) so the L1 adders see plain-FF inputs.
+
+Findings:
+- Fix 1: the input x MUST get the same +1 delay (x_q) -- the L1
+  butterfly pairs the reads with the input, both must be the same
+  clock's data. This was the first silent break (the all-zeros).
+- Fix 2 (the model): the Python 2-cycle model must assign the r-regs
+  from the OLD q-regs (reverse order: `a_r = a_q; ... a_q = cur_a`)
+  to emulate the Verilog nonblocking -- a sequential `a_q = cur;
+  a_r = a_q` gives NO delay.
+- The minimal 2-cycle (the L0b+x_q with the ORIGINAL k-gates):
+  values preserved (the stream is the old's shifted by one -- the
+  first frame's head gets displaced), latency 3D+9; the emergence
+  observed at lat-1 with a trailing zero -- the slice/emergence needs
+  one more off-by-one pass.
+- ANY gate-shift (mux k3->k4, shift k5->k7, pfifo k7->k9, writes
+  k1->k2) BREAKS the pfifo values (2/8) -- the +1 does NOT propagate
+  that way; the L0b's delay changes the select-vs-data relationship
+  differently for the mux (data-relative) vs the pfifo (absolute
+  window) gates. The correct mapping needs a careful model-first pass
+  (the model = the contract) rather than the guess-and-check.
+- The committed state is the a41f6bf + the duplicate-y0_raw5 removal
+  + the ring zero-initialization (both verified-harmless): 20/20
+  bit-exact N=4..2048 fwd+inv, synth WNS -0.020, post-P&R -0.123.
+
+NEXT for the closure: finish the L0b mapping in the model (the
+pfifo's slot semantics under the +1), then mirror + re-verify.
