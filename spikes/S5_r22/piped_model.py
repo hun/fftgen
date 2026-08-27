@@ -1,5 +1,10 @@
 """Spike S5g: PIPELINED R2^2 DIF stage model (timing closure).
 
+WIP: the L0-L5 structure is right but NOT yet bit-exact -- the
+y0/product output alignment still has an off-by-one; needs a
+dedicated debugging session (mirror the per-depth phase gates
+and the pfifo lag exactly).
+
 Mirrors the planned pipelined fft_stage_r22 register-for-register:
 the step() is the posedge -- L5 writes use the t-1 pipeline registers,
 L0 captures the combinational reads, L1..L4 compute the next-stage
