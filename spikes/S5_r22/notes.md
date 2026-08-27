@@ -207,3 +207,21 @@ Reference for later: thoughts/cmult.v -- a 3-DSP fully pipelined
 complex multiplier (Vivado docs, Gauss trick) vs our 4-DSP Karatsuba.
 Could cut the R2^2 stage's DSP count if the ALU/pre-adder structure
 accepts it (the F4 combine needs the cross terms though).
+
+## L0 retiming -- pfifo ring wrap (the LAST bug for D>=2)
+
+N=4 is 8/8 bit-exact. N=8 raw is 11/12 -- only pos7 (the LAST product
+of the block, the y3g1) reads the stale y3g0 from pfifo[2] instead of
+the y3g1 at pfifo[0]. The pfifo ring (depth 2D=4) with the 3D=6
+products/block and the lag D=2: the six reads cycle pr = 1,2,3,0,1,2
+(the 6 product slots for 2 groups), but the LAST product's slot
+(pfifo[0]) is written at s18 (the shift_p2 of the y3g1 is ready at
+s17, written at s17 to pfifo[1] after the y1g1 slot) and read at
+pr=0 (s21) -- one step/slot late. The fix needs the pfifo ring's
+write/read pointer arithmetic to place the block's LAST product in the
+slot the LAST read expects (the ring's wrap alignment at the block
+boundary). The 4th new product (the block's 6th) should overwrite the
+1st-read slot after its read.
+
+Status: the L0 register retiming produces CORRECT product VALUES; the
+pfifo delivery of the block's last product is one slot off for D>=2.

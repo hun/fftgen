@@ -105,7 +105,7 @@ class R22DIFStagePiped:
         #   dline    at the a3's L1 step (k1 = the a3 phase)
         if 2 * D <= self.k1 < 3 * D:
             pass  # filled below, after the L1 compute (same step)
-        if self.k6 < 3 * D:
+        if self.k6 < 2 * D or self.k6 >= 3 * D:
             self.pfifo[self.pwp] = self.shift_p2_r
         out_val = self.y0_r if self.k7 >= 3 * D else self.pfifo[self.pr_r]
 
