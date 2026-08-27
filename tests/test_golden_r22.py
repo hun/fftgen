@@ -248,5 +248,51 @@ class TestR22StreamingModel(unittest.TestCase):
         self.assertEqual(m.latency, 66)
 
 
+
+class TestR22StreamingModelDit(unittest.TestCase):
+    """Cycle-accurate streaming DIT R2² model (bitrev-in / native-out)
+    must reproduce the DIT batch contract bit-exactly."""
+
+    @staticmethod
+    def _bitrev(N, n):
+        return [int(format(k, "0%db" % n)[::-1], 2) for k in range(N)]
+
+    def _check(self, cfg, frames=2, seed=7):
+        from golden import R22SDFGoldenModelDit
+        rng = random.Random(seed)
+        N = cfg.num_points
+        br = self._bitrev(N, cfg.num_stages)
+        raw = _rand_frame(N * frames, cfg.sample_width, rng)
+        samples = [raw[f * N + br[j]]
+                   for f in range(frames) for j in range(N)]
+        got = R22SDFGoldenModelDit(cfg).process_stream(samples)
+        exp = []
+        for f in range(frames):
+            fr = samples[f * N:(f + 1) * N]
+            exp += fft_fixed_batch_r22_dit(fr, cfg)
+        mism = [(k, got[k], exp[k]) for k in range(len(got))
+                if got[k] != exp[k]]
+        self.assertEqual(mism, [], f"{cfg}: {len(mism)} mismatches")
+
+    def test_sizes_fwd_inv(self):
+        for N in (4, 8, 16, 32, 64, 128, 256):
+            for inv in (False, True):
+                with self.subTest(N=N, inv=inv):
+                    self._check(FFTConfig(num_points=N, inverse=inv,
+                                          input_order="bitreversed",
+                                          output_order="native"))
+
+    def test_odd_stage_count(self):
+        for N in (8, 32, 128):
+            with self.subTest(N=N):
+                self._check(FFTConfig(num_points=N,
+                                      input_order="bitreversed",
+                                      output_order="native"))
+
+    def test_multi_frame(self):
+        self._check(FFTConfig(num_points=16, input_order="bitreversed",
+                              output_order="native"), frames=4)
+
+
 if __name__ == "__main__":
     unittest.main()

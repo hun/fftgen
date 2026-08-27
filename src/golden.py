@@ -512,6 +512,183 @@ class R22SDFGoldenModel:
         return self.process_stream(samples)
 
 
+# ----------------------------------------------------------------------
+# P7: cycle-accurate streaming DIT R2² model (mirror topology)
+# ----------------------------------------------------------------------
+
+class _R22DITStage:
+    """One radix-2² DIT stage (stage pair (A, A+1) merged).
+
+    Mirror of :class:`_R22DIFStage` with multiply-then-combine: the
+    three products t1/t2/t3 are computed at the a1/a2/a3 arrivals
+    (ONE shared complex multiplier, 75% duty), then the F₄ combine at
+    the a3 clock with the exact ±j rotations. Group depth H = 2^A,
+    twiddle stride 4^{m'}, block size 4H:
+
+      k in [0, H):    a0 -> v0 = a0 << td -> vline (depth 3H)
+      k in [H, 2H):   a1 -> t1 = cmul(a1, T[2j*4^m']) -> t1line (2H)
+      k in [2H, 3H):  a2 -> t2 = cmul(a2, T[j*4^m'])   -> t2line (H)
+      k in [3H, 4H):  a3 -> t3 = cmul(a3, T[3j*4^m']); F₄ combine
+                      (y0 out, y1/y2/y3 into the H/2H/3H queues)
+
+    Position p's value emerges at clock p + 3H (stage latency 3H).
+    """
+
+    def __init__(self, A: int, n: int, N: int, sA: int, sB: int,
+                 td: int, tw: Sequence[Complex], inverse: bool = False):
+        self.A = A
+        self.n = n
+        self.N = N
+        self.sA, self.sB = sA, sB
+        self.td = td
+        self.H = 1 << A
+        self.base = 4 ** ((n - 2 - A) // 2)
+        self.js = -1 if not inverse else 1
+        self.tw = tw
+        self.vline = [(0, 0)] * (3 * self.H)
+        self.t1line = [(0, 0)] * (2 * self.H)
+        self.t2line = [(0, 0)] * self.H
+        self.q1 = [(0, 0)] * self.H
+        self.q2 = [(0, 0)] * (2 * self.H)
+        self.q3 = [(0, 0)] * (3 * self.H)
+        self.out = (0, 0)
+        self.vp = 0
+        self.t1p = 0
+        self.t2p = 0
+        self.q1p = 0
+        self.q2p = 0
+        self.q3p = 0
+
+    @property
+    def latency(self) -> int:
+        return 3 * self.H + 1        # +1: the registered output
+
+    def _rot(self, z: Complex) -> Complex:
+        return (-self.js * z[1], self.js * z[0])
+
+    def _prod(self, z: Complex, t: Complex) -> Complex:
+        return complex_multiply_karatsuba(z[0], z[1], t[0], t[1])
+
+    def step(self, x: Complex, pos: int) -> Complex:
+        H = self.H
+        ret = self.out
+        r, i = x
+        k = pos % (4 * H)
+        j = pos % H
+        S = self.td + self.sA + self.sB
+        cur = (0, 0)
+        if k < H:
+            self.vline[self.vp] = (r << self.td, i << self.td)
+            cur = self.q1[self.q1p]
+        elif k < 2 * H:
+            self.t1line[self.t1p] = self._prod(
+                (r, i), self.tw[(2 * j * self.base) % self.N])
+            cur = self.q2[self.q2p]
+        elif k < 3 * H:
+            self.t2line[self.t2p] = self._prod(
+                (r, i), self.tw[(j * self.base) % self.N])
+            cur = self.q3[self.q3p]
+        else:
+            t3 = self._prod((r, i), self.tw[(3 * j * self.base) % self.N])
+            v0 = self.vline[self.vp]
+            t1 = self.t1line[self.t1p]
+            t2 = self.t2line[self.t2p]
+            r2 = self._rot(t2)
+            r3 = self._rot(t3)
+            y0 = (round_shift(v0[0] + t1[0] + t2[0] + t3[0], S),
+                  round_shift(v0[1] + t1[1] + t2[1] + t3[1], S))
+            y2 = (round_shift(v0[0] + t1[0] - t2[0] - t3[0], S),
+                  round_shift(v0[1] + t1[1] - t2[1] - t3[1], S))
+            y1 = (round_shift(v0[0] - t1[0] + r2[0] - r3[0], S),
+                  round_shift(v0[1] - t1[1] + r2[1] - r3[1], S))
+            y3 = (round_shift(v0[0] - t1[0] - r2[0] + r3[0], S),
+                  round_shift(v0[1] - t1[1] - r2[1] + r3[1], S))
+            self.q1[self.q1p] = y1
+            self.q2[self.q2p] = y2
+            self.q3[self.q3p] = y3
+            cur = y0
+
+        self.vp = (self.vp + 1) % (3 * H)
+        self.t1p = (self.t1p + 1) % (2 * H)
+        self.t2p = (self.t2p + 1) % H
+        self.q1p = (self.q1p + 1) % H
+        self.q2p = (self.q2p + 1) % (2 * H)
+        self.q3p = (self.q3p + 1) % (3 * H)
+        self.out = cur
+        return ret
+
+
+class R22SDFGoldenModelDit:
+    """Cycle-accurate streaming model of the R2² DIT pipeline (P7):
+    bit-reversed input, natural output (the mirror of the DIF core).
+
+    The odd-n leftover (DIT stage 0, the trivial ±1 stage) runs FIRST
+    as a plain radix-2 DIT stage, then the pairs (A, A+1) for
+    A = 1, 3, ... (or A = 0, 2, ... for even n). Verified bit-exact
+    against :func:`fft_fixed_batch_r22_dit`.
+    """
+
+    def __init__(self, cfg: FFTConfig):
+        if cfg.ssr != 1:
+            raise NotImplementedError("R22 model supports ssr=1 only")
+        if not cfg.is_dit or cfg.input_order != "bitreversed" \
+                or cfg.output_order != "native":
+            raise NotImplementedError(
+                "R22 DIT model covers bitreversed->native only")
+        self.cfg = cfg
+        N = cfg.num_points
+        self.N = N
+        n = cfg.num_stages
+        td = cfg.twiddle_decimal
+        tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
+        self.leftover = None
+        self.stages = []
+        lo = 0 if n % 2 == 0 else 1
+        if lo == 1:
+            self.leftover = _SDFStage(0, N, cfg.shifts[0], td, [tw[0]],
+                                      dit=True)
+        k = 0
+        while lo + 2 * k + 1 < n:
+            A = lo + 2 * k
+            self.stages.append(_R22DITStage(
+                A, n, N, cfg.shifts[A], cfg.shifts[A + 1], td, tw,
+                cfg.inverse))
+            k += 1
+        self.latency = (11 if self.leftover is not None else 0) \
+            + sum(st.latency for st in self.stages)
+
+    def process_stream(self, samples, markers=None):
+        """Bit-reversed input stream -> natural-order output (bit-exact vs
+        the DIT batch contract)."""
+        N = self.N
+        raw = []
+        T = len(samples)
+        for pos in range(T + self.latency):
+            src = samples[pos] if pos < T else (0, 0)
+            cur = src[:2]
+            up = 0
+            if self.leftover is not None:
+                cur = self.leftover.step(cur[0], cur[1])
+                up += 11
+            for st in self.stages:
+                cur = st.step(tuple(cur), pos - up)
+                up += st.latency
+            raw.append(cur)
+        raw = raw[self.latency:]
+        outs = []
+        for f in range(len(raw) // N):
+            frame = raw[f * N:(f + 1) * N]
+            q = [quantize_output(re, im, self.cfg.sample_decimal,
+                                 self.cfg.output_width,
+                                 self.cfg.output_decimal)
+                 for re, im in frame]
+            if markers is not None:
+                for kk, (re, im) in enumerate(q):
+                    outs.append((re, im) + tuple(markers[f * N + kk]))
+            else:
+                outs.extend(q)
+        return outs
+
 def fft_fixed_batch_r22_dit(samples: Sequence[Complex], cfg: FFTConfig,
                             twiddles: Optional[Sequence[Complex]] = None
                             ) -> List[Complex]:
