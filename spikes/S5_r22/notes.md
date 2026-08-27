@@ -275,3 +275,18 @@ product reaches the pfifo; the group-1's sd selection or its twiddle
 (g_r2) pairing produces a missing/wrong write. The y2 product
 ordering for the second group needs a check of the operand mux vs the
 sd_r pipeline (the sd of group 1 at its combine step vs the k3 phase).
+
+## The D=2 product window (decisive)
+
+The D=2's shift_p2 holds the SIX products at CONSECUTIVE steps s12-s17
+(y2g0, y3g0, y1g0, y2g1, y1g1, y3g1) with the pre-edge k3 phases
+1,2,3,4,5,6. The fixed gate [0,2D) U [3D,4D) = [0,4) U [6,8) covers
+1,2,3,6 but MISSES 4,5 (the y2g1 and y1g1) -- the group-1 products
+are lost. D=1's three products at s9-s11 (k3 phases 3,0,1) happen to
+fit [0,2) U [3,4). So the pfifo write must fire on the block's 3D
+CONSECUTIVE product-ready steps (a product-window flag tracking the
+first product's ready step), NOT a fixed phase window.
+
+Next session: replace the phase-gated pfifo write with a per-block
+product-window flag (set when the first product of the block is in the
+shift_p2 pipeline, clear 3D steps later). This unifies D=1 and D=2.
