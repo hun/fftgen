@@ -459,3 +459,36 @@ pass: dump the shift_p/pfifo slotting for the D=4 frame-2 in both
 versions.
 NEXT: solve the D=4 divergence, then re-verify the full sweep, then
 synthesize (expect DSPs 20 -> 15).
+
+## 3-DSP cmult -- ROOT CAUSE FOUND + full investigation conclusion
+
+The D=4 divergence root cause: Verilog sizes the +/- operators to
+the widest OPERAND, so `tr_r2 - ti_r2` (both 18-bit) evaluates at 18
+bits -- a result like +185,364 has the 18-bit sign bit set and gets
+sign-extended as NEGATIVE. Fix: widen the operands first:
+  wire signed [TW:0] t_diff = $signed({{1{tr[TW-1]}}, tr}) - $signed({{1{ti[TW-1]}}, ti});
+(same for t_sum and m_diff). With the fix the D=4 stage is 34/34
+identical to the 4-DSP and the FULL rtl_check is 20/20 BIT-EXACT.
+
+The synthesis does NOT give 3 DSPs: the Vivado refactors the three
+Gauss products into FOUR DSPs per stage (20 total, not 15) -- the
+common (a-c)*d fans to BOTH re/im C-inputs, so its product gets
+duplicated (the mapping shows two (C or 0)+A*B2 and two
+(C+((D'-A2)*B2)')' per stage). AND the timing degrades (impl WNS
+-1.002 vs the 4-DSP's -0.051): the extra LUT adders + the cross-DSP
+fanouts.
+
+The registered-common (common_r) fanout hub is INHERENTLY one clock
+stale -- the nonblocking `common_r <= mult0` re-registers the MREG,
+so the p sum would pair the multr with the PREVIOUS clock's common
+(verified: cycle-18's p used the cycle-16 multr with the cycle-15
+common). Fixing it needs an extra pipeline hop (together with the
+multr_r register), shifting all the downstream gates.
+
+CONCLUSION: the Gauss arithmetic is proven and bit-exact (20/20),
+but reproducing the reference's 3-DSP count in our RTL requires
+either explicit DSP48E2 instantiation or the +1-common-pipeline
+shift -- and neither fixes the worse timing (the cross-DSP/LUT-add
+paths). The 4-DSP committed state (20 DSPs, WNS -0.051) remains the
+best synthesizable design. The 3-DSP port is documented for the
+future (a DSP-primitive effort), with AR/BR/MR/PR usage in mind.
