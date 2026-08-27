@@ -144,3 +144,26 @@ Status: the values are NOT yet bit-exact (the first-stage y0 is off);
 this is a multi-iteration effort like the plain core's NLAYERS 7->10.
 The synthesis proof stands: 20 DSPs at N=2048 R=1; 500 MHz closure is
 the remaining P7 work.
+
+## Pipelined RTL (WIP, committed) -- status after the model milestone
+
+The L0-L5 pipelined `rtl/fft_stage_r22.v` is WRITTEN but NOT yet bit-exact
+(Verilator: N=4 stage outputs (10275, 23021) at cycle 7 instead of
+(5138, -21258); the y0_raw chain's values are subtly wrong -- the
+y0_raw3 after cycle 5 shows ~2x the expected y0_raw of the a3, so a
+duplicated add or a wrong sram value is lurking).
+
+Verified structure (the model is the contract -- piped_model.py):
+- the L1 is COMBINATIONAL from the async reads/input (NOT registered
+  captures) -- a registered L1 is one clock behind the model's step
+- the lag-D lines (sram/dram/dline) MUST be written at the ARRIVAL
+  clock (depth 0, the current combinational s_x/d_x, plain sp): a
+  nonblocking write cannot be seen in the same clock, so the model's
+  depth-1 write + (sp-1) address is NOT synthesizable as-is
+- the pfifo write and the output mux use the depth-4 registers (k4)
+- the shift select uses k3 (the product's capture phase)
+
+Next session: VCD-trace the y0_raw/s0/sx values against the model's
+per-cycle values (spikes/S5_r22/piped_model.py prints the model's
+cycle-by-cycle outputs); the y0_raw chain, the sram write value, and
+the round_shift staging are the suspects.

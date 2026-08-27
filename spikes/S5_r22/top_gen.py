@@ -35,7 +35,7 @@ def top_rtl(cfg):
         sig0 = cfg.shifts[2 * g]
         sig1 = cfg.shifts[2 * g + 1]
         rom_base = sum(3 * (N >> (2 * t + 2)) for t in range(g))
-        up_lat = sum(3 * (N >> (2 * t + 2)) + 1 for t in range(g))
+        up_lat = sum(3 * (N >> (2 * t + 2)) + 5 for t in range(g))
         k_pre = (-up_lat) % (4 * D)
         stages.append(f"""    fft_stage_r22 #(
         .DEPTH          ({D}),
@@ -148,7 +148,7 @@ module fft_r22_top #(
 endmodule
 `default_nettype wire
 """
-    lat = sum(3 * (N >> (2 * t + 2)) + 1 for t in range(npairs))
+    lat = sum(3 * (N >> (2 * t + 2)) + 5 for t in range(npairs))
     if leftover:
         lat += 11
     return src, lat
