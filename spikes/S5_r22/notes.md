@@ -260,3 +260,18 @@ product -- step 11's product (a waste-c3) must be skipped AND the step
 sequence compensated so the y3 lands at the pr=0 read. Fix options:
 (a) delay the y3's pipeline by one more (shift_p3) so its write lands
 at s14/pwfi[0]; (b) a one-shot address offset for the last product.
+
+## k3 gate verified fully for D=1; D=2's group-1 y2 missing
+
+The k3 gate (operand-phase [0,2D) U [3D,4D)) + shift_p2 writes is
+verified for D=1: y2->pfifo[0] (s10) [y3 overwrites after the read],
+y1->pfifo[1] (s11), y3->pfifo[0] (s12); the reads pr=0,1,0 at the
+positions 1,2,3 deliver y2,y1,y3 at steps 12,13,14 (pos0=y0@11).
+N=4 is 8/8 both directions.
+
+N=8 (D=2): 12/16 -- the GROUP-1's y2 (pos4) is ZERO. The D=2's sd
+products: the k3 mux selects sd at [6,8) (2 phases) but only ONE sd
+product reaches the pfifo; the group-1's sd selection or its twiddle
+(g_r2) pairing produces a missing/wrong write. The y2 product
+ordering for the second group needs a check of the operand mux vs the
+sd_r pipeline (the sd of group 1 at its combine step vs the k3 phase).
