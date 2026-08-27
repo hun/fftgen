@@ -402,8 +402,32 @@ class R22SDFGoldenModel:
                 m, N, cfg.shifts[2 * m], cfg.shifts[2 * m + 1], td, tw,
                 cfg.inverse))
             m += 1
-        self.nleft = n - 2 * m              # leftover plain stages
-        self.latency = sum(st.latency for st in self.stages)
+        # leftover last stage (odd n): the trivial W^0 stage as a plain
+        # radix-2 SDF stage (D=1). Its reset state aligns directly to the
+        # R2² chain's output (verified); it contributes D + NLAYERS = 11.
+        self.leftover = None
+        if n % 2 == 1:
+            self.leftover = _SDFStage(n - 1, N, cfg.shifts[n - 1], td,
+                                      [tw[0]], dit=False)
+            # the chain's first output arrives at this stage after the
+            # R2² latency; the D=1 COMPUTE/PASS phase must be flipped by
+            # (chain_latency mod 2) so the first real pair lands on a
+            # COMPUTE clock (verified for N = 8..1024)
+            for _ in range(sum(st.latency for st in self.stages) % 2):
+                self.leftover.step(0, 0)
+        self.latency = sum(st.latency for st in self.stages) \
+            + (11 if self.leftover is not None else 0)
+        # post-warm leftover state (RTL reset preloads): mirrors the plain
+        # model's stage_preloads format
+        self.leftover_preload = None
+        if self.leftover is not None:
+            lo = self.leftover
+            self.leftover_preload = {
+                "wptr": lo.wptr, "pwp": lo.pwp,
+                "raddr": (lo.wptr - lo.D) % (2 * lo.D),
+                "pipe": list(lo.pipe_comp),
+                "phase_i": lo.i, "compute": lo.in_compute,
+            }
         self._sb = deque()
         self._cycles = 0
 
@@ -418,8 +442,8 @@ class R22SDFGoldenModel:
 
     def tick(self, enabled: bool, re: int = 0, im: int = 0,
              tuser: int = 0, tlast: int = 0):
-        """One clock. The R2² stages run in lockstep; the leftover stage
-        (odd n) is applied per-frame by process_stream."""
+        """One clock; the R2² stages and the streaming leftover run in
+        lockstep."""
         if not enabled:
             return False, 0, 0, 0, 0
         cur = (re, im)
@@ -431,6 +455,8 @@ class R22SDFGoldenModel:
             # model's warmup presets do the same alignment)
             cur = st.step(cur, pos - up)
             up += st.latency
+        if self.leftover is not None:
+            cur = self.leftover.step(cur[0], cur[1])
         self._cycles += 1
         self._sb.append((tuser, tlast))
         valid = self._cycles > self.latency
@@ -441,32 +467,9 @@ class R22SDFGoldenModel:
         return valid, cur[0], cur[1], u, l
 
     def _apply_leftover(self, frame):
-        """Batch-style leftover last stage (odd n): plain radix-2 DIF."""
-        if self.nleft == 0:
-            return frame
-        N = self.N
-        x = [list(v) for v in frame]
-        tw = canonical_twiddles(N, self.cfg.twiddle_width,
-                                self.cfg.twiddle_decimal,
-                                self.cfg.inverse)
-        td = self.cfg.twiddle_decimal
-        for s in range(2 * len(self.stages), self.cfg.num_stages):
-            D = N >> (s + 1)
-            sig = self.cfg.shifts[s]
-            for start in range(0, N, 2 * D):
-                for j in range(D):
-                    i1 = start + j
-                    i2 = i1 + D
-                    ar, ai = x[i1]
-                    br, bi = x[i2]
-                    x[i1] = [round_shift(ar + br, sig),
-                             round_shift(ai + bi, sig)]
-                    dr, di = ar - br, ai - bi
-                    cr, ci = tw[(j << s) % N]
-                    pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
-                    sh = td + sig
-                    x[i2] = [round_shift(pr, sh), round_shift(pi, sh)]
-        return [tuple(v) for v in x]
+        """Retained for reference only; the streaming leftover in the
+        chain replaces the per-frame batch form."""
+        return frame
 
     def process_stream(self, samples, markers=None, frames=None):
         """Run frames through the R2² chain; apply the leftover stage per
@@ -474,7 +477,8 @@ class R22SDFGoldenModel:
         contract)."""
         N = self.N
         # lockstep the whole stream (plus drain cycles) through the R2²
-        # stages; drop the warmup so positions 0..T-1 align
+        # stages and the streaming leftover; drop the warmup so positions
+        # 0..T-1 align
         raw = []
         T = len(samples)
         for pos in range(T + self.latency):
@@ -484,12 +488,14 @@ class R22SDFGoldenModel:
             for st in self.stages:
                 cur = st.step(tuple(cur), pos - up)
                 up += st.latency
+            if self.leftover is not None:
+                cur = self.leftover.step(cur[0], cur[1])
             raw.append(cur)
         raw = raw[self.latency:]
         assert len(raw) == T
         outs = []
         for f in range(len(raw) // N):
-            frame = self._apply_leftover(raw[f * N:(f + 1) * N])
+            frame = raw[f * N:(f + 1) * N]
             q = [quantize_output(re, im, self.cfg.sample_decimal,
                                  self.cfg.output_width,
                                  self.cfg.output_decimal)
