@@ -167,3 +167,21 @@ Next session: VCD-trace the y0_raw/s0/sx values against the model's
 per-cycle values (spikes/S5_r22/piped_model.py prints the model's
 cycle-by-cycle outputs); the y0_raw chain, the sram write value, and
 the round_shift staging are the suspects.
+
+## L0-register retiming (user directive: ALL ram reads need a register)
+
+The timing-critical async LUTRAM reads must land in registers before
+they fan out. The piped DIF model is being retimed with an explicit
+L0 register stage (the reads captured at the posedge, the L1 consumes
+them one step later). This shifts the whole schedule: the a2/a3
+butterflies arrive one clock later, the s0/s1 combine becomes
+s_r + s0_r at step 3D+g+2, the products move to k3/k4/k5/k6/k7 gates,
+the pfifo writes use shift_p2 at the k6<3D gate, the mux gate is k7.
+
+STATUS: N=4 (D=1) is BIT-EXACT both directions. D>=2 fail at the
+stagger: the y1/y3 twiddle must be selected by the DATA's group
+(the sp-based group, = (sp-1) mod D in this schedule), not the read
+phase -- the retimed schedule decouples the two (the d0/d1 of group g
+are read at sp=g+1, and the twiddle T[g*4^m] must follow the group,
+not the k phase). This is the next fix: capture the twiddle (and the
+group) with the L0 d_r/dl_r read instead of the k phase.
