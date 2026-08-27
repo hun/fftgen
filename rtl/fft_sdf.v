@@ -156,7 +156,7 @@ module fft_sdf #(
                 (((2*DEPTH) - ((SUM_D + PIPE_DEPTH*g) % (2*DEPTH))) % (2*DEPTH));
             localparam integer PRELOAD_I = WARM % DEPTH;
             localparam        PRELOAD_C = (WARM >= DEPTH) ? 1 : 0;
-            // slice this stage's preload from the pack (63 bits each)
+            // slice this stage's preload from the pack (74 bits each)
             localparam [4159:0] PRE_SLICE =
                 {{64{1'b0}}, PRELOAD_PACK} >> (74 * g);
             localparam [15:0] WPTR_PRE = PRE_SLICE[15:0];
@@ -172,7 +172,6 @@ module fft_sdf #(
                 .SHIFT          (SHIFT),
                 .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
                 .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-                .K_STRIDE       (1 << g),
                 .ROM_BASE       (SUM_D),
                 .NPTS           (N),
                 .PRELOAD_I      (PRE_I),
@@ -275,7 +274,6 @@ module fft_stage #(
     parameter integer SHIFT          = 1,    // per-stage scaling shift 0..2
     parameter integer TWIDDLE_WIDTH  = 18,
     parameter integer TWIDDLE_DECIMAL= 17,
-    parameter integer K_STRIDE       = 1,    // (unused; generator pre-permutes)
     parameter integer ROM_BASE       = 0,
     parameter integer NPTS           = 16,
     // NO declared width: the parameter takes the width of the value
@@ -289,6 +287,7 @@ module fft_stage #(
     parameter [15:0]  RADDR_PRE      = 16'h0,
     parameter [8:0]   PIPE_PRE       = 9'h0,
     parameter integer TOPOLOGY       = 0,    // 0 = DIF, 1 = DIT
+    parameter integer K_STRIDE       = 1,    // (unused; generator pre-permutes twiddles)
     // 1 = trivial-twiddle stage (W^0 = (1,0) only): the product path is
     // an exact pass-through -- no DSPs. DIF stage n-1 / DIT stage 0.
     parameter integer TRIVIAL        = 0,
@@ -375,7 +374,6 @@ module fft_stage #(
     // combinational pr = pwp - D, but the address is registered for the
     // BRAM/LUTRAM address input (breaks the pointer->memory->out path).
     reg [RAMW-1:0] pr_r /*verilator public_flat*/;
-    wire [RAMW-1:0] pr = pwp - DEPTH[RAMW-1:0]; // (combinational, debug)
 
     // FSM
     reg          in_compute /*verilator public_flat*/;                  // 0 = PASS/FILL, 1 = COMPUTE

@@ -35,8 +35,6 @@ module fft_top #(
     output wire [OUTPUT_WIDTH-1:0]     m_axis_tdata_im,
     output wire                        m_axis_tuser,
     output wire                        m_axis_tlast,
-    output wire [NUM_POINTS*INTERN_WIDTH-1:0] dbg_stage_re,
-    output wire [NUM_POINTS*INTERN_WIDTH-1:0] dbg_stage_im,
 
     input  wire                        rst
 );

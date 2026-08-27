@@ -124,8 +124,15 @@ def parse_util(path: str) -> dict:
     for line in open(path):
         parts = [p.strip() for p in line.split("|")]
         if len(parts) >= 3 and parts[1].rstrip("*") in UTIL_ROWS:
+            raw = parts[2].strip()
             try:
-                res[parts[1].rstrip("*")] = int(parts[2])
+                # Block RAM Tile reports halves (e.g. 10.5); keep as float
+                # and render without trailing .0 for integers.
+                if "." in raw:
+                    v = float(raw)
+                    res[parts[1].rstrip("*")] = (int(v) if v.is_integer() else v)
+                else:
+                    res[parts[1].rstrip("*")] = int(raw)
             except ValueError:
                 pass
     return res

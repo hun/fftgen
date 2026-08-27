@@ -116,6 +116,7 @@ int main(int argc, char** argv) {
         int64_t mre = (ore & ((int64_t)1 << (OW-1))) ? (ore | ~(((int64_t)1 << OW)-1)) : ore;
         int64_t mim = (oim & ((int64_t)1 << (OW-1))) ? (oim | ~(((int64_t)1 << OW)-1)) : oim;
         fout << mre << " " << mim << "\n";
+
         dut->clk = 0; dut->eval();
         cycle++;
     }

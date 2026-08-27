@@ -34,25 +34,61 @@ from typing import List, Sequence, Tuple
 import math
 
 from config import FFTConfig
-from golden import SDFGoldenModel, ReorderModel
+from golden import SDFGoldenModel, R22SDFGoldenModel, ReorderModel
 from twiddles import canonical_twiddles
 from quant import round_shift, quantize_output
 
 
 class _SSRLane:
-    """One R=1 engine: DIF core + ping-pong reorder -> native order."""
+    """One R=1 engine: DIF core + ping-pong reorder -> native order.
 
-    def __init__(self, m_cfg: FFTConfig):
+    arch = "r2" (plain radix-2, ``fft_sdf``) or "r22" (radix-2^2,
+    ``fft_sdf_r22`` / ``R22SDFGoldenModel``). For r22 the RTL pipeline
+    (3*D+9 per pair, AREG/BREG) is deeper than the 3*D+1 golden stage,
+    so an extra delay aligns valid to the RTL's N+sum(3D+9)+M latency.
+    """
+
+    def __init__(self, m_cfg: FFTConfig, arch: str = "r2"):
         import copy
+        from collections import deque
         core_cfg = copy.copy(m_cfg)
         core_cfg.input_order = "native"
         core_cfg.output_order = "bitreversed"
-        self.core = SDFGoldenModel(core_cfg, dit=False)
+        if arch == "r22":
+            self.core = R22SDFGoldenModel(core_cfg)
+            # RTL r22 core LATENCY = M + sum(3*D+9) [+11]  (see rtl/fft_sdf_r22.v)
+            M = m_cfg.num_points
+            n = core_cfg.num_stages
+            pipelined = sum(3 * (M >> (2 * m + 2)) + 10 for m in range(n // 2))
+            if n % 2:
+                pipelined += 11
+            rtl_core_lat = M + pipelined
+            # golden core latency (3*D+1) + reorder M
+            golden_lane = self.core.latency + M
+            rtl_lane = rtl_core_lat + M
+            self._extra = rtl_lane - golden_lane
+            self._extra_q: deque = deque()
+            # prefill extra delay with invalid entries
+            for _ in range(max(0, self._extra)):
+                self._extra_q.append((False, 0, 0, 0, 0))
+        else:
+            self.core = SDFGoldenModel(core_cfg, dit=False)
+            self._extra = 0
+            self._extra_q = None
+        self.arch = arch
         self.reorder = ReorderModel(m_cfg.num_points)
-        self.latency = self.core.latency + m_cfg.num_points
+        # lane latency as seen by SSR crossbar (core + reorder + extra)
+        if arch == "r22":
+            self.latency = self.core.latency + m_cfg.num_points + max(0, self._extra)
+        else:
+            self.latency = self.core.latency + m_cfg.num_points
 
     def tick(self, enabled: bool, re: int, im: int, u: int, l: int):
         v1, re, im, uu, ll = self.core.tick(enabled, re, im, u, l)
+        if self.arch == "r22" and self._extra > 0:
+            # delay core valid+data to match RTL pipeline (3D+9 vs 3D+1)
+            self._extra_q.append((v1, re, im, uu, ll))
+            v1, re, im, uu, ll = self._extra_q.popleft()
         v2, re, im, extra = self.reorder.tick(enabled and v1, re, im,
                                               (uu, ll))
         if extra is None:
@@ -61,25 +97,32 @@ class _SSRLane:
 
 
 class SSRGoldenModel:
-    """Streaming SSR FFT model. See module docstring for the contract."""
+    """Streaming SSR FFT model. See module docstring for the contract.
 
-    def __init__(self, cfg: FFTConfig):
+    arch selects the per-lane engine: "r2" (default, plain radix-2)
+    or "r22" (P7, one multiply/pair). Both share the same crossbar.
+    """
+
+    def __init__(self, cfg: FFTConfig, arch: str = "r2"):
         if cfg.ssr < 2:
             raise ValueError("SSRGoldenModel requires cfg.ssr >= 2")
         if cfg.input_order != "native":
             raise NotImplementedError("SSR v1 supports native input only")
         if cfg.output_order != "native":
             raise NotImplementedError("SSR v1 supports native output only")
+        if arch not in ("r2", "r22"):
+            raise ValueError(f"arch must be 'r2' or 'r22', got {arch!r}")
         R = cfg.ssr
         M = cfg.num_points // R
         self.cfg = cfg
         self.R = R
         self.M = M
+        self.arch = arch
         import copy
         lane_cfg = copy.copy(cfg)
         lane_cfg.num_points = M
         lane_cfg.ssr = 1
-        self.lanes = [_SSRLane(lane_cfg) for _ in range(R)]
+        self.lanes = [_SSRLane(lane_cfg, arch=arch) for _ in range(R)]
         if R >= 8:
             self.CB_LAT = 11    # +input reg, G/H, Q-reg, partials, scalar
         self.latency = self.lanes[0].latency + self.CB_LAT
@@ -104,11 +147,17 @@ class SSRGoldenModel:
 
     # ------------------------------------------------------------------
     def reset(self):
+        from collections import deque
         for ln in self.lanes:
             ln.core.reset()
             ln.reorder.reset()
+            if ln.arch == "r22" and ln._extra > 0:
+                ln._extra_q = deque()
+                for _ in range(ln._extra):
+                    ln._extra_q.append((False, 0, 0, 0, 0))
         self._cycles = 0
         self._slot = 0
+        self._synced = False
 
     def tick(self, word_re: Sequence[int], word_im: Sequence[int],
              mk: Sequence[Tuple[int, int]]):
@@ -129,7 +178,10 @@ class SSRGoldenModel:
         self._cycles += 1
         # the lanes carry A_r[p] with p counted from THEIR first valid
         # output (they all share the same latency, hence lockstep)
-        p = (self._cycles - self.lanes[0].latency) % M
+        # r22 lane has one extra output register (m_re_r) vs r2, so p
+        # lags by one; compensate for bit-exact alignment.
+        p_off = 1 if self.arch == "r22" else 0
+        p = (self._cycles - self.lanes[0].latency - p_off) % M
         self._dbg_p = p
         self._dbg_lane = [(lo[1], lo[2], lo[0]) for lo in lane_out]
         filled = self._cycles > self.lanes[0].latency + self.CB_LAT

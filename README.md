@@ -18,7 +18,7 @@ All implementation phases (P0–P6) are complete; see the phase table in
 
 - **R = 1 (SDF)**: bit-exact N = 2…128 (all four input/output order corners,
   fwd/inv, widths 8…25, `ce`-freeze suites); 500 MHz met post-synth on KU5P
-  for N = 64…8192 (worst WNS +0.158).
+  for N = 64…8192 (worst WNS +0.107).
 - **DSP reduction (P6)**: the DIF last two / DIT first two stages multiply
   only by W^0/±j and emit exact fabric products — R=1 N=2048 uses **36 DSPs**
   (was 44), R=2 N=2048 **68** (was 84), N=4 **0**; timing unchanged.

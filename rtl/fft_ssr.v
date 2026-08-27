@@ -90,9 +90,7 @@ module fft_ssr #(
                 .m_axis_tdata_re(ore),
                 .m_axis_tdata_im(oim),
                 .m_axis_tuser   (ou),
-                .m_axis_tlast   (ol),
-                .dbg_stage_re   (),
-                .dbg_stage_im   ()
+                .m_axis_tlast   (ol)
             );
         end
     endgenerate
