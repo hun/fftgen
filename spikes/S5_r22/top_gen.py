@@ -3,7 +3,8 @@
 
 def _leftover_preload(cfg):
     """Post-warm leftover state for the PIPELINED chain (parity based on
-    the RTL's 3D+6 stage latencies, not the stream model's 3D+1)."""
+    the RTL's 3D+8 stage latencies -- 3D+8 = odd iff D is odd, same as
+    3D+6, so the parity formula is unchanged)."""
     from golden import R22SDFGoldenModel
     from golden import _SDFStage
     m = R22SDFGoldenModel(cfg)
@@ -13,7 +14,7 @@ def _leftover_preload(cfg):
     from twiddles import canonical_twiddles
     tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
     lo = _SDFStage(n - 1, N, cfg.shifts[n - 1], td, [tw[0]], dit=False)
-    chain_mod2 = sum(3 * (N >> (2 * t + 2)) + 6 for t in range(n // 2)) % 2
+    chain_mod2 = sum(3 * (N >> (2 * t + 2)) + 8 for t in range(n // 2)) % 2
     for _ in range(chain_mod2):
         lo.step(0, 0)
     pipe = int("".join("1" if b else "0"
@@ -39,7 +40,7 @@ def top_rtl(cfg):
         sig0 = cfg.shifts[2 * g]
         sig1 = cfg.shifts[2 * g + 1]
         rom_base = sum(3 * (N >> (2 * t + 2)) for t in range(g))
-        up_lat = sum(3 * (N >> (2 * t + 2)) + 6 for t in range(g))
+        up_lat = sum(3 * (N >> (2 * t + 2)) + 8 for t in range(g))
         k_pre = (-up_lat) % (4 * D)
         stages.append(f"""    fft_stage_r22 #(
         .DEPTH          ({D}),
@@ -153,7 +154,7 @@ module fft_r22_top #(
 endmodule
 `default_nettype wire
 """
-    lat = sum(3 * (N >> (2 * t + 2)) + 6 for t in range(npairs))
+    lat = sum(3 * (N >> (2 * t + 2)) + 8 for t in range(npairs))
     if leftover:
         lat += 11
     return src, lat

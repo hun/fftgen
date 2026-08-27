@@ -324,3 +324,21 @@ four reads, the k-chain to k7, the pfifo/window gates, the pos-derived
 pointers -- the RTL equivalences are the pre-edge semantics), update
 top_gen.py (the K_PRELOAD = -upstream latencies, the leftover preload
 parity using the 3D+8 latencies), and re-verify + synthesize.
+
+## L0-retimed RTL verified 16/16 (N=4..2048, fwd+inv)
+
+rtl/fft_stage_r22.v rewritten as a 1:1 mirror of the verified
+piped_model.py: L0 regs (the 4 async reads + input + g_r), the L1
+wires from the L0 regs (y0_raw/sd pair s_r + the s0_r L1 reg), the
+k-chain extended to k7, the gates (ram k, sram/dram/dline k1,
+pfifo k7 in [0,2D) U [3D,4D), out k7, product mux + ROM select k3,
+shift select k5), shift_p2, and the PHASE-DERIVED pointers (rp/pwp =
+k mod 2D, sp = k mod D with D=1 special case, pr = (k-D) mod 2D) --
+the chained stage's k is its own step index, so the ring addresses
+follow the model's step-index pointers. The AREG/BREG regs are
+dropped (the DSP absorbs the L1-reg mux); latency 3D+8. top_gen.py
+updated (up_lat/K_PRELOAD/lat 3D+8; the leftover parity 3D+8 is odd
+iff D odd, same as 3D+6).
+
+rtl_check: 16/16 BIT-EXACT (skip = lat-1 consistently).
+NEXT: KU5P synthesis at 500 MHz (WNS target >= 0, 20 DSPs).
