@@ -405,3 +405,23 @@ combines, dd ~1.79-1.85ns -- the residual is the RAMB DOUT CKO ~1.4
 L0b read (a second read register) is the structural fix for the
 DOUT-CKO; the model-first derivation of its exact gate mapping is
 the next step (documented above).
+
+## L0b (2-cycle read) -- conclusively NOT a simple +1
+
+With the assignment order CORRECTED (the r-regs = the previous q-regs,
+matching the Verilog nonblocking), the true 2-cycle model produces
+values that match the RTL's garbage EXACTLY -- the +1 read-delay
+BREAKS the schedule (the pfifo/products land in the wrong slots).
+The earlier "32/32 bit-exact" was an artifact: the min2c's sequential
+`a_q = cur; a_r = a_q` made the a_r = the CURRENT reads (a no-op).
+
+Single-gate shifts all fail (mux k4, shift k6, pfifo k8/k9, writes
+k2, group g_r3, and the full combination): the L0b's delay changes
+the select-vs-data relationships in a way that a uniform +1 does not
+capture -- the pfifo's absolute-phase window and the products'
+data-relative slots move differently. Closing the DOUT-CKO (~1.4ns)
+this way needs a full re-derivation of the phase windows under the
+extra read register (the model = the contract), NOT guess-and-check.
+
+Current committed state: 20/20 bit-exact, KU5P impl WNS -0.051
+(36 eps, the BRAM-DOUT->c1/c3/sd paths), 20 DSPs.
