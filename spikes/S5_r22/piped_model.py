@@ -105,7 +105,10 @@ class R22DIFStagePiped:
         #   dline    at the a3's L1 step (k1 = the a3 phase)
         if 2 * D <= self.k1 < 3 * D:
             pass  # filled below, after the L1 compute (same step)
-        if self.k6 < 2 * D or self.k6 >= 3 * D:
+        # the product-ready phase window is D-dependent: D=1's products
+        # (y2/y1/y3) are ready at k6 in [0,3D); D=2's at [0,2D) U
+        # [3D,4D). TODO: unify via a per-ready-step gate (see notes)
+        if self.k6 < 3 * D:
             self.pfifo[self.pwp] = self.shift_p2_r
         out_val = self.y0_r if self.k7 >= 3 * D else self.pfifo[self.pr_r]
 

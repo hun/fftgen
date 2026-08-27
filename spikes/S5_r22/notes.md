@@ -225,3 +225,17 @@ boundary). The 4th new product (the block's 6th) should overwrite the
 
 Status: the L0 register retiming produces CORRECT product VALUES; the
 pfifo delivery of the block's last product is one slot off for D>=2.
+
+## The decisive finding: the pfifo write gate is D-dependent
+
+The product-ready phases (the shift_p2 ready steps mapped to k6):
+  D=1: y2@k6=0, y1@k6=1, y3@k6=2  -> gate k6 < 3D (N=4 8/8)
+  D=2: 6 products @ k6 = 6,7,0,1,2,3 -> gate k6 in [0,2D) U [3D,4D)
+The two gates conflict (D=1's y3 at k6=2 lands in [2D,3D) which D=2's
+gate excludes). Root: the pipeline-delayed product-ready steps are not
+a fixed phase window; they depend on where the combine lands vs the
+block boundary (D=1's combine at 3D+2 -> products @ ~3D+6+1 -> phases
+0..3D-1; D=2's at different relative steps). Fix: derive the READY
+STEPS per D (the shift_p2 ready step for each of the 3D used products)
+and gate the write on the ready steps, not a fixed k-window. This is
+the last structural piece; the product VALUES are all correct.
