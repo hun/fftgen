@@ -22,12 +22,8 @@ def top_rtl(cfg):
     leftover = (n % 2 == 1)
     intern = cfg.sample_width + max(0, n - sum(cfg.shifts)) + 1
 
-    se_re = ('    wire signed [INTERN_WIDTH-1:0] in_x_re =\n'
-             '        {{(INTERN_WIDTH-SAMPLE_WIDTH){in_re[SAMPLE_WIDTH-1]}}, '
-             'in_re};')
-    se_im = ('    wire signed [INTERN_WIDTH-1:0] in_x_im =\n'
-             '        {{(INTERN_WIDTH-SAMPLE_WIDTH){in_im[SAMPLE_WIDTH-1]}}, '
-             'in_im};')
+    se_re = '    assign in_x_re = in_re;'
+    se_im = '    assign in_x_im = in_im;'
 
     stages = []
     for g in range(npairs):
@@ -138,6 +134,7 @@ module fft_r22_top #(
     wire signed [INTERN_WIDTH-1:0] w_re [0:NPAIRS-1];
     wire signed [INTERN_WIDTH-1:0] w_im [0:NPAIRS-1];
     wire signed [INTERN_WIDTH-1:0] w_lo_re, w_lo_im;
+    wire signed [INTERN_WIDTH-1:0] in_x_re, in_x_im;
 {se_re}
 {se_im}
 {chr(10).join(stages)}
