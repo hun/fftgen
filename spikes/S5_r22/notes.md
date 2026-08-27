@@ -290,3 +290,18 @@ first product's ready step), NOT a fixed phase window.
 Next session: replace the phase-gated pfifo write with a per-block
 product-window flag (set when the first product of the block is in the
 shift_p2 pipeline, clear 3D steps later). This unifies D=1 and D=2.
+
+## N=256+ chain alignment (the last piece)
+
+N<=128 verified (12/12 for the 4..128 fwd+inv sweep). N=256+ single
+frame fails at pos16. Each stage passes in isolation (D=64, D=16
+both 512/512 fed raw samples; the D=16 also 512/512 fed the stage-0
+stream at the aligned step). The 2-stage run-style chain diverges at
+pos16 with the ROTATED values ((a,b)->(b,-a) -- a j-multiplied
+neighbor), suggesting a k-phase or warmup-state misalignment in the
+multi-stage feeding that does NOT appear in the single-stage or the
+clean max(N) direct feed. The negative-step warmup (the chain feeds
+steps -lat0..0) vs clean (0..) behavior is the suspect -- the phase-
+gated writes during the negative warmup may differ. Next: trace the
+2-stage chain's s1 input vs the clean feed at pos16 (the s1's k and
+the sram/dram contents at the divergence).

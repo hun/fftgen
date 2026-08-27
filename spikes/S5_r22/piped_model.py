@@ -73,6 +73,7 @@ class R22DIFStagePiped:
         self.k5 = 0
         self.k6 = 0
         self.k7 = 0
+        self.pw_r = 0               # the product-window countdown (0 none)
         self.out = (0, 0)
 
     @property
@@ -109,11 +110,7 @@ class R22DIFStagePiped:
         # selected at the k3 phase (the shift_p2 is 3 steps later); the
         # k5 register = the selection phase at this step. Used phases:
         # [0,D) y1, [D,2D) y3, [3D,4D) y2 -- the [2D,3D) c3 is waste.
-        # the pfifo write gates on the OPERAND's selection phase (the
-        # product pipeline from the k3 mux to the shift_p2 is 4 steps =
-        # a multiple of the 4D period ONLY for D=1; this gate is the
-        # verified-correct one for D=1 and near-correct for D>=2).
-        if self.k3 < 2 * D or self.k3 >= 3 * D:
+        if self.k7 < 2 * D or self.k7 >= 3 * D:
             self.pfifo[self.pwp] = self.shift_p2_r
         out_val = self.y0_r if self.k7 >= 3 * D else self.pfifo[self.pr_r]
 
@@ -190,6 +187,9 @@ class R22DIFStagePiped:
         self.k3 = self.k2
         self.k2 = self.k1
         self.k1 = cur_k
+        # (the pfifo write gates on the operand's selection phase via
+        # k7 = the phase 3+4=7 steps back at the pre-edge: the k3-during
+        # the L1 selection of the product now in the shift_p2)
         self.a_r = cur_a
         self.s_r = cur_s
         self.d_r = cur_d
