@@ -305,3 +305,22 @@ steps -lat0..0) vs clean (0..) behavior is the suspect -- the phase-
 gated writes during the negative warmup may differ. Next: trace the
 2-stage chain's s1 input vs the clean feed at pos16 (the s1's k and
 the sram/dram contents at the divergence).
+
+## L0 retiming COMPLETE: 160/160 bit-exact (N=4..2048)
+
+The final bug was the RING POINTERS: a chained stage is called with
+pos-up (its own step index), so the rp/sp/pwp/pr_r must derive from
+the step (pos+1 mod size), NOT the accumulated call count -- the
+upstream warmup calls skewed the ring addresses by the upstream
+latency mod D, misaligning the D-lag memories.
+
+All paths verified: L0-registered reads, the s_r + s0_r combine at
+3D+g+2, the per-D gates (mux k3, shift k5, pfifo k7 in [0,2D) U
+[3D,4D)), the mux k7, the latency 3D+8. 160 configs (N 4..2048,
+fwd+inv, sample widths 16/18/20/24, twiddle widths 16/18).
+
+NEXT: mirror this retimed model in rtl/fft_stage_r22.v (register the
+four reads, the k-chain to k7, the pfifo/window gates, the pos-derived
+pointers -- the RTL equivalences are the pre-edge semantics), update
+top_gen.py (the K_PRELOAD = -upstream latencies, the leftover preload
+parity using the 3D+8 latencies), and re-verify + synthesize.

@@ -213,9 +213,12 @@ class R22DIFStagePiped:
         self.y0_r = y0_s
         self.shift_p2_r = self.shift_p_r
         self.shift_p_r = shift_p
-        self.rp = (self.rp + 1) % (2 * D)
-        self.sp = (self.sp + 1) % D
-        self.pwp = (self.pwp + 1) % (2 * D)
+        # pointers derive from the STEP index (pos): a chained stage is
+        # called with pos-up (its own step), so the ring addresses stay
+        # aligned regardless of the upstream warmup call count.
+        self.rp = (pos + 1) % (2 * D)
+        self.sp = (pos + 1) % D
+        self.pwp = (pos + 1) % (2 * D)
         self.pr_r = (self.pwp - D) % (2 * D)
         self.out = out_val
         return ret
