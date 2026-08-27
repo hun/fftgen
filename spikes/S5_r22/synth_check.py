@@ -44,7 +44,7 @@ synth_design -top fft_r22_top -part $part
 create_clock -period $period_ns -name clk [get_ports clk]
 report_utilization -file utilization.rpt
 report_timing_summary -delay_type max -max_paths 10 -file timing.rpt
-{"opt_design\nplace_design\nphys_opt_design\nroute_design\nreport_utilization -file utilization_impl.rpt\nreport_timing_summary -delay_type max -max_paths 10 -file timing_impl.rpt" if impl else ""}
+{"opt_design\nplace_design\nphys_opt_design\nroute_design\nphys_opt_design\nroute_design\nreport_utilization -file utilization_impl.rpt\nreport_timing_summary -delay_type max -max_paths 10 -file timing_impl.rpt" if impl else ""}
 """
     open(os.path.join(outdir, "synth.tcl"), "w").write(tcl)
     r = subprocess.run(

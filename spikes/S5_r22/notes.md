@@ -394,3 +394,14 @@ Findings:
 
 NEXT for the closure: finish the L0b mapping in the model (the
 pfifo's slot semantics under the +1), then mirror + re-verify.
+
+## Post-route phys_opt: WNS -0.051 (from -0.123), 36 eps
+
+The default flow ran phys_opt before route only. Added a second
+phys_opt + re-route after route_design: the KU5P impl WNS improved
+from -0.123 to -0.051 (the top path: the BRAM DOUT -> the c3/sd L1
+combines, dd ~1.79-1.85ns -- the residual is the RAMB DOUT CKO ~1.4
++ the L1 XOR/add logic). 20 DSPs, 36 failing endpoints. The 2-cycle
+L0b read (a second read register) is the structural fix for the
+DOUT-CKO; the model-first derivation of its exact gate mapping is
+the next step (documented above).
