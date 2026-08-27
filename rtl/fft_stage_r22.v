@@ -8,7 +8,7 @@
 // instead of 4). Group depth D = N/4^{m+1}, twiddle stride 4^m
 // (pre-sliced ROM: [T[g*4^m]], [T[2g*4^m]], [T[3g*4^m]]).
 //
-// Pipeline (each stage = one register; the phase chain k1..k7 is the
+// Pipeline (each stage = one register; the phase chain k1..k8 is the
 // delayed capture phase for the per-depth write gates):
 //   L0   the four async memory reads + the input + the twiddle group
 //        are captured in registers BEFORE any fanout (the user
@@ -19,32 +19,33 @@
 //        register s0_r (the previous clock's s0), so
 //        y0_raw/sd = s_r +/- s0_r (the retimed pairing), and
 //        c1/c3 = d_r +/- j*dl_r
-//   L2   product operand mux (gate k3 = the operand's selection
-//        phase) + the 4 multiplies (DSP48E2; the L1 regs feed the
-//        AREG/BREG inputs)
+//   L2a  the DSP AREG/BREG operand capture: the product mux (k3) and
+//        the BRAM-twiddle DOUT registered so the DSP48E2 uses its
+//        input registers (the A/B inputs are not combinational)
+//   L2b  the 4 multiplies (the DSP MREG)
 //   L3   re/im combine (the DSP ALU/PREG)
-//   L4   round-half-up staging (products by the k5-selected shift;
-//        y0 from the 4-deep y0_raw chain)
+//   L4   round-half-up staging (products by the k6-selected shift;
+//        y0 from the 5-deep y0_raw chain)
 //   L5   writes + output mux (per-depth gates)
 //
-// Writes and depths (from the verified piped model):
-//   ram    depth 0 (raw input)        gate k   (write-old/read-new
-//                                          at the same address, the
-//                                          async read gets the OLD)
-//   sram/  depth 0 (the CURRENT      gate k1  (the arrival clock =
+// Writes and depths (from the verified piped model, +1 for the
+// AREG/BREG stage):
+//   ram    depth 0 (raw input)        gate k    (the async read gets
+//                                          the OLD at the same address)
+//   sram/  depth 0 (the CURRENT      gate k1   (the arrival clock =
 //   dram   combinational s_x/d_x)              the reads' capture)
 //   dline  depth 0 (the CURRENT d_x) gate k1
-//   pfifo  depth 6 (shift_p2)        gate k7  (the operand-selection
-//                                          phase, [0,2D) U [3D,4D))
-//   output mux  depth 6 (y0_r)       gate k7; pfifo lag D
-//   shift select                      gate k5  (the product's capture)
+//   pfifo  depth 7 (shift_p2)        gate k8   (the operand phase,
+//                                          [0,2D) U [3D,4D))
+//   output mux  depth 7 (y0_r)       gate k8; pfifo lag D
+//   shift select                      gate k6   (the product's capture)
 //
 // Pointers: rp/sp/pwp/pr are derived from the PHASE (k mod the ring
 // sizes): a chained stage's phase is its OWN step index (K_PRELOAD =
 // -upstream latency), so the ring addresses stay aligned with the
 // model's step-index pointers regardless of the upstream warmup.
 //
-// Position p's value emerges at clock p + 3D + 8 (latency 3D+8).
+// Position p's value emerges at clock p + 3D + 9 (latency 3D+9).
 
 `default_nettype none
 
@@ -105,13 +106,14 @@ module fft_stage_r22 #(
     // k1..k7 is the capture phase at depth 1..7 (reverse-order shifts
     // in the model): during clock i, k_d = the phase at i-d.
     reg [KW-1:0] k;
-    reg [KW-1:0] k1;
-    reg [KW-1:0] k2;
-    reg [KW-1:0] k3;
-    reg [KW-1:0] k4;
-    reg [KW-1:0] k5;
-    reg [KW-1:0] k6;
-    reg [KW-1:0] k7;
+    (* shreg_extract = "no" *) reg [KW-1:0] k1;
+    (* shreg_extract = "no" *) reg [KW-1:0] k2;
+    (* shreg_extract = "no" *) reg [KW-1:0] k3;
+    (* shreg_extract = "no" *) reg [KW-1:0] k4;
+    (* shreg_extract = "no" *) reg [KW-1:0] k5;
+    (* shreg_extract = "no" *) reg [KW-1:0] k6;
+    (* shreg_extract = "no" *) reg [KW-1:0] k7;
+    (* shreg_extract = "no" *) reg [KW-1:0] k8;
 
     // the twiddle group of the L0 captures (=(sp-1) mod D) + the
     // delayed register (aligned with the L1 regs / the L2 mux)
@@ -138,27 +140,35 @@ module fft_stage_r22 #(
     // twiddle ROM: full R2² table (N entries), this pair's slice at
     // [ROM_BASE, ROM_BASE + 3D); slice 0 = T[g*4^m] (y1 = c1),
     // slice 1 = T[2g*4^m] (y2 = sd), slice 2 = T[3g*4^m] (y3 = c3)
+    //
+    // the read is REGISTERED (a BRAM DOUT): every LUTRAM read must
+    // land in a register before it fans into the DSP. The address is
+    // selected by (k2, g_r) at one clock BEFORE the product: the
+    // k2 reg at clock i = the phase at i-3 = the product's k3 at
+    // i+1, and the g_r at i = the group g_r2 at i+1, so the DOUT
+    // (visible at i+1) is exactly the product's twiddle.
     localparam integer ROMW = (NPTS > 1) ? $clog2(NPTS) : 1;
-    (* ram_style = "distributed" *)
+    (* ram_style = "block" *)
     reg signed [TWIDDLE_WIDTH*2-1:0] tw_rom [0:NPTS-1];
     initial $readmemh(TWIDDLE_FILE, tw_rom);
     localparam [ROMW-1:0] SLICE0 = 0;
     localparam [ROMW-1:0] SLICE1 = DEPTH;
     localparam [ROMW-1:0] SLICE2 = 2 * DEPTH;
-    // the L2 mux selects by k3 (the operand's selection phase):
+    // the L2 mux selects by the k3 phase (the operand's selection
+    // phase); the READ is computed one clock earlier from (k2, g_r):
     //   k3 >= 3D      -> sd  (y2), twiddle = T[2g*4^m]   = slice 1
     //   k3 <  D       -> c1  (y1), twiddle = T[g*4^m]    = slice 0
     //   D <= k3 < 3D  -> c3  (y3), twiddle = T[3g*4^m]   = slice 2
-    wire phase_mux_y2 = (k3 >= THREE_D);
-    wire phase_mux_y1 = (k3 <  ONE_D);
+    wire phase_mux_y2 = (k2 >= THREE_D);
+    wire phase_mux_y1 = (k2 <  ONE_D);
     wire [ROMW-1:0] rom_which = phase_mux_y2 ? SLICE1
                               : (phase_mux_y1 ? SLICE0 : SLICE2);
     wire [ROMW-1:0] rom_addr = ROM_BASE[ROMW-1:0] + rom_which
-                               + {{(ROMW-DW){1'b0}}, g_r2};
-    wire signed [TWIDDLE_WIDTH-1:0] tr = tw_rom[rom_addr]
+                               + {{(ROMW-DW){1'b0}}, g_r};
+    reg [TWIDDLE_WIDTH*2-1:0] tw_dout;
+    wire signed [TWIDDLE_WIDTH-1:0] tr = tw_dout
         [TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
-    wire signed [TWIDDLE_WIDTH-1:0] ti = tw_rom[rom_addr]
-        [TWIDDLE_WIDTH-1:0];
+    wire signed [TWIDDLE_WIDTH-1:0] ti = tw_dout[TWIDDLE_WIDTH-1:0];
 
     // round-half-up arithmetic right shift (BW domain, sums)
     function signed [BW-1:0] round_shift_bw;
@@ -236,26 +246,34 @@ module fft_stage_r22 #(
     wire signed [CB-1:0] c3_im = se_d0_im + js_d1_re;
 
     // L1 registers (the butterflies/combines; captured at the posedge)
-    reg [BW-1:0] s0_r_re, s0_r_im;
-    reg [BW-1:0] sd_r_re, sd_r_im;
-    reg [CB-1:0] c1_r_re, c1_r_im, c3_r_re, c3_r_im;
-    reg [BW-1:0] y0_raw_r_re, y0_raw_r_im;
-    reg [BW-1:0] y0_raw2_re, y0_raw2_im;
-    reg [BW-1:0] y0_raw3_re, y0_raw3_im;
-    reg [BW-1:0] y0_raw4_re, y0_raw4_im;
+    // (shreg_extract=no: the chains must be plain FFs -- the SRL16
+    // tap reads are combinational and land on the critical path)
+    (* shreg_extract = "no" *) reg [BW-1:0] s0_r_re, s0_r_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] sd_r_re, sd_r_im;
+    (* shreg_extract = "no" *) reg [CB-1:0] c1_r_re, c1_r_im, c3_r_re, c3_r_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw_r_re, y0_raw_r_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw2_re, y0_raw2_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw3_re, y0_raw3_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw4_re, y0_raw4_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw5_re, y0_raw5_im;
 
     // ------------------------------------------------------------------
-    // L2: product operand mux (by the k3 phase, from the L1 regs) +
-    // the multiplies (the DSP48E2; the L1 regs feed the AREG/BREG)
+    // L2a: the DSP AREG/BREG operand capture. The product mux (k3) and
+    // the twiddle are captured one clock BEFORE the multiply so the
+    // DSP48E2 absorbs its input registers (A, B) as well as the MREG
+    // and the PREG -- without them the twiddle/mux fan straight into
+    // the multiplier in one clock (the long path).
     // ------------------------------------------------------------------
     wire [CB-1:0] m_re = (k3 >= THREE_D) ? {{(CB-BW){sd_r_re[BW-1]}}, sd_r_re}
                         : (k3 < ONE_D ? c1_r_re : c3_r_re);
     wire [CB-1:0] m_im = (k3 >= THREE_D) ? {{(CB-BW){sd_r_im[BW-1]}}, sd_r_im}
                         : (k3 < ONE_D ? c1_r_im : c3_r_im);
-    wire signed [MWB-1:0] m_re_w = {{(MWB-CB){m_re[CB-1]}}, m_re};
-    wire signed [MWB-1:0] m_im_w = {{(MWB-CB){m_im[CB-1]}}, m_im};
-    wire signed [MWB-1:0] tr_w = {{(MWB-TWIDDLE_WIDTH){tr[TWIDDLE_WIDTH-1]}}, tr};
-    wire signed [MWB-1:0] ti_w = {{(MWB-TWIDDLE_WIDTH){ti[TWIDDLE_WIDTH-1]}}, ti};
+    reg [CB-1:0] m_r_re, m_r_im;                 // the AREG (operand)
+    reg [TWIDDLE_WIDTH-1:0] tr_r2, ti_r2;        // the BREG (twiddle)
+    wire signed [MWB-1:0] m_re_w = {{(MWB-CB){m_r_re[CB-1]}}, m_r_re};
+    wire signed [MWB-1:0] m_im_w = {{(MWB-CB){m_r_im[CB-1]}}, m_r_im};
+    wire signed [MWB-1:0] tr_w = {{(MWB-TWIDDLE_WIDTH){tr_r2[TWIDDLE_WIDTH-1]}}, tr_r2};
+    wire signed [MWB-1:0] ti_w = {{(MWB-TWIDDLE_WIDTH){ti_r2[TWIDDLE_WIDTH-1]}}, ti_r2};
     reg [MWB-1:0] prod_rr, prod_ri, prod_ir, prod_ii;   // the DSP MREG
 
     // ------------------------------------------------------------------
@@ -264,18 +282,19 @@ module fft_stage_r22 #(
     reg [PW-1:0] p_re, p_im;
 
     // ------------------------------------------------------------------
-    // L4: round-half-up staging (the k5-selected shift; the delayed y0)
+    // L4: round-half-up staging (the k6-selected shift; the delayed y0)
     // ------------------------------------------------------------------
     reg [PW-1:0] shift_p_re, shift_p_im;
     reg [PW-1:0] shift_p2_re, shift_p2_im;   // the pfifo write value
-    reg [WIDTH-1:0] y0_r_re, y0_r_im;
+    (* shreg_extract = "no" *) reg [BW-1:0] y0_raw5_re, y0_raw5_im;
+    (* shreg_extract = "no" *) reg [WIDTH-1:0] y0_r_re, y0_r_im;
 
     // L5 gates
     wire w_gate_ram = (k < TWO_D);
     wire w_gate_sd  = (k1 >= TWO_D && k1 < THREE_D);
     wire w_gate_dl  = (k1 >= THREE_D);
-    wire w_gate_pf  = (k7 < TWO_D || k7 >= THREE_D);
-    wire out_is_y0  = (k7 >= THREE_D);
+    wire w_gate_pf  = (k8 < TWO_D || k8 >= THREE_D);
+    wire out_is_y0  = (k8 >= THREE_D);
 
     always @(posedge clk) begin
         if (rst) begin
@@ -287,6 +306,7 @@ module fft_stage_r22 #(
             k5     <= K_PRELOAD[KW-1:0];
             k6     <= K_PRELOAD[KW-1:0];
             k7     <= K_PRELOAD[KW-1:0];
+            k8     <= K_PRELOAD[KW-1:0];
             g_r    <= {DW{1'b0}};
             g_r2   <= {DW{1'b0}};
             a_r_re <= {BW{1'b0}}; a_r_im <= {BW{1'b0}};
@@ -302,8 +322,11 @@ module fft_stage_r22 #(
             y0_raw2_re <= {BW{1'b0}}; y0_raw2_im <= {BW{1'b0}};
             y0_raw3_re <= {BW{1'b0}}; y0_raw3_im <= {BW{1'b0}};
             y0_raw4_re <= {BW{1'b0}}; y0_raw4_im <= {BW{1'b0}};
+            y0_raw5_re <= {BW{1'b0}}; y0_raw5_im <= {BW{1'b0}};
             prod_rr <= {MWB{1'b0}}; prod_ri <= {MWB{1'b0}};
             prod_ir <= {MWB{1'b0}}; prod_ii <= {MWB{1'b0}};
+            m_r_re <= {CB{1'b0}}; m_r_im <= {CB{1'b0}};
+            tr_r2 <= {TWIDDLE_WIDTH{1'b0}}; ti_r2 <= {TWIDDLE_WIDTH{1'b0}};
             p_re <= {PW{1'b0}}; p_im <= {PW{1'b0}};
             shift_p_re <= {PW{1'b0}}; shift_p_im <= {PW{1'b0}};
             shift_p2_re <= {PW{1'b0}}; shift_p2_im <= {PW{1'b0}};
@@ -312,6 +335,9 @@ module fft_stage_r22 #(
             out_im <= {WIDTH{1'b0}};
         end else if (ce) begin
             // ---- L0 registers (the reads + the input of THIS clock) ----
+            // (the data rings' reads are register-captured here; the
+            // twiddle reads into the BRAM-style tw_dout)
+            tw_dout <= tw_rom[rom_addr];
             a_r_re <= a0_re;    a_r_im <= a0_im;
             s_r_re <= s0_re;    s_r_im <= s0_im;
             d_r_re <= d0_re;    d_r_im <= d0_im;
@@ -328,11 +354,16 @@ module fft_stage_r22 #(
             y0_raw2_re <= y0_raw_r_re;  y0_raw2_im <= y0_raw_r_im;
             y0_raw3_re <= y0_raw2_re;   y0_raw3_im <= y0_raw2_im;
             y0_raw4_re <= y0_raw3_re;   y0_raw4_im <= y0_raw3_im;
+            y0_raw5_re <= y0_raw4_re;   y0_raw5_im <= y0_raw4_im;
             g_r2   <= g_r;
             k1 <= k; k2 <= k1; k3 <= k2; k4 <= k3;
-            k5 <= k4; k6 <= k5; k7 <= k6;
+            k5 <= k4; k6 <= k5; k7 <= k6; k8 <= k7;
 
-            // ---- L2: the products (the DSP MREG) ----
+            // ---- L2a: the DSP AREG/BREG operand capture ----------------
+            m_r_re <= m_re;   m_r_im <= m_im;
+            tr_r2 <= tr;      ti_r2 <= ti;
+
+            // ---- L2b: the products (the DSP MREG) ----------------
             prod_rr <= m_re_w * tr_w;
             prod_ri <= m_re_w * ti_w;
             prod_ir <= m_im_w * tr_w;
@@ -345,7 +376,7 @@ module fft_stage_r22 #(
                   + {{(PW-MWB){prod_ir[MWB-1]}}, prod_ir};
 
             // ---- L4: the round-half-up staging ----
-            if (k5 >= THREE_D) begin
+            if (k6 >= THREE_D) begin
                 shift_p_re <= round_shift_pw(p_re, TD_PLUS_S1);
                 shift_p_im <= round_shift_pw(p_im, TD_PLUS_S1);
             end else begin
@@ -353,8 +384,8 @@ module fft_stage_r22 #(
                 shift_p_im <= round_shift_pw(p_im, TD_PLUS_BOTH);
             end
             shift_p2_re <= shift_p_re;  shift_p2_im <= shift_p_im;
-            y0_r_re <= round_shift_bw(y0_raw4_re, SIGMA1)[WIDTH-1:0];
-            y0_r_im <= round_shift_bw(y0_raw4_im, SIGMA1)[WIDTH-1:0];
+            y0_r_re <= round_shift_bw(y0_raw5_re, SIGMA1)[WIDTH-1:0];
+            y0_r_im <= round_shift_bw(y0_raw5_im, SIGMA1)[WIDTH-1:0];
 
             // ---- L5: the writes and the output ----
             if (w_gate_ram) begin

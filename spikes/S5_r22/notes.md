@@ -342,3 +342,22 @@ iff D odd, same as 3D+6).
 
 rtl_check: 16/16 BIT-EXACT (skip = lat-1 consistently).
 NEXT: KU5P synthesis at 500 MHz (WNS target >= 0, 20 DSPs).
+
+## AREG/BREG DSP stage + shreg-extract: 16/16 bit-exact, WNS -0.02 syn / -0.123 impl
+
+The user flagged the DSP registers (a, d, ad, b, m, p): the mapping
+showed only MREG+PREG (the A/B inputs combinational). Re-added the
+AREG/BREG operand registers (m_r/tr_r2 = the k3-mux and the BRAM
+twiddle captured one clock before the multiply); the DSP report now
+shows AREG=1 BREG=1 MREG=1 PREG=1. The multiply's combinational path
+(B2->MULT->M_DATA->ALU, 1.85ns) is the new critical -- the DSP's
+M-register pipeline must be forced (the final netlist bypasses the
+MREG: the multiply+ALU run in one clock). Also forced shreg_extract
+= no on the y0_raw/k chains (the SRL tap reads were on the critical
+path). Latency 3D+9; verified 16/16 incl. N=2048 fwd+inv.
+
+KU5P @ 500MHz: synth WNS -0.020 (DSP-internal), post-P&R WNS -0.123
+with 160 endpoints: the write-data paths (x_r -> the rounded s_x/d_x
+-> the RAMS32/D SP, ~2.09ns, route-dominated) + the BRAM-DOUT->c1
+(1.86) + the tw_dout->DSP-B. Next: the 2-cycle BRAM read (the DOUT
+CKO 1.4ns out of the L1 paths) and/or the post-route phys_opt.
