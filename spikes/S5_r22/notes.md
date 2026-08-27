@@ -114,3 +114,33 @@ same treatment (P7 milestone 8): register the multiply operands into
 DSP input regs, the products into MREG, split the F4 combine into
 fabric stages, and the round_shift into a staging layer -- mirroring
 the model's combinational step with the RTL pipeline registers.
+
+## Timing closure (WIP) -- the pipelining plan
+
+The critical path (~7.2 ns) is the LUTRAM async-read mux (rp -> RAMS64E1
+-> MUXF7/8/9) PLUS the DSP48E2s used combinationally (the RTL's `wire
+prod = m*w` has no registers, so AREG/BREG/MREG/PREG are not absorbed).
+
+The pipeline (piped_model.py, WIP -- NOT yet bit-exact):
+  L0 capture   registered reads + input + twiddle + phase (k_r)
+  L1 butterfly s0/d0, s1/d1, sd = s0(ram-read) - s1, the +/-j combines,
+               y0 = s0(ram-read) + s1   (the s0 must come from the SRAM
+               read capture, NOT a held register)
+  L2 products  the 4 real multiplies (DSP MREG)
+  L3 combine   re = rr - ii, im = ri + ir
+  L4 shift     round-half-up staging (products AND y0, both at depth 4
+               so the output mux aligns)
+  L5 write     pfifo + sram/dram/dline/ram + output
+
+KEY discipline (the bug source): each write/mux uses its register at its
+OWN pipeline depth, gated by the matching delayed phase:
+  ram write   depth 0 (raw input)  gate k
+  sram/dram   depth 1 (L1 regs)    gate k1 (= k delayed 1)
+  dline       depth 1              gate k1
+  pfifo       depth 4 (shift_p)    gate k4
+  output mux  depth 4 (y0_r)       gate k4; pfifo lag = D + 1
+
+Status: the values are NOT yet bit-exact (the first-stage y0 is off);
+this is a multi-iteration effort like the plain core's NLAYERS 7->10.
+The synthesis proof stands: 20 DSPs at N=2048 R=1; 500 MHz closure is
+the remaining P7 work.
