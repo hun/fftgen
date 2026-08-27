@@ -94,3 +94,23 @@ bit-exactly.
    +/-j combine in fabric, P6 trivial_prod for the free sub-paths.
 4. Twiddle ROM re-layout (pair bases, stride 4^m slices).
 5. Bit-exact verification vs the re-pinned golden + timing sweep.
+
+## Synthesis: DSP reduction proven, timing needs pipelining
+
+`synth_check.py` synthesizes the full R2² core on KU5P:
+
+| config | R2² DSPs | vs P6 | vs original |
+|---|---|---|---|
+| N=2048 R=1 | **20** | 36 | 44 |
+
+Exactly the projection (5 general pairs x 4 DSPs + trivial leftover).
+
+Timing: NOT yet closed at 500 MHz (WNS −5.232 @ 2 ns; critical path
+~7.2 ns regardless of clock). The R2² stage's datapath is fully
+combinational (product -> F4 combine -> fused round_shift); the plain
+core's 500 MHz closure came from the 10-layer pipeline with DSP
+register absorption (AREG/BREG/MREG/PREG). The R2² stage needs the
+same treatment (P7 milestone 8): register the multiply operands into
+DSP input regs, the products into MREG, split the F4 combine into
+fabric stages, and the round_shift into a staging layer -- mirroring
+the model's combinational step with the RTL pipeline registers.
