@@ -242,7 +242,8 @@ Same stage, one parameter:
 IFFT is not a separate datapath: it is the same core with **conjugated
 twiddle ROM contents** and a different scaling schedule (the 1/N factor is
 distributed into the per-stage shifts). One RTL module, two generated
-configurations.
+configurations. For run-time `FFT↔IFFT` the `INVERSE` `parameter` becomes
+`input inv_i` (`generic DYNAMIC_INVERSE`): `W_N^k` `ti → -ti` (`1 XOR` on `Q` sign, magnitude-first table keeps `+1` saturated), `r22` `±j` (`js=−/+j`) and `fft_cross` `W_R^{rq}`/`W_N^{r p}` `±j`/`sqrt2/2` signs all mux on `inv_i` (`~30 LUT` total, `0` `BRAM/DSP`, `WNS` unchanged). `SCALING_PACK` `auto=(1,)*log2(N)` is identical for `FFT/IFFT`, so no `σ` mux is needed; `TOPOLOGY` (`D=N>>s+1` vs `1<<s`) stays as generated — `inv_i` keeps stream order (`native→bitrev` `DIF` or `bitrev→native` `DIT`, §4).
 
 ### 3.5 Twiddle storage
 
@@ -258,6 +259,12 @@ configurations.
   read is fused into the L0 capture so `t_reg` *is* the BRAM output
   register.
 - **URAM never stores twiddles** (no power-up initialization); see §7.
+
+### 3.6 Run-time `FFT↔IFFT` (`inv_i`)
+
+`N=1024 R=1 r22` `KU5P 2ns`: static `INV=0` `3438 LUT 20 DSP -0.020` → dynamic `inv_i` `3507 LUT (+69 +2%) 20 DSP -0.020` (`FFT` `ti→-ti` `1 XOR`, `r22` `js` `1 LUT/stage`, `cross` `W_R` `~10 LUT`). `0` `BRAM/DSP` cost, `1` `FF` for `inv_i` `ce` hold; `generic DYNAMIC_INVERSE=0` keeps `parameter` `0` penalty.
+
+**Order semantic with `inv_i`:** `inv_i` does **not** flip `native↔bitrev` — `TOPOLOGY` does. `FFT native→bitrev` `DIF` + `IFFT native→bitrev` `DIF` (same `D`) are *not* inverses as streams (`IFFT(FFT(x)) = R·x/N`). Closing `x/N native→native` needs `FFT native→bitrev` `DIF` + `IFFT bitrev→native` `DIT` (canonical `TX`/`RX` pair, `is_dit=input_order==bitreversed`). With `inv_i` alone the stream order stays as generated; to also flip order at run time add `1×N` `fft_reorder` after `DIF IFFT` or generate the `DIT` variant and mux `TOPOLOGY` (the `DYNAMIC_N` `Dcur` mux — `+22 LUT/stage`).
 
 ## 4. Output ordering (`fft_reorder`)
 
