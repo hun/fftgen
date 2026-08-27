@@ -48,6 +48,8 @@ class R22DIFStagePiped:
         self.x_r = (0, 0)           # the input
         self.t_r = (0, 0)           # the twiddle
         self.t_r2 = (0, 0)          # the twiddle delayed (aligns with L1 regs)
+        self.g_r = 0                # the group of the L0 reads ((sp-1)%D)
+        self.g_r2 = 0               # delayed (aligns with the L1 regs)
         # ---- L1 registers (the butterflies/combines)
         self.s0_r = (0, 0)          # the s_x (sram write / s1 at combine)
         self.d0_r = (0, 0)          # the d_x (dram/dline writes)
@@ -149,11 +151,14 @@ class R22DIFStagePiped:
         # phase of t-3 (the capture of the L1 regs' values) ----
         if self.k3 >= 3 * D:
             m = self.sd_r
+            which = 2
         elif self.k3 < D:
             m = self.c1_r
+            which = 1
         else:
             m = self.c3_r
-        t = self.t_r2
+            which = 3
+        t = self.tw[(which * self.g_r2 * self.base) % self.N]
         prod = complex_multiply_karatsuba(m[0], m[1], t[0], t[1])
 
         # ---- L3: combine (from the t-1 products) ----
@@ -184,6 +189,8 @@ class R22DIFStagePiped:
         self.x_r = cur_x
         self.t_r2 = self.t_r
         self.t_r = cur_t
+        self.g_r2 = self.g_r
+        self.g_r = (self.sp - 1) % D
         self.s0_r = s_x
         self.d0_r = d_x
         self.sd_r = sd

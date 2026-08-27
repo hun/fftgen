@@ -185,3 +185,25 @@ phase -- the retimed schedule decouples the two (the d0/d1 of group g
 are read at sp=g+1, and the twiddle T[g*4^m] must follow the group,
 not the k phase). This is the next fix: capture the twiddle (and the
 group) with the L0 d_r/dl_r read instead of the k phase.
+
+## L0 retiming progress -- D>=2 pfifo gate alignment (the blocker)
+
+N=4 (D=1) is BIT-EXACT. The D>=2 staggers fail at the pfifo writes:
+the products are computed at the right steps (the y2 of group 0 ready
+as shift_p2 after s12 for N=8), but the pfifo gate `k6 < 3D` has the
+[3D,4D) phases in the OFF region, so the D=2 y2s (ready at k6=6,7)
+are blocked and their shift_p2 values get overwritten by the next
+products. For D=1 the ready steps happened to land on k6 in [0,3D)
+(that is why N=4 passes); for D>=2 they land on [3D,4D).
+
+Next: the pfifo write gate must cover the phase where EACH product is
+ready (the write should follow the shift_p2 pipeline depth, not a
+fixed phase window). Likely fix: gate the write by "a product from a
+block's group is ready" i.e. the k7 window shifted, or track the ready
+steps directly. The twiddle-by-group fix (g_r2 = (sp-1)%D) is correct
+(N=4's 8/8 and N=8's 12/16 confirm the y0/y1/y3 paths).
+
+Reference for later: thoughts/cmult.v -- a 3-DSP fully pipelined
+complex multiplier (Vivado docs, Gauss trick) vs our 4-DSP Karatsuba.
+Could cut the R2^2 stage's DSP count if the ALU/pre-adder structure
+accepts it (the F4 combine needs the cross terms though).
