@@ -64,6 +64,39 @@ def write_lane_twiddle_mem(cfg_m: FFTConfig, path: str) -> None:
     write_twiddle_mem(cfg_m, path)
 
 
+def write_r22_twiddle_mem(cfg: FFTConfig, path: str) -> None:
+    """R2^2 twiddle ROM (P7): pair m occupies [BASE_m, BASE_m + 3*D_m)
+    with the slices [T[g*4^m]], [T[2g*4^m]], [T[3g*4^m]] for g in
+    [0, D_m), D_m = N/4^{m+1}, BASE_m = sum(3*D_t, t<m). An odd stage
+    count appends one W^0 word for the leftover D=1 stage. Layout must
+    match rtl/fft_stage_r22.v ROM_BASE addressing (verified by
+    spikes/S5_r22/rtl_check_prod.py)."""
+    from twiddles import canonical_twiddles
+    N = cfg.num_points
+    tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal,
+                            cfg.inverse)
+    words: List[int] = []
+    m = 0
+    while 2 * m + 1 < cfg.num_stages:
+        D = N >> (2 * m + 2)
+        base = 4 ** m
+        for which in (1, 2, 3):          # slice order: y1, y2, y3
+            for g in range(D):
+                re, im = tw[(which * g * base) % N]
+                words.append(((re & ((1 << cfg.twiddle_width) - 1))
+                              << cfg.twiddle_width)
+                             | (im & ((1 << cfg.twiddle_width) - 1)))
+        m += 1
+    if cfg.num_stages % 2 == 1:
+        re, im = tw[0]
+        words.append(((re & ((1 << cfg.twiddle_width) - 1))
+                      << cfg.twiddle_width)
+                     | (im & ((1 << cfg.twiddle_width) - 1)))
+    with open(path, "w") as f:
+        for w in words:
+            f.write(_hex(w, cfg.twiddle_width * 2) + "\n")
+
+
 def write_wn_mem(cfg: FFTConfig, path: str) -> None:
     """Crossbar pre-twiddle ROM for fft_cross.v:
     R*M words, row r = 0..R-1 holds W_N^{r*p} for p in [0,M)."""
@@ -315,10 +348,18 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
               for k in range(N)]
         samples = [fr[br[j]] for fr in frames for j in range(N)]
 
-    # golden expected (OrderedFFTModel covers every order corner)
-    m = OrderedFFTModel(cfg)
+    # golden expected: r22 re-pins the rounding contract (P7) -- the
+    # config guard keeps r22 in the native->bitreversed DIF corner the
+    # streaming model covers
     markers = _markers(N, num_frames)
-    expected = m.process_stream(samples, markers=markers)
+    if cfg.is_r22:
+        from golden import R22SDFGoldenModel
+        m = R22SDFGoldenModel(cfg)
+        expected = m.process_stream(samples, markers=markers)
+    else:
+        # OrderedFFTModel covers every order corner
+        m = OrderedFFTModel(cfg)
+        expected = m.process_stream(samples, markers=markers)
 
     # stimulus + mask
     with open(os.path.join(outdir, "stimulus.txt"), "w") as f:
@@ -337,13 +378,20 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     # RTL + twiddle ROM
     rtl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                            "rtl")
-    for fn in ("fft_sdf.v", "fft_reorder.v", "fft_top.v"):
+    r22 = cfg.is_r22
+    rtl_files = ("fft_top_r22.v", "fft_sdf_r22.v", "fft_stage_r22.v",
+                 "fft_sdf.v", "fft_reorder.v") if r22 else \
+                ("fft_sdf.v", "fft_reorder.v", "fft_top.v")
+    for fn in rtl_files:
         shutil.copy(os.path.join(rtl_dir, fn), outdir)
-    write_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles.mem"))
+    if r22:
+        write_r22_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles_r22.mem"))
+    else:
+        write_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles.mem"))
 
     # build with verilator
-    tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                      "tb", "tb_fft_sdf.cpp")
+    tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tb",
+                      "tb_fft_r22.cpp" if r22 else "tb_fft_sdf.cpp")
     intern = cfg.sample_width + max(0, cfg.num_stages - sum(cfg.shifts)) + 1
     # SCALING_PACK: 2 bits per stage
     pack = 0
@@ -353,26 +401,7 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     # natural output order (bitreversed for DIF, native for DIT)
     core_out = "bitreversed" if not cfg.is_dit else "native"
     reorder_out = (cfg.output_order != core_out)
-    # per-stage post-warm reset preloads (packed for the RTL generate).
-    # Stage timing is independent of I/O ordering: build the model with the
-    # core's natural orders so order-conversion configs don't trip its guard.
-    import dataclasses
-    from golden import SDFGoldenModel
-    if cfg.is_dit:
-        nat_in, nat_out = "bitreversed", "native"
-    else:
-        nat_in, nat_out = "native", "bitreversed"
-    _gm = SDFGoldenModel(
-        dataclasses.replace(cfg, input_order=nat_in, output_order=nat_out),
-        dit=cfg.is_dit)
-    # per-stage preloads travel via a generated header (the -G parser
-    # caps parameter values at 32 bits); width grows with stage count:
-    # 74 bits/stage, so N=16384 (14 stages) needs 1036 bits
-    write_preload_pack_vh(_gm.stage_preloads,
-                          os.path.join(outdir, "fft_preloads.vh"))
     gargs = [
-        "+define+FFTGEN_PRELOADS",
-        "+incdir+.",
         f"-GNUM_POINTS={cfg.num_points}",
         f"-GSAMPLE_WIDTH={cfg.sample_width}",
         f"-GSAMPLE_DECIMAL={cfg.sample_decimal}",
@@ -386,17 +415,52 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GTOPOLOGY={'1' if cfg.is_dit else '0'}",
         f"-GREORDER_OUT={'1' if reorder_out else '0'}",
     ]
-    cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
-           "--top-module", "fft_top", "-Wno-fatal",
-           "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
-                      f"-DTB_OUTPUT_WIDTH={cfg.output_width}",
-           *gargs,
-           "fft_top.v", "fft_sdf.v", "fft_reorder.v", tb]
+    if r22:
+        # r22: the leftover D=1 preloads are computed IN the RTL
+        # (LO_PARITY); no generated preload pack is involved
+        gargs += [f"-GINVERSE={'1' if cfg.inverse else '0'}",
+                  '-GTWIDDLE_FILE="fft_twiddles_r22.mem"']
+        cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+               "--top-module", "fft_top_r22", "-Wno-fatal",
+               "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                          f"-DTB_OUTPUT_WIDTH={cfg.output_width}",
+               *gargs,
+               "fft_top_r22.v", "fft_sdf_r22.v", "fft_stage_r22.v",
+               "fft_sdf.v", "fft_reorder.v", tb]
+        binary = "Vfft_top_r22"
+    else:
+        # per-stage post-warm reset preloads (packed for the RTL generate).
+        # Stage timing is independent of I/O ordering: build the model with
+        # the core's natural orders so order-conversion configs don't trip
+        # its guard.
+        import dataclasses
+        from golden import SDFGoldenModel
+        if cfg.is_dit:
+            nat_in, nat_out = "bitreversed", "native"
+        else:
+            nat_in, nat_out = "native", "bitreversed"
+        _gm = SDFGoldenModel(
+            dataclasses.replace(cfg, input_order=nat_in,
+                                output_order=nat_out),
+            dit=cfg.is_dit)
+        # per-stage preloads travel via a generated header (the -G parser
+        # caps parameter values at 32 bits); width grows with stage count:
+        # 74 bits/stage, so N=16384 (14 stages) needs 1036 bits
+        write_preload_pack_vh(_gm.stage_preloads,
+                              os.path.join(outdir, "fft_preloads.vh"))
+        gargs = ["+define+FFTGEN_PRELOADS", "+incdir+.", *gargs]
+        cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+               "--top-module", "fft_top", "-Wno-fatal",
+               "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                          f"-DTB_OUTPUT_WIDTH={cfg.output_width}",
+               *gargs,
+               "fft_top.v", "fft_sdf.v", "fft_reorder.v", tb]
+        binary = "Vfft_top"
     r = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
 
-    r = subprocess.run([os.path.join("obj_dir", "Vfft_top")],
+    r = subprocess.run([os.path.join("obj_dir", binary)],
                        cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}

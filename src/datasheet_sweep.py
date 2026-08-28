@@ -166,31 +166,10 @@ UTIL_ROWS = ["CLB LUTs", "CLB Registers", "LUT as Memory",
 # ---------------------------------------------------------------------------
 
 def write_r22_twiddle_mem(cfg, path):
-    """R2^2 twiddle ROM: pair m occupies [BASE_m, BASE_m+3*D_m) with slices
-    [T[g*4^m]], [T[2g*4^m]], [T[3g*4^m]] for g in [0,D_m). Leftover odd stage
-    appends one W^0 word. Mirrors spikes/S5_r22/rtl_check.py."""
-    from twiddles import canonical_twiddles
-    N = cfg.num_points
-    tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal, cfg.inverse)
-    words = []
-    m = 0
-    while 2 * m + 1 < cfg.num_stages:
-        D = N >> (2 * m + 2)
-        base = 4 ** m
-        for which in (1, 2, 3):
-            for g in range(D):
-                re, im = tw[(which * g * base) % N]
-                words.append(((re & ((1 << cfg.twiddle_width) - 1)) << cfg.twiddle_width)
-                             | (im & ((1 << cfg.twiddle_width) - 1)))
-        m += 1
-    if cfg.num_stages % 2 == 1:
-        re, im = tw[0]
-        words.append(((re & ((1 << cfg.twiddle_width) - 1)) << cfg.twiddle_width)
-                     | (im & ((1 << cfg.twiddle_width) - 1)))
-    hwidth = (cfg.twiddle_width * 2 + 3) // 4
-    with open(path, "w") as f:
-        for w in words:
-            f.write("%0*x\n" % (hwidth, w))
+    """Canonical writer lives in fft_gen (P7 step 3); kept as a thin
+    alias so the sweep artifacts helpers stay local-import friendly."""
+    from fft_gen import write_r22_twiddle_mem as _w
+    return _w(cfg, path)
 
 
 def artifacts_r2(n, r, outdir):
