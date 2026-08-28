@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Parameterized streaming FFT/IFFT Verilog core generator (Xilinx)"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "Proprietary"}
+license = { text = "CERN-OHL-S-2.0 OR LicenseRef-Commercial (closed-source licence on request; contact hannes.klas@gmail.com)" }
 
 [project.optional-dependencies]
 dev = ["numpy"]

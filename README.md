@@ -143,3 +143,22 @@ block floating point, runtime twiddle reload.
 Tracked in [PLAN.md](PLAN.md) §5: deep product FIFOs infer as LUTRAM
 (output-register mux); Icarus/Questa runs deferred since P2; corner orders
 with SSR not yet exercised; Artix-7 @ 250 MHz secondary gate not yet run.
+
+## Licence
+
+This project is dual-licensed. You may use, study, modify, share and
+distribute it under either of the following, at your option:
+
+1. **CERN Open Hardware Licence Version 2 — Strongly Reciprocal
+   (CERN-OHL-S-2.0)** — the full text is in [LICENSE](LICENSE) and at
+   <https://ohwr.org/cern_ohl_s_v2.txt>. Under this strongly reciprocal
+   licence, products built from these designs (or modified versions of
+   them) must remain available as open hardware under CERN-OHL-S-2.0.
+2. **A closed-source commercial licence**, available on request from
+   **Hannes Klas &lt;hannes.klas@gmail.com&gt;** — for projects where the
+   reciprocity obligation does not fit.
+
+SPDX expression: `CERN-OHL-S-2.0 OR LicenseRef-Commercial`.
+
+Versions in the project history prior to the relicensing commit were
+distributed under a proprietary licence and remain governed by that licence.
