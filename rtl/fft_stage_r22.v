@@ -440,6 +440,9 @@ module fft_stage_r22 #(
             p_im <= prod_re_ti + c_tr;
 
             // ---- L5: the round-half-up staging ------------------
+            // PW == MWB + 1 by construction (CB = WIDTH+2), so the
+            // combine result needs exactly one sign bit to reach the
+            // shift staging width.
             if (k7 >= THREE_D) begin
                 shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_S1);
                 shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_S1);
