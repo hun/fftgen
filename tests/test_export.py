@@ -32,6 +32,7 @@ def _export(args):
         sample_width=16, sample_decimal=0,
         output_width=None, output_decimal=None,
         twiddle_width=18, scaling="auto",
+        stage_mode=args.get("stage_mode", "r2"),
         num_frames=args.get("num_frames", 3), seed=1,
         part="xcku5p-ffva676-1-e", clk_mhz=500.0,
         outdir=args["outdir"])
@@ -43,18 +44,24 @@ def _export(args):
 def _verilator_run(outdir, cfg):
     """Build + run the exported tree exactly as README.txt documents."""
     ssr = cfg.ssr > 1
-    top = "fft_ssr" if ssr else "fft_top"
-    files = (([] if ssr else ["fft_core.v"]) +
-             ["fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
-              "fft_cross.v"][:4 if not ssr else 5])
-    # keep order deterministic and explicit per arch
-    files = (([] if ssr else ["fft_core.v"]) +
-             (["fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
-               "fft_cross.v"] if ssr else
-              ["fft_sdf.v", "fft_reorder.v"]))
+    r22 = cfg.is_r22
+    top = ("fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
+           else "fft_top")
+    if ssr:
+        files = (["fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                  "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
+                  "fft_cross.v"] if r22 else
+                 ["fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
+                  "fft_cross.v"])
+    else:
+        files = (["fft_core.v", "fft_sdf_r22.v", "fft_stage_r22.v",
+                  "fft_sdf.v"] if r22 else
+                 ["fft_core.v", "fft_sdf.v", "fft_reorder.v"])
+    tbname = ("tb_fft_ssr_r22.cpp" if (ssr and r22) else
+              "tb_fft_ssr.cpp" if ssr else "tb_fft_sdf.cpp")
     cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
            "--top-module", top, "-Wno-fatal",
-           "+define+FFTGEN_PRELOADS", "+incdir+.",
+           *([] if r22 else ["+define+FFTGEN_PRELOADS", "+incdir+."]),
            "-GNUM_POINTS=%d" % cfg.num_points,
            "-GSCALING_PACK=32'h%08x" % (_pack(cfg)),
            "-GINTERN_WIDTH=%d" % (_iw(cfg)),
@@ -63,8 +70,7 @@ def _verilator_run(outdir, cfg):
            "-DTB_SAMPLE_WIDTH=%d -DTB_OUTPUT_WIDTH=%d -DTB_SSR=%d"
            % (cfg.sample_width, cfg.output_width, cfg.ssr),
            *files,
-           os.path.join("tb", "tb_fft_ssr.cpp" if ssr
-                        else "tb_fft_sdf.cpp")]
+           os.path.join("tb", tbname)]
     if ssr:
         cmd[cmd.index("-GPIPE_DEPTH=10"):cmd.index("-GPIPE_DEPTH=10")] = [
             "-GSSR=%d" % cfg.ssr, "-GINVERSE=%d" % int(cfg.inverse),
@@ -157,6 +163,82 @@ class TestExportSSR(unittest.TestCase):
                 break
         self.assertIsNotNone(aligned, "exported SSR stream did not align")
         self.assertEqual(aligned, 0)
+
+
+class TestExportR22(unittest.TestCase):
+    """P7: r22 R=1 exports must reproduce the re-pinned golden vectors
+    bit-exactly from the shipped files alone."""
+
+    def _check(self, args):
+        outdir = os.path.join(ROOT, "build", args["name"])
+        args["outdir"] = outdir
+        cfg, res = _export(args)
+        for fn in ("fft_core.v", "fft_params.vh", "twiddle_map.txt",
+                   "fft_twiddles_r22.mem", "fft_sdf_r22.v",
+                   "fft_stage_r22.v"):
+            self.assertTrue(os.path.isfile(os.path.join(outdir, fn)), fn)
+        # no preload pack ships with r22 (parity is computed in RTL)
+        self.assertFalse(os.path.isfile(
+            os.path.join(outdir, "fft_preloads.vh")))
+        _verilator_run(outdir, cfg)
+        exp = [l.split() for l in open(os.path.join(outdir, "expected.txt"))
+               if l.strip()]
+        act = [l.split() for l in open(os.path.join(outdir, "actual.txt"))
+               if l.strip()]
+        self.assertEqual(len(exp), len(act))
+        for e, a in zip(exp, act):
+            self.assertEqual(e, a)
+
+    def test_export_r22(self):
+        self._check({"num_points": 64, "output_order": "bitreversed",
+                     "stage_mode": "r22", "name": "export_tst_r22_n64"})
+
+    def test_export_r22_inverse(self):
+        self._check({"num_points": 32, "output_order": "bitreversed",
+                     "stage_mode": "r22", "inverse": True,
+                     "name": "export_tst_r22_n32inv"})
+
+
+class TestExportSSR22(unittest.TestCase):
+    """P7: SSR r22 export ships the same vectors as generate_ssr and
+    runs within the documented R/2+1 tolerance."""
+
+    def test_export_ssr22_r2(self):
+        from fft_gen import generate_ssr
+        from config import FFTConfig
+        outdir = os.path.join(ROOT, "build", "export_tst_ssr22")
+        args = {"num_points": 32, "ssr": 2, "output_order": "native",
+                "stage_mode": "r22", "num_frames": 4, "outdir": outdir}
+        cfg, res = _export(args)
+        ref = os.path.join(ROOT, "build", "export_tst_ssr22_ref")
+        generate_ssr(FFTConfig(num_points=32, ssr=2,
+                               output_order="native",
+                               stage_mode="r22"),
+                     ref, num_frames=4, seed=1)
+        for fn in ("stimulus.txt", "expected.txt",
+                   "fft_twiddles_r22_lane.mem", "fft_wn.mem"):
+            with open(os.path.join(ref, fn)) as f1, \
+                    open(os.path.join(outdir, fn)) as f2:
+                self.assertEqual(f1.read(), f2.read(), fn)
+        _verilator_run(outdir, cfg)
+        exp = [tuple(int(x) for x in l.split())
+               for l in open(os.path.join(outdir, "expected.txt"))
+               if l.strip()]
+        act = [tuple(int(x) for x in l.split())
+               for l in open(os.path.join(outdir, "actual.txt"))
+               if l.strip()]
+        tol = cfg.ssr // 2 + 1
+        aligned = None
+        for skip in range(len(act) // cfg.ssr):
+            base = skip * cfg.ssr
+            n_cmp = min(len(exp), len(act) - base)
+            if n_cmp < cfg.num_points:
+                break
+            if all(all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
+                   for e, a in zip(exp[:n_cmp], act[base:base + n_cmp])):
+                aligned = base
+                break
+        self.assertIsNotNone(aligned, "exported SSR r22 stream did not align")
 
 
 if __name__ == "__main__":
