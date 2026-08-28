@@ -28,7 +28,10 @@ class TestFFTConfigValid(unittest.TestCase):
         self.assertFalse(cfg.is_dit)
 
     def test_explicit_everything(self):
-        cfg = FFTConfig(num_points=64, inverse=True, ssr=4,
+        # every field settable explicitly and reflected; ssr stays 1 because
+        # corner orders are only defined for R=1 (P8 subset aside) -- the
+        # point here is is_dit / shifts / scaling_guaranteed.
+        cfg = FFTConfig(num_points=64, inverse=True, ssr=1,
                         input_order="bitreversed", output_order="native",
                         sample_width=25, sample_decimal=2,
                         output_width=20, output_decimal=1,
@@ -60,9 +63,9 @@ class TestFFTConfigInvalid(unittest.TestCase):
             self.assert_invalid(num_points=64, ssr=bad)
 
     def test_ssr_divide(self):
-        FFTConfig(num_points=32, ssr=8)      # 8 | 32: fine
+        FFTConfig(num_points=32, ssr=8, output_order="native")   # 8 | 32
         with self.assertRaises(ValueError):
-            FFTConfig(num_points=4, ssr=8)   # 8 does not divide 4
+            FFTConfig(num_points=4, ssr=8, output_order="native")  # 8 -| 4
 
     def test_orders(self):
         self.assert_invalid(num_points=8, input_order="reversed")
@@ -85,7 +88,10 @@ class TestSSRDivide(unittest.TestCase):
     def test_valid_combinations(self):
         for n, r in ((8, 1), (8, 2), (8, 4), (8, 8),
                      (1024, 8), (4, 2), (2, 1)):
-            cfg = FFTConfig(num_points=n, ssr=r)
+            # R>1 pins the SSR native -> native contract (output_order
+            # defaults to bitreversed, which is only legal at R=1)
+            cfg = FFTConfig(num_points=n, ssr=r,
+                            output_order="native" if r > 1 else "bitreversed")
             self.assertEqual(cfg.ssr, r)
 
 
@@ -102,16 +108,25 @@ class TestStageMode(unittest.TestCase):
                 self.assertIn("mode=r22", repr(cfg))
 
     def test_r22_ssr_orders(self):
-        # SSR r22 shares the SSR v1 native -> native contract
+        # SSR r22 shares the SSR v1 native -> native contract, plus the P8
+        # corner-order subset (R=2 native -> bitreversed forward only).
         for r in (2, 4, 8):
             cfg = FFTConfig(num_points=16 * r, ssr=r, stage_mode="r22",
                             output_order="native")
             self.assertTrue(cfg.is_r22)
-        with self.assertRaises(ValueError):
-            FFTConfig(num_points=32, ssr=2, stage_mode="r22")  # bitrev out
-        with self.assertRaises(ValueError):
-            FFTConfig(num_points=32, ssr=2, stage_mode="r22",
-                      output_order="native", input_order="bitreversed")
+        # P8 step 1: the forward corner order at R=2 is now legal
+        self.assertTrue(FFTConfig(num_points=32, ssr=2,
+                                  stage_mode="r22").ssr_corner_supported())
+        for kw in (dict(num_points=32, ssr=4, stage_mode="r22"),      # R=4
+                   dict(num_points=32, ssr=8, stage_mode="r22"),      # R=8
+                   dict(num_points=32, ssr=2, stage_mode="r22",
+                        inverse=True),                                # inv corner
+                   dict(num_points=32, ssr=2, stage_mode="r22",
+                        output_order="native",
+                        input_order="bitreversed")):                  # inv corner
+            with self.subTest(**kw):
+                with self.assertRaises(ValueError):
+                    FFTConfig(**kw)
 
     def test_r22_rejects_other_orders(self):
         for kw in (dict(input_order="bitreversed"),

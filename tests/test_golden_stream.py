@@ -166,8 +166,10 @@ class TestStreamLatencyAndFraming(unittest.TestCase):
 
 class TestStreamRejectsUnbuiltConfigs(unittest.TestCase):
     def test_ssr_not_yet(self):
+        # legal config (SSR native -> native), rejected by the R=1 model
         with self.assertRaises(NotImplementedError):
-            SDFGoldenModel(FFTConfig(num_points=8, ssr=2))
+            SDFGoldenModel(FFTConfig(num_points=8, ssr=2,
+                                     output_order="native"))
 
     def test_order_conversion_not_in_core(self):
         with self.assertRaises(NotImplementedError):

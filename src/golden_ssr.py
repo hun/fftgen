@@ -13,6 +13,18 @@ Architecture (mirrors the planned RTL exactly):
        contiguous": over a frame, lane q holds the contiguous block
        X[qM .. qM+M-1])
 
+P8 -- output_order="bitreversed" (R == 2, arch r22; FFT native -> bitrev):
+
+  bitrev_N(R*c + q) = bitrev_M(c)*R + bitrev_R(q), and bitrev_2 is the
+  IDENTITY, so a frame emitted with slot e carrying X[bitrev_N(e)] needs
+  only (a) the lane reorder DISABLED (the DIF lane already emits
+  bitrev_M(c) at clock c) and (b) the crossbar's bin index taken as
+  bitrev_M(counter) for the WN row lookup. No lane permutation, no
+  reorder memory anywhere -- and lane latency DROPS by M (the contract
+  change this mode advertises). 0 and M-1 are bitrev fixed points, so the
+  frame markers keep their exact clocks (SOF on the first emission, EOF
+  on the last). Everything downstream of the p index is order-agnostic.
+
 Fixed-point contract for the crossbar:
   * lane outputs are already quantized to output_width (they are the
     engines' final outputs)
@@ -33,8 +45,8 @@ Output markers ride through the lanes: SOF enters with sample n=0
 from typing import List, Sequence, Tuple
 import math
 
-from config import FFTConfig
-from golden import SDFGoldenModel, R22SDFGoldenModel, ReorderModel
+from config import FFTConfig, SSR_CORNER_ORDERS
+from golden import SDFGoldenModel, R22SDFGoldenModel, ReorderModel, _bitrev
 from twiddles import canonical_twiddles
 from quant import round_shift, quantize_output
 
@@ -51,7 +63,8 @@ class _SSRLane:
     extra = 8*npairs + 1.
     """
 
-    def __init__(self, m_cfg: FFTConfig, arch: str = "r2"):
+    def __init__(self, m_cfg: FFTConfig, arch: str = "r2",
+                 reorder_out: bool = True):
         import copy
         from collections import deque
         core_cfg = copy.copy(m_cfg)
@@ -78,12 +91,14 @@ class _SSRLane:
             self._extra = 0
             self._extra_q = None
         self.arch = arch
-        self.reorder = ReorderModel(m_cfg.num_points)
-        # lane latency as seen by SSR crossbar (core + reorder + extra)
+        self.reorder_out = reorder_out
+        self.reorder = ReorderModel(m_cfg.num_points) if reorder_out else None
+        # lane latency as seen by SSR crossbar (core + optional reorder + extra)
+        ring = m_cfg.num_points if reorder_out else 0
         if arch == "r22":
-            self.latency = self.core.latency + m_cfg.num_points + max(0, self._extra)
+            self.latency = self.core.latency + ring + max(0, self._extra)
         else:
-            self.latency = self.core.latency + m_cfg.num_points
+            self.latency = self.core.latency + ring
 
     def tick(self, enabled: bool, re: int, im: int, u: int, l: int):
         v1, re, im, uu, ll = self.core.tick(enabled, re, im, u, l)
@@ -91,6 +106,10 @@ class _SSRLane:
             # delay core valid+data to match RTL pipeline (3D+9 vs 3D+1)
             self._extra_q.append((v1, re, im, uu, ll))
             v1, re, im, uu, ll = self._extra_q.popleft()
+        if self.reorder is None:
+            # P8: the DIF lane's own output order is bitrev -- exactly the
+            # order the bitrev_N emission needs at R == 2, so no buffer.
+            return v1, re, im, uu, ll
         v2, re, im, extra = self.reorder.tick(enabled and v1, re, im,
                                               (uu, ll))
         if extra is None:
@@ -108,10 +127,15 @@ class SSRGoldenModel:
     def __init__(self, cfg: FFTConfig, arch: str = "r2"):
         if cfg.ssr < 2:
             raise ValueError("SSRGoldenModel requires cfg.ssr >= 2")
-        if cfg.input_order != "native":
-            raise NotImplementedError("SSR v1 supports native input only")
-        if cfg.output_order != "native":
-            raise NotImplementedError("SSR v1 supports native output only")
+        if cfg.input_order != "native" or cfg.output_order != "native":
+            # P8 verified subset (see SSR_CORNER_ORDERS); anything else still
+            # needs bitrev_R to be a real permutation -> not generatable.
+            if not cfg.ssr_corner_supported():
+                raise NotImplementedError(
+                    f"SSR supports native -> native only, plus the P8 subset "
+                    f"{sorted(SSR_CORNER_ORDERS)}; got ssr={cfg.ssr} "
+                    f"{cfg.input_order} -> {cfg.output_order} "
+                    f"inverse={cfg.inverse} arch={arch!r}")
         if arch not in ("r2", "r22"):
             raise ValueError(f"arch must be 'r2' or 'r22', got {arch!r}")
         R = cfg.ssr
@@ -120,11 +144,18 @@ class SSRGoldenModel:
         self.R = R
         self.M = M
         self.arch = arch
+        # P8: bitrev emission == DIF lanes with their reorder off, and the
+        # crossbar walking its bin index in bitrev_M order (see module
+        # docstring). Native output keeps the historical configuration.
+        self.emit_brev = cfg.output_order == "bitreversed"
+        self.lm = M.bit_length() - 1
         import copy
         lane_cfg = copy.copy(cfg)
         lane_cfg.num_points = M
         lane_cfg.ssr = 1
-        self.lanes = [_SSRLane(lane_cfg, arch=arch) for _ in range(R)]
+        self.lanes = [_SSRLane(lane_cfg, arch=arch,
+                              reorder_out=not self.emit_brev)
+                      for _ in range(R)]
         if R >= 8:
             self.CB_LAT = 11    # +input reg, G/H, Q-reg, partials, scalar
         self.latency = self.lanes[0].latency + self.CB_LAT
@@ -152,7 +183,8 @@ class SSRGoldenModel:
         from collections import deque
         for ln in self.lanes:
             ln.core.reset()
-            ln.reorder.reset()
+            if ln.reorder is not None:
+                ln.reorder.reset()
             if ln.arch == "r22" and ln._extra > 0:
                 ln._extra_q = deque()
                 for _ in range(ln._extra):
@@ -184,7 +216,11 @@ class SSRGoldenModel:
         # depth in _extra; the crossbar phase convention (p counts from
         # the first lane-valid word) then lags the data by one word
         p_off = 1 if self.arch == "r22" else 0
-        p = (self._cycles - self.lanes[0].latency - p_off) % M
+        p_seq = (self._cycles - self.lanes[0].latency - p_off) % M
+        # P8: with the lane reorders off the lanes present A_r[p] with p
+        # already in bitrev_M order, so the SEQUENTIAL counter must be
+        # bit-reversed to name the actual bin the WN row belongs to.
+        p = _bitrev(p_seq, self.lm) if self.emit_brev else p_seq
         self._dbg_p = p
         self._dbg_lane = [(lo[1], lo[2], lo[0]) for lo in lane_out]
         filled = self._cycles > self.lanes[0].latency + self.CB_LAT
@@ -303,3 +339,22 @@ def ssr_emission_to_native(num_points: int, ssr: int) -> List[int]:
     """perm[e] = natural sample index carried by emission slot e."""
     M = num_points // ssr
     return [(e % ssr) * M + (e // ssr) for e in range(num_points)]
+
+
+def ssr_emission_perm(num_points: int, ssr: int,
+                      output_order: str = "native") -> List[int]:
+    """perm[e] = natural index carried by flat emission slot e, for either
+    output order. `native` is the block-contiguous SSR contract; `bitreversed`
+    is the P8 corner order (slot e carries X[bitrev_N(e)] -- the same
+    convention fft_reorder imposes at R = 1).
+
+    At R = 2 the two views agree with the implementation identity
+    bitrev_N(R*c + q) = bitrev_M(c)*R + q, which is what makes the corner
+    order free of any lane permutation.
+    """
+    if output_order == "native":
+        return ssr_emission_to_native(num_points, ssr)
+    if output_order != "bitreversed":
+        raise ValueError(f"bad output_order {output_order!r}")
+    n = num_points.bit_length() - 1
+    return [_bitrev(e, n) for e in range(num_points)]
