@@ -13,7 +13,7 @@ result is verified bit-exact against that model.
 
 ## Status
 
-All implementation phases (P0–P6) are complete; see the phase table in
+All implementation phases (P0–P7) are complete; see the phase table in
 [PLAN.md](PLAN.md) §5.
 
 - **R = 1 (SDF)**: bit-exact N = 2…128 (all four input/output order corners,
@@ -22,12 +22,20 @@ All implementation phases (P0–P6) are complete; see the phase table in
 - **DSP reduction (P6)**: the DIF last two / DIT first two stages multiply
   only by W^0/±j and emit exact fabric products — R=1 N=2048 uses **36 DSPs**
   (was 44), R=2 N=2048 **68** (was 84), N=4 **0**; timing unchanged.
+- **Radix-2² (P7, `--stage-mode r22`)**: each DIF stage pair is merged into one
+  4-sample group with a single general complex multiplier. R=1 N=2048 **20
+  DSPs** (r2: 36), N=8192 **24** (r2: 44), R=8 N=8192 **204** (r2: 300) — and
+  ~10–20% fewer LUTs — while **meeting 500 MHz post-synth at every N**
+  (+0.187 … +0.048, same corner as r2). Bit-exact against the re-pinned r22
+  golden contract (few-LSB rounding placement, identical SQNR); covers DIF,
+  fwd/inv, widths and scaling schedules as for `r2` — R = 1 native →
+  bitreversed, R = 2/4/8 on the SSR native → native contract.
 - **SSR (R = 2, 4, 8)**: bit-exact fwd+inv; R = 2 N = 8192 and the R = 4 / R = 8
   corner configs close 500 MHz post-route on KU5P.
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
-  `expected.txt` vectors.
-- Test suite: 114 tests green (unit + golden + Verilator RTL).
+  `expected.txt` vectors (both `--stage-mode` values).
+- Test suite: 139 tests green (unit + golden + Verilator RTL + export).
 
 Current numbers: [doc/datasheet.md](doc/datasheet.md) (N × R synthesis sweep,
 KU5P @ 500 MHz).

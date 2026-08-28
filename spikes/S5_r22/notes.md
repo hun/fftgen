@@ -596,3 +596,27 @@ post-synth **WNS +0.082, 0 failing endpoints**, 20 DSP48 (r2: 36),
 5251 LUT / 3677 FF / 7.5 BRAM. The critical path is now plain fabric
 (the L0 input-capture CARRY8 butterfly chain), i.e. the DSP is off the
 limiting path.
+
+## P7 step 7c: r22 N=2048 post-route (impl_aggr.tcl)
+
+Default implementation strategy (opt / place / phys_opt / route) on the
+exported N=2048 r22 core: post-synth +0.082 MET, but post-route
+**-0.117 / 62 FEP** -- a pure-fabric family, `L0 x_r_*` capture -> 3x
+CARRY8 (the diff butterfly) -> the `dram/dline` **LUTRAM write** data
+inputs, 5 levels with 57% route delay. Nothing DSP-related left.
+
+`spikes/S5_r22/dsp_probe/impl_aggr.tcl` (place Explore,
+phys_opt AggressiveExplore, route AggressiveExplore, then a second
+phys_opt + route) on the same netlist:
+
+    post-route WNS +0.003 ns, TNS 0, 0 failing endpoints
+    4969 LUT (2637 as memory), 4306 FF, 20 DSP48E2, 7.5 BRAM tile, 0 URAM
+
+so the r22 R=1 core does close 500 MHz post-route on the corner config,
+with the same directive recipe the r2 SSR runs used. Thin margin (+3 ps)
+-- the real lever for r22 at large N is the v1 all-LUTRAM delay rings: at
+N=2048 the deep rings are ~122 kb of LUTRAM per pair, and the placer
+already moved part of them into BRAM on its own (the new worst path
+starts in `dline_im_reg_bram_0`), which is exactly what an explicit
+r22 memory policy + a re-derived registered-read stage would do on
+purpose (cf. the "L0b 2-cycle read needs a full re-derivation" note).
