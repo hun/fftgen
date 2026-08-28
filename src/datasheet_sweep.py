@@ -8,11 +8,11 @@ side-by-side for easy comparison.
 
 * ``r2``  -- plain radix-2 SDF (log2(N) stages, ``rtl/fft_sdf.v`` + ``fft_stage``).
           Supports all R (1,2,4,8). P6 trivial-stage reduction included.
-* ``r22`` -- radix-2^2 SDF (P7, ``rtl/fft_stage_r22.v`` via spike top
-          ``spikes/S5_r22/top_gen.py``). R=1: single-stream core;
-          R=2 (P7, this impl): SSR via ``rtl/fft_ssr_r22.v`` (R × M-point
-          ``fft_top_r22`` lanes + ``fft_cross``). One complex multiply per
-          stage pair (3 products / 4-group), ~2× DSP savings.
+* ``r22`` -- radix-2^2 SDF (P7, ``rtl/fft_stage_r22.v`` via the production
+          core ``rtl/fft_sdf_r22.v`` -- the direct analogue of the ``r2``
+          ``fft_sdf`` top). R>1: SSR via ``rtl/fft_ssr_r22.v`` (R x
+          M-point ``fft_top_r22`` lanes + ``fft_cross``). One complex
+          multiply per stage pair (3 products / 4-group), ~2x DSP savings.
 
 Results are cached per config in ``<jobs-dir>/N*_R*_r22| r2/result.json``;
 re-runs skip completed configs, so an interrupted sweep resumes.
@@ -115,13 +115,24 @@ report_timing_summary -delay_type max -max_paths 5 -file timing.txt
 TCL_R22 = """\
 set part    [lindex $argv 0]
 set npts    [lindex $argv 1]
+set ssr     [lindex $argv 2]
+set pack    [lindex $argv 3]
+set intern  [lindex $argv 4]
 create_project -in_memory -part $part
 add_files -fileset sources_1 [list \\
-    [file normalize [file join [pwd] fft_core.v]] \\
+    @RTL@/fft_sdf_r22.v \\
     @RTL@/fft_stage_r22.v \\
     @RTL@/fft_sdf.v ]
-set_property top fft_r22_top [current_fileset]
-synth_design -top fft_r22_top -part $part
+set_property top fft_sdf_r22 [current_fileset]
+set tw_abs  [file normalize [file join [pwd] fft_twiddles_r22.mem]]
+synth_design -top fft_sdf_r22 \\
+    -generic NUM_POINTS=$npts \\
+    -generic TWIDDLE_FILE=$tw_abs \\
+    -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \\
+    -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
+    -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
+    -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \\
+    -generic PIPE_DEPTH=10 -generic INVERSE=0
 create_clock -period @NS@ -name clk [get_ports clk]
 report_utilization -file util.txt
 report_timing_summary -delay_type max -max_paths 5 -file timing.txt
@@ -208,16 +219,8 @@ def artifacts_r22(n, outdir, r=1):
         write_r22_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles_r22.mem"))
         shutil.copy(os.path.join(outdir, "fft_twiddles_r22.mem"),
                     os.path.join(outdir, "fft_twiddles.mem"))
-        try:
-            sys.path.insert(0, SPIKE_R22)
-            from top_gen import top_rtl
-            top, _lat = top_rtl(cfg)
-        except Exception as e:
-            raise RuntimeError(f"r22 top_gen failed for N={n}: {e}")
-        finally:
-            if SPIKE_R22 in sys.path:
-                sys.path.remove(SPIKE_R22)
-        open(os.path.join(outdir, "fft_core.v"), "w").write(top)
+        open(os.path.join(outdir, "fft_preloads.vh"),
+             "w").write("// r22: K_PRELOAD per pair, computed in RTL\n")
         pack = sum((sh & 3) << (2 * s) for s, sh in enumerate(cfg.shifts))
         intern = cfg.sample_width + max(0, cfg.num_stages - sum(cfg.shifts)) + 1
         return {"pack": pack, "intern": intern, "preload_bits": 0}
@@ -312,7 +315,8 @@ def run_one(args):
             tcl_path = os.path.join(outdir, "synth.tcl")
             open(tcl_path, "w").write(tcl)
             cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
-                   "-source", "synth.tcl", "-tclargs", PART, str(n)]
+                   "-source", "synth.tcl", "-tclargs", PART, str(n), str(r),
+                   str(gen["pack"]), str(gen["intern"])]
         else:
             tcl = TCL_R22_SSR.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
             tcl_path = os.path.join(outdir, "synth.tcl")
