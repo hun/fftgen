@@ -13,6 +13,7 @@ module fft_top_r22 #(
     parameter integer TWIDDLE_DECIMAL = TWIDDLE_WIDTH - 1,
     parameter integer SCALING_PACK   = 32'h01010101,
     parameter integer TOPOLOGY       = 0,
+    parameter integer INVERSE        = 0,
     parameter integer REORDER_OUT    = 0,
     parameter TWIDDLE_FILE           = "fft_twiddles_r22_lane.mem",
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
@@ -43,7 +44,7 @@ module fft_top_r22 #(
                 .SAMPLE_DECIMAL(SAMPLE_DECIMAL), .OUTPUT_WIDTH(OUTPUT_WIDTH),
                 .OUTPUT_DECIMAL(OUTPUT_DECIMAL), .TWIDDLE_WIDTH(TWIDDLE_WIDTH),
                 .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL), .SCALING_PACK(SCALING_PACK),
-                .TOPOLOGY(TOPOLOGY), .TWIDDLE_FILE(TWIDDLE_FILE),
+                .INVERSE(INVERSE), .TOPOLOGY(TOPOLOGY), .TWIDDLE_FILE(TWIDDLE_FILE),
                 .INTERN_WIDTH(INTERN_WIDTH), .PIPE_DEPTH(PIPE_DEPTH),
                 .TWIDDLE_MEM(TWIDDLE_MEM)
             ) u_core (
@@ -66,7 +67,7 @@ module fft_top_r22 #(
                 .SAMPLE_DECIMAL(SAMPLE_DECIMAL), .OUTPUT_WIDTH(OUTPUT_WIDTH),
                 .OUTPUT_DECIMAL(OUTPUT_DECIMAL), .TWIDDLE_WIDTH(TWIDDLE_WIDTH),
                 .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL), .SCALING_PACK(SCALING_PACK),
-                .TOPOLOGY(TOPOLOGY), .TWIDDLE_FILE(TWIDDLE_FILE),
+                .INVERSE(INVERSE), .TOPOLOGY(TOPOLOGY), .TWIDDLE_FILE(TWIDDLE_FILE),
                 .INTERN_WIDTH(INTERN_WIDTH), .PIPE_DEPTH(PIPE_DEPTH),
                 .TWIDDLE_MEM(TWIDDLE_MEM)
             ) u_core (

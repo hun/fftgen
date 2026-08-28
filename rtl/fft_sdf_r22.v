@@ -1,9 +1,27 @@
-// fftgen -- R=1 R2^2 SDF core, P7 (DIF only, native->bitreversed).
-// Mirrors top_gen.py / R22SDFGoldenModel: pairs (2m,2m+1) merged into
-// one 4-sample group with ONE shared complex multiply (3 products per
-// 4-group), twiddle stride 4^m, D_m = N/4^{m+1}. Odd N leaves a plain
-// trivial stage (D=1, 0 DSPs). Same AXI-stream framing contract as
-// fft_sdf.v (tvalid/tuser/tlast ride at fixed latency).
+// fftgen -- R=1 R2^2 SDF core, P7 (DIF, native->bitreversed).
+// Mirrors R22SDFGoldenModel / spikes/S5_r22/top_gen.py: pairs (2m,2m+1)
+// merged into one 4-sample group with ONE shared complex multiply
+// (3 products per 4-group), twiddle stride 4^m, D_m = N/4^{m+1}. Each
+// pair stage outputs the value of stream position p at clock
+// p + 3*D + 9 (the verified pipelined stage), so the chain re-aligns
+// every pair's phase counter via K_PRELOAD = (-upstream_latency) mod
+// 4D, and the odd-n leftover plain radix-2 stage (D=1, W^0 trivial,
+// 0 DSPs) starts from its post-warm parity state (LO_PARITY).
+//
+// The twiddle ROM (write_r22_twiddle_mem) holds, per pair m, the three
+// slices [T[g*4^m]], [T[2g*4^m]], [T[3g*4^m]] (3*D_m words, base
+// sum(3*D_t, t<m)); an odd stage count appends one W^0 word for the
+// leftover at base sum(3*D_t) over ALL pairs.
+//
+// Same AXI-stream framing contract as fft_sdf.v (tvalid/tuser/tlast
+// ride at fixed latency LATENCY = sum(3*D+9) [+11 leftover] [+1 output
+// register]; the datapath and marker chain advance only while
+// ce && s_axis_tvalid).
+//
+// INVERSE consistency: INVERSE flips the intra-stage +/-j combines;
+// the conjugate (IFFT) twiddle table must come from the ROM (write the
+// file with cfg.inverse=True). The two always travel together -- the
+// generator bakes both from one FFTConfig.
 
 `default_nettype none
 
@@ -16,13 +34,15 @@ module fft_sdf_r22 #(
     parameter integer TWIDDLE_WIDTH  = 18,
     parameter integer TWIDDLE_DECIMAL = TWIDDLE_WIDTH - 1,
     parameter integer SCALING_PACK   = 32'h01010101,
-    // 0 = DIF only for now; DIT is a separate module (fft_stage_r22_dit)
+    parameter integer INVERSE        = 0,
+    // DIF only for now; DIT is a separate topology (fft_stage_r22_dit,
+    // wired via TOPOLOGY in a later P7 step)
     parameter integer TOPOLOGY       = 0,
     parameter TWIDDLE_FILE           = "fft_twiddles_r22.mem",
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
     parameter integer PIPE_DEPTH     = 10, // kept for compat, not used
     parameter [4095:0] PRELOAD_PACK  = 4096'b0, // unused in r22 (K_PRELOAD per pair)
-    parameter integer TWIDDLE_MEM   = 0
+    parameter integer TWIDDLE_MEM    = 0
 )(
     input  wire                      clk,
     input  wire                      ce,
@@ -39,60 +59,51 @@ module fft_sdf_r22 #(
     input  wire                      rst
 );
 
-    localparam integer N       = NUM_POINTS;
-    localparam integer NSTAGES = $clog2(N);
-    localparam integer NPAIRS  = NSTAGES / 2;
+    localparam integer N        = NUM_POINTS;
+    localparam integer NSTAGES  = $clog2(N);
+    localparam integer NPAIRS   = NSTAGES / 2;
     localparam integer LEFTOVER = NSTAGES % 2;
 
-    // R22 latency helpers -- must be at module scope (not inside generate)
-    function integer r22_latency;
-        input integer n;
-        input integer Nval;
-        integer m, D, lat;
-        begin
-            lat = 0;
-            for (m = 0; m < n/2; m = m+1) begin
-                D = Nval >> (2*m+2);
-                lat = lat + 3*D + 10;
-            end
-            if ((n % 2) != 0) lat = lat + 11;
-            r22_latency = lat;
-        end
-    endfunction
-    function integer up_lat;
-        input integer gg;
+    // R2^2 chain latency helpers (per-pair RTL latency 3D+9, verified;
+    // leftover plain D=1 stage adds D + NLAYERS = 11).
+    function integer chain_lat;      // pairs only, upstream of `npairs'
+        input integer npairs;
         integer mm, DD, ll;
         begin
             ll = 0;
-            for (mm = 0; mm < gg; mm = mm+1) begin
-                DD = N >> (2*mm+2);
-                ll = ll + 3*DD + 10;
+            for (mm = 0; mm < npairs; mm = mm + 1) begin
+                DD = N >> (2 * mm + 2);
+                ll = ll + 3 * DD + 9;
             end
-            up_lat = ll;
+            chain_lat = ll;
         end
     endfunction
-    function integer pair_base;
+    function integer data_lat;       // full datapath (pairs + leftover)
+        begin
+            data_lat = chain_lat(NSTAGES / 2) + ((NSTAGES % 2) ? 11 : 0);
+        end
+    endfunction
+    function integer up_lat;         // latency of the pairs upstream of g
+        input integer gg;
+        begin
+            up_lat = chain_lat(gg);
+        end
+    endfunction
+    function integer pair_base;      // twiddle ROM base of pair g
         input integer gg;
         integer mm, DD2, bb;
         begin
             bb = 0;
-            for (mm = 0; mm < gg; mm = mm+1) begin
-                DD2 = N >> (2*mm+2);
-                bb = bb + 3*DD2;
+            for (mm = 0; mm < gg; mm = mm + 1) begin
+                DD2 = N >> (2 * mm + 2);
+                bb = bb + 3 * DD2;
             end
             pair_base = bb;
         end
     endfunction
-    function integer chain_lat;
-        input integer n; input integer Nval;
-        integer mm, DD3, ll2;
-        begin
-            ll2=0;
-            for (mm=0; mm<n/2; mm=mm+1) begin DD3=Nval>>(2*mm+2); ll2=ll2+3*DD3+9; end
-            chain_lat=ll2;
-        end
-    endfunction
-    localparam integer LATENCY = N + r22_latency(NSTAGES, N);
+
+    // +1: the registered quantizer output below
+    localparam integer LATENCY = data_lat() + 1;
     localparam integer CNT_W   = $clog2(LATENCY + 1);
 
     wire run = ce && s_axis_tvalid;
@@ -108,9 +119,11 @@ module fft_sdf_r22 #(
             if (cnt == LATENCY[CNT_W-1:0] - 1'b1) out_valid_r <= 1'b1;
         end
     end
+    // contract (PLAN.md 2.8): tvalid is low whenever the datapath is
+    // frozen (run == 0), so a consumer never sees stale data twice
     assign m_axis_tvalid = out_valid_r && run;
 
-    // marker shift register depth LATENCY
+    // frame marker sideband: shift register, depth LATENCY
     reg mk_user [0:LATENCY-1];
     reg mk_last [0:LATENCY-1];
     integer k;
@@ -118,7 +131,7 @@ module fft_sdf_r22 #(
         if (run) begin
             mk_user[0] <= s_axis_tuser;
             mk_last[0] <= s_axis_tlast;
-            for (k = 1; k < LATENCY; k = k+1) begin
+            for (k = 1; k < LATENCY; k = k + 1) begin
                 mk_user[k] <= mk_user[k-1];
                 mk_last[k] <= mk_last[k-1];
             end
@@ -128,8 +141,9 @@ module fft_sdf_r22 #(
     assign m_axis_tlast = mk_last[LATENCY-1];
 
     // stage chain: NPAIRS r22 stages + optional leftover plain stage
-    wire signed [INTERN_WIDTH-1:0] w_re [0:NPAIRS-1];
-    wire signed [INTERN_WIDTH-1:0] w_im [0:NPAIRS-1];
+    localparam integer WIDX = (NPAIRS > 0) ? NPAIRS : 1; // avoid [0:-1]
+    wire signed [INTERN_WIDTH-1:0] w_re [0:WIDX-1];
+    wire signed [INTERN_WIDTH-1:0] w_im [0:WIDX-1];
     wire signed [INTERN_WIDTH-1:0] w_lo_re, w_lo_im;
     wire signed [INTERN_WIDTH-1:0] in_x_re, in_x_im;
     assign in_x_re = $signed({{(INTERN_WIDTH-SAMPLE_WIDTH){s_axis_tdata_re[SAMPLE_WIDTH-1]}}, s_axis_tdata_re});
@@ -137,11 +151,11 @@ module fft_sdf_r22 #(
 
     genvar g;
     generate
-        for (g = 0; g < NPAIRS; g = g+1) begin : pairs
-            localparam integer D = N >> (2*g+2);
-            localparam integer SIGMA0 = (SCALING_PACK >> (4*g)) & 3;
-            localparam integer SIGMA1 = (SCALING_PACK >> (4*g+2)) & 3;
-            localparam integer K_PRE = (4*D - (up_lat(g) % (4*D))) % (4*D);
+        for (g = 0; g < NPAIRS; g = g + 1) begin : pairs
+            localparam integer D = N >> (2 * g + 2);
+            localparam integer SIGMA0 = (SCALING_PACK >> (4 * g)) & 3;
+            localparam integer SIGMA1 = (SCALING_PACK >> (4 * g + 2)) & 3;
+            localparam integer K_PRE = (4 * D - (up_lat(g) % (4 * D))) % (4 * D);
 
             fft_stage_r22 #(
                 .DEPTH          (D),
@@ -152,48 +166,44 @@ module fft_sdf_r22 #(
                 .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
                 .ROM_BASE       (pair_base(g)),
                 .NPTS           (N),
-                .INVERSE        (0),
+                .INVERSE        (INVERSE),
                 .K_PRELOAD      (K_PRE),
                 .TWIDDLE_FILE   (TWIDDLE_FILE)
             ) u_pair (
                 .clk(clk), .ce(run), .rst(rst),
-                .in_re  (g==0 ? in_x_re : w_re[g-1]),
-                .in_im  (g==0 ? in_x_im : w_im[g-1]),
+                .in_re  (g == 0 ? in_x_re : w_re[g-1]),
+                .in_im  (g == 0 ? in_x_im : w_im[g-1]),
                 .out_re (w_re[g]), .out_im (w_im[g])
             );
         end
     endgenerate
 
-    // leftover plain stage D=1 for odd NSTAGES
+    // leftover plain stage D=1 for odd NSTAGES. The chain outputs at
+    // position p land on this stage's input at clock p + chain_lat; the
+    // D=1 COMPUTE/PASS phase must therefore start flipped by
+    // chain_lat mod 2 (verified in top_gen._leftover_preload / the
+    // golden model's parity stepping). All other post-warm fields
+    // follow the same parity: wptr=pwp=parity, raddr=(wptr-D) mod 2D.
     wire signed [INTERN_WIDTH-1:0] chain_out_re, chain_out_im;
+    localparam integer LO_PARITY = chain_lat(NPAIRS) % 2;
     generate
         if (LEFTOVER != 0) begin : has_leftover
-            if (NPAIRS==0) begin
+            if (NPAIRS == 0) begin : lo_direct
                 assign chain_out_re = in_x_re;
                 assign chain_out_im = in_x_im;
-            end else begin
+            end else begin : lo_chain
                 assign chain_out_re = w_re[NPAIRS-1];
                 assign chain_out_im = w_im[NPAIRS-1];
             end
-            // plain leftover: D=1, shift = last stage shift, trivial (W0)
-            localparam integer LS = (SCALING_PACK >> (2*(NSTAGES-1))) & 3;
-            localparam integer CHAIN = chain_lat(NSTAGES,N);
-            // For D=1, leftover parity is CHAIN mod 2; we pre-step the
-            // golden leftover that many times to get preload state.
-            // For RTL, we can simply set PRELOAD_I = CHAIN%2 etc via K?
-            // Simpler: start with default preloads and let valid gate
-            // drain; the bit-exact contract requires the preload parity
-            // -- we generate it via a function mirroring top_gen._leftover_preload
-            // For now, tie preloads to 0 and rely on latency gate; the
-            // r22 spike top does the parity stepping in Python.
-            // TODO: wire correct preloads from generator (74-bit pack not used here).
             fft_stage #(
-                .DEPTH(1), .WIDTH(INTERN_WIDTH), .SHIFT(LS),
+                .DEPTH(1), .WIDTH(INTERN_WIDTH),
+                .SHIFT((SCALING_PACK >> (2 * (NSTAGES - 1))) & 3),
                 .TWIDDLE_WIDTH(TWIDDLE_WIDTH), .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-                .ROM_BASE(0), .NPTS(N),
-                .PRELOAD_I(0), .PRELOAD_C(0),
-                .WPTR_PRE(0), .PWP_PRE(0), .RADDR_PRE(0), .PIPE_PRE(0),
-                .TOPOLOGY(0), .TRIVIAL(1), .TWIDDLE_MEM(1),
+                .ROM_BASE(pair_base(NPAIRS)), .NPTS(N),
+                .PRELOAD_I(0), .PRELOAD_C(LO_PARITY),
+                .WPTR_PRE(LO_PARITY), .PWP_PRE(LO_PARITY),
+                .RADDR_PRE(1 - LO_PARITY), .PIPE_PRE(0),
+                .TOPOLOGY(0), .TRIVIAL(1), .TWIDDLE_MEM(TWIDDLE_MEM),
                 .TWIDDLE_FILE(TWIDDLE_FILE)
             ) u_left (
                 .clk(clk), .ce(run), .rst(rst),
@@ -208,20 +218,20 @@ module fft_sdf_r22 #(
 
     wire signed [INTERN_WIDTH-1:0] core_re, core_im;
     generate
-        if (LEFTOVER != 0) begin
+        if (LEFTOVER != 0) begin : sel_left
             assign core_re = w_lo_re;
             assign core_im = w_lo_im;
-        end else if (NPAIRS>0) begin
+        end else if (NPAIRS > 0) begin : sel_pairs
             assign core_re = w_re[NPAIRS-1];
             assign core_im = w_im[NPAIRS-1];
-        end else begin
+        end else begin : sel_pass
             assign core_re = in_x_re;
             assign core_im = in_x_im;
         end
     endgenerate
 
-    // output quantize Q(sd) -> Q(od)
-    localparam integer RESHIFT = (SAMPLE_DECIMAL > OUTPUT_DECIMAL) ? SAMPLE_DECIMAL-OUTPUT_DECIMAL : 0;
+    // output quantize Q(sample_decimal) -> Q(output_decimal), saturated
+    localparam integer RESHIFT = (SAMPLE_DECIMAL > OUTPUT_DECIMAL) ? SAMPLE_DECIMAL - OUTPUT_DECIMAL : 0;
     localparam integer QW = INTERN_WIDTH + RESHIFT + OUTPUT_WIDTH + 2;
     function [OUTPUT_WIDTH-1:0] quant_out;
         input signed [INTERN_WIDTH-1:0] v;

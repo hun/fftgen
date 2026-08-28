@@ -492,3 +492,29 @@ shift -- and neither fixes the worse timing (the cross-DSP/LUT-add
 paths). The 4-DSP committed state (20 DSPs, WNS -0.051) remains the
 best synthesizable design. The 3-DSP port is documented for the
 future (a DSP-primitive effort), with AR/BR/MR/PR usage in mind.
+
+## PRODUCTION CORE: fft_sdf_r22.v verified (P7 step 1)
+
+The generic wrapper (rtl/fft_sdf_r22.v + fft_top_r22.v, parameters via
+-G, NOT the per-config generated spike top) is now the production core
+and is BIT-EXACT against R22SDFGoldenModel including tuser/tlast marker
+alignment and ce/tvalid freeze masks:
+
+  rtl_check_prod.py: 27/27 -- N=2,4,..256 fwd+inv (odd/even stage
+  counts, last-pair D=1 collapse), N=1024/2048, widths 8/12.3->20/25->20,
+  tw 8/10.8, scaling 000/201/222, freeze periodic/bursty.
+
+Fixes vs the old wrapper (which was synthesis-sweep-only, never
+simulated): INVERSE parameter (was hardcoded 0); per-pair K_PRELOAD
+phase from the VERIFIED 3D+9 chain latency (was 3D+10); LATENCY is the
+datapath latency sum(3D+9)[+11][+1 quant reg] (was N + double-count);
+leftover D=1 stage gets its post-warm parity preloads
+(wptr=pwp=parity, raddr=1-parity, compute=parity, pipe=0) computed in
+Verilog (were tied 0 with a TODO); leftover twiddle at
+pair_base(NPAIRS) (the appended W^0 word); array decls valid for
+NPAIRS=0 (N=2).
+
+NOTE for step 5: golden_ssr.py's r22 lane latency ("M + sum(3D+10)")
+was written against the OLD, wrong wrapper formula and must be
+re-derived (extra lane delay = 8*npairs + [leftover 0] + 1 vs the
+golden's 3D+1 stages -- to be pinned against the verified RTL).
