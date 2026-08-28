@@ -10,6 +10,12 @@ from typing import Optional, Sequence, Tuple
 
 VALID_SSR = (1, 2, 4, 8)
 VALID_ORDERS = ("native", "bitreversed")
+# "r2"  = plain radix-2 SDF (one butterfly per stage, P0-P6)
+# "r22" = radix-2^2 folded SDF (P7): one shared complex multiply per
+#         stage pair; re-pins the golden rounding points vs "r2"
+#         (1-2 LSB, identical SQNR -- see spikes/S5_r22/notes.md).
+#         v1 scope: DIF, native->bitreversed, R=1 (the verified subset).
+VALID_STAGE_MODES = ("r2", "r22")
 
 
 def is_power_of_two(n: int) -> bool:
@@ -39,6 +45,9 @@ class FFTConfig:
     # Per-stage right-shift schedule ("auto" = conservative, cannot overflow;
     # otherwise an explicit list with one entry per stage, entries in 0..2)
     scaling: object = "auto"
+
+    # Stage architecture (see VALID_STAGE_MODES)
+    stage_mode: str = "r2"
 
     def __post_init__(self):
         if self.output_width is None:
@@ -92,9 +101,15 @@ class FFTConfig:
         """True if the emitted topology is DIT (bit-reversed input)."""
         return self.input_order == "bitreversed"
 
+    @property
+    def is_r22(self) -> bool:
+        """True if the core uses the radix-2^2 folded datapath (P7)."""
+        return self.stage_mode == "r22"
+
     def __repr__(self):
         return (f"FFTConfig(N={self.num_points}, inverse={self.inverse}, "
                 f"ssr={self.ssr}, in={self.input_order}, out={self.output_order}, "
+                f"mode={self.stage_mode}, "
                 f"W={self.sample_width}.{self.sample_decimal}->"
                 f"{self.output_width}.{self.output_decimal}, "
                 f"tw={self.twiddle_width}.{self.twiddle_decimal}, "
@@ -105,6 +120,23 @@ class FFTConfig:
     # ------------------------------------------------------------------
 
     def _validate(self):
+        if self.stage_mode not in VALID_STAGE_MODES:
+            raise ValueError(
+                f"stage_mode must be one of {VALID_STAGE_MODES}, "
+                f"got {self.stage_mode!r}")
+        if self.stage_mode == "r22":
+            # P7 step 1 verified subset (spikes/S5_r22/rtl_check_prod.py):
+            # DIF chain, native -> bitreversed, R = 1. SSR lanes and the
+            # DIT / reorder corners open with their own verification
+            # steps (P7 step 5 / DIT wiring); until then refuse cleanly.
+            if self.ssr != 1:
+                raise ValueError(
+                    f"stage_mode='r22' supports ssr=1 only for now "
+                    f"(SSR r22 arrives with P7 step 5), got ssr={self.ssr}")
+            if self.input_order != "native" or self.output_order != "bitreversed":
+                raise ValueError(
+                    "stage_mode='r22' supports native -> bitreversed only "
+                    f"for now, got {self.input_order} -> {self.output_order}")
         if not is_power_of_two(self.num_points) or self.num_points < 2:
             raise ValueError(
                 f"num_points must be a power of two >= 2, got {self.num_points}")

@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
-from config import FFTConfig, is_power_of_two
+from config import FFTConfig, is_power_of_two, VALID_ORDERS
 
 
 class TestIsPowerOfTwo(unittest.TestCase):
@@ -87,6 +87,41 @@ class TestSSRDivide(unittest.TestCase):
                      (1024, 8), (4, 2), (2, 1)):
             cfg = FFTConfig(num_points=n, ssr=r)
             self.assertEqual(cfg.ssr, r)
+
+
+class TestStageMode(unittest.TestCase):
+    def test_default_is_r2(self):
+        self.assertEqual(FFTConfig(num_points=8).stage_mode, "r2")
+
+    def test_r22_valid(self):
+        for N in (2, 4, 8, 16, 2048):
+            for inv in (False, True):
+                cfg = FFTConfig(num_points=N, inverse=inv,
+                                stage_mode="r22")
+                self.assertTrue(cfg.is_r22)
+                self.assertIn("mode=r22", repr(cfg))
+
+    def test_r22_rejects_ssr(self):
+        with self.assertRaises(ValueError):
+            FFTConfig(num_points=16, ssr=2, stage_mode="r22")
+
+    def test_r22_rejects_other_orders(self):
+        for kw in (dict(input_order="bitreversed"),
+                   dict(output_order="native"),
+                   dict(input_order="bitreversed", output_order="native")):
+            with self.subTest(**kw):
+                with self.assertRaises(ValueError):
+                    FFTConfig(num_points=16, stage_mode="r22", **kw)
+
+    def test_bad_stage_mode(self):
+        for bad in ("r4", ""):
+            with self.assertRaises(ValueError):
+                FFTConfig(num_points=8, stage_mode=bad)
+
+    def test_r2_all_orders_still_ok(self):
+        for io in VALID_ORDERS:
+            for oo in VALID_ORDERS:
+                FFTConfig(num_points=8, input_order=io, output_order=oo)
 
 
 if __name__ == "__main__":
