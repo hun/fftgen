@@ -620,3 +620,48 @@ already moved part of them into BRAM on its own (the new worst path
 starts in `dline_im_reg_bram_0`), which is exactly what an explicit
 r22 memory policy + a re-derived registered-read stage would do on
 purpose (cf. the "L0b 2-cycle read needs a full re-derivation" note).
+
+## P7 step 8: the SSR crossbar's DSP MREG (xbar_probe)
+
+After step 7 the R>=2 rows were still -0.020 (R=2/4) / -0.165 (R=8),
+N-independent and byte-identical between the r2 and r22 architectures --
+because the path is `u_cross/g_pre[r].pp1_reg`: A/B-reg -> PREADD ->
+MULT -> M_DATA(passthrough) -> ALU -> PREG, 1.85 ns, the same merge
+signature as the r22 stage (four lane products formed in ONE clock, two
+of them summed in the next -> the tool spends a product register to make
+room).
+
+`xbar_probe.py` synthesizes `fft_cross` alone (M = 32, OOC, @2 ns,
+~40 s/variant) -- 96 failing endpoints = 4 DSPs x 24 bits, the whole
+SSR number in one lane, which is why it looked N-independent.
+
+What the crossbar has and the r22 stage did not: the reorder-BRAM
+clock-to-out fix already inserts TWO operand hops -- q -> d (data) and
+wa -> wq (coefficient) -- i.e. the SAME word available one cycle apart.
+So the stagger is free:
+
+    pp3/pp4 (im-operand)   <= q_im  * wa_*     (early hop,  = the MREG)
+    pp1/pp2 (re-operand)   <= d_re  * wq_*     (late hop,   = the MREG)
+    pc3/pc4                <= pp3/pp4          (C-port regs = the CREGs)
+    b_re/b_im              <= pp1 -/+ pc4, pp2 +/- pc3      (the PREG)
+
+Every register EDGE that existed before still exists at the same cycle
+for the same word, so CB_LAT (7/11), the pd taps, the frame-sync
+emission and the fft_ssr marker pipeline are all UNCHANGED -- no
+contract change, no extra stage, no removed stage.
+
+| variant | R=2 | R=4 | R=8 | note |
+|---|---|---|---|---|
+| `cur` | -0.020 / 96 | -0.020 | -0.165 | intra-DSP |
+| `nat` (AW products, no stagger) | -0.020 / 96 | — | — | width lever alone does nothing HERE (unlike r22, where both were needed) |
+| **`stg`** | **+0.015 / 0** | **+0.013 / 0** | -0.165 / 52 | DSP count unchanged (4 at R=2, 12 at R=4) |
+
+R=8 keeps its -0.165 but the limiter MOVES: `qq_* -> fhi_*`, 8 logic
+levels of pure fabric (6 CARRY8) in the sqrt(2)/2 scalar-multiply lo/hi
+split -- the g_pre DSP hop is gone. That is a separate piece of work.
+
+TRAP (kept as variants_xbar/fft_cross_stag.v): the pc3/pc4 C-port
+registers are load-bearing. Dropping them leaves b pairing pp1(word k)
+with pp4(word k+1) -- it still synthesizes to +0.015 (timing-blind), and
+fails 4/4 SSR subtests. Verify the VALUES before believing any timing
+win.
