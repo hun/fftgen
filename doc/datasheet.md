@@ -8,9 +8,9 @@ scaling schedule, PIPE_DEPTH=10 (golden NLAYERS), post-warm preload
 packs applied (`FFTGEN_PRELOADS`) for `r2`. `r22` uses the production
 P7 core (`rtl/fft_sdf_r22.v` + `rtl/fft_stage_r22.v`, `K_PRELOAD` phase
 alignment; `rtl/fft_ssr_r22.v` for R>1) -- the same files the export
-flow ships. Post-synth estimates; the `r2` R=1 and `r22` R=1 paths close
-post-route (see PLAN.md P5a / S3 findings and the P7 step 7 note on
-`rtl/fft_stage_r22.v`).
+flow ships. Post-synth estimates; `r2` R=1 and `r22` R=1 close post-route
+(the `r22` N=2048 corner needs the aggressive directive recipe, see the
+timing notes below and PLAN.md P5a / S3 / `spikes/S5_r22/notes.md`).
 
 Twiddle ROM style is `auto`: block RAM from N >= 256
 (doc/mem_cutoffs.md S4).
@@ -149,7 +149,7 @@ Legacy spike sweep remains at `spikes/S2_timing/datasheet_sweep.py`.
 | architecture | WNS behavior | limiter |
 |---|---|---|
 | `r2` R=1 | +0.107 .. +0.113, flat across N (all MET) | product-FIFO LUTRAM read (pointer -> memory -> out) |
-| `r22` R=1 | +0.048 .. +0.187, all MET (P7 step 7) | plain fabric: L0 input capture -> CARRY8 diff butterfly -> LUTRAM delay-line write; the DSP is off the limiting path. N=2048 post-route -0.117 / 62 FEP on that same fabric family (post-synth +0.082) -- the deep `r22` v1 LUTRAM rings are the next lever (BRAM/URAM policy + a re-derived registered-read stage) |
+| `r22` R=1 | +0.048 .. +0.187, all MET (P7 step 7) | plain fabric: L0 input capture -> CARRY8 diff butterfly -> LUTRAM delay-line write; no DSP-internal path left. N=2048 post-route: -0.117 / 62 FEP with the default strategy, **MET (+0.003 / 0 FEP) with `place Explore` + `phys_opt/route AggressiveExplore` double pass** (4969 LUT, 20 DSP, 7.5 BRAM; recipe `spikes/S5_r22/dsp_probe/impl_aggr.tcl`). The thin margin is the v1 all-LUTRAM ring policy -- the placer already moves part of the deep rings into BRAM on its own, so an explicit `r22` memory policy + a re-derived registered-read stage is the real next lever |
 | R=2 / R=4 (`r2`, `r22`) | -0.020 flat, N-independent | NOT the lanes: the crossbar's intra-DSP hop (`u_cross/g_pre pp*_reg`: A/B-reg -> preadd -> mult -> ALU -> PREG, MREG bypassed) -- identical for both arches, so the `r22` lane savings come for free. Measured -0.021 post-route with TNS -0.152 at R=2 N=8192 (`r2`, AggressiveExplore double pass) -- skew-dominated synth estimate |
 | R=8 (`r2`, `r22`) | -0.165 flat | same crossbar hop plus the sqrt(2)/2 scalar-multiply split path; not yet post-routed |
 

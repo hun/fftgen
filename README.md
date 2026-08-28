@@ -24,9 +24,11 @@ All implementation phases (P0–P7) are complete; see the phase table in
   (was 44), R=2 N=2048 **68** (was 84), N=4 **0**; timing unchanged.
 - **Radix-2² (P7, `--stage-mode r22`)**: each DIF stage pair is merged into one
   4-sample group with a single general complex multiplier. R=1 N=2048 **20
-  DSPs** (r2: 36), N=8192 **24** (r2: 44), R=8 N=8192 **204** (r2: 300) — and
-  ~10–20% fewer LUTs — while **meeting 500 MHz post-synth at every N**
-  (+0.187 … +0.048, same corner as r2). Bit-exact against the re-pinned r22
+  DSPs** (r2: 36), N=8192 **24** (r2: 44), R=8 N=8192 **204** (r2: 300) — with
+  ~15–20% fewer LUTs *and* less LUTRAM (N=2048: 5251/2872 vs 6120/3644) —
+  while **meeting 500 MHz post-synth at every N** (+0.187 … +0.048, same
+  corner as r2; the N=2048 corner also closes post-route, +0.003, with the
+  aggressive directive recipe). Bit-exact against the re-pinned r22
   golden contract (few-LSB rounding placement, identical SQNR); covers DIF,
   fwd/inv, widths and scaling schedules as for `r2` — R = 1 native →
   bitreversed, R = 2/4/8 on the SSR native → native contract.
