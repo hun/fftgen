@@ -166,7 +166,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
 
     from golden_ssr import SSRGoldenModel as _P
     if pad_frames is None:
-        pad_frames = (_P(cfg).latency + M - 1) // M + 2
+        pad_frames = (_P(cfg, arch=cfg.stage_mode).latency + M - 1) // M + 2
 
     rng = __import__("random").Random(seed)
     frames = [[(rng.randint(-2 ** (cfg.sample_width - 1),
@@ -181,7 +181,7 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
 
     from golden_ssr import SSRGoldenModel
-    m = SSRGoldenModel(cfg)
+    m = SSRGoldenModel(cfg, arch=cfg.stage_mode)
 
     # stimulus: flat natural samples, hex
     with open(os.path.join(outdir, "stimulus.txt"), "w") as f:
@@ -199,8 +199,12 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     # RTL sources
     rtl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                            "rtl")
-    for fn in ("fft_sdf.v", "fft_reorder.v", "fft_top.v",
-               "fft_cross.v", "fft_ssr.v"):
+    r22 = cfg.is_r22
+    for fn in (("fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
+                "fft_cross.v") if r22 else
+               ("fft_sdf.v", "fft_reorder.v", "fft_top.v",
+                "fft_cross.v", "fft_ssr.v")):
         shutil.copy(os.path.join(rtl_dir, fn), outdir)
 
     # lane config artifacts: twiddle mem + preload pack + scaling pack
@@ -208,8 +212,12 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     lane_cfg = dataclasses.replace(cfg, num_points=M, ssr=1,
                                    input_order="native",
                                    output_order="bitreversed")
-    write_lane_twiddle_mem(lane_cfg, os.path.join(outdir,
-                                                  "fft_twiddles_lane.mem"))
+    if r22:
+        write_r22_twiddle_mem(lane_cfg, os.path.join(
+            outdir, "fft_twiddles_r22_lane.mem"))
+    else:
+        write_lane_twiddle_mem(lane_cfg, os.path.join(outdir,
+                                                      "fft_twiddles_lane.mem"))
     write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
 
     intern_m = (cfg.sample_width
@@ -217,26 +225,10 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     pack_m = 0
     for s_, sh in enumerate(lane_cfg.shifts):
         pack_m |= (sh & 3) << (2 * s_)
-    from golden import SDFGoldenModel
-    SDFGoldenModel(dataclasses.replace(
-        lane_cfg, input_order="native", output_order="bitreversed"), dit=False)
-    # identical field layout to the R=1 path (fft_sdf.v slices it there):
-    # per stage {wptr16, pwp16, raddr16, pipe6, phase_i16, compute1} = 71b
-    _gm = SSRGoldenModel(cfg) if False else None
-    lane_full = dataclasses.replace(cfg, num_points=M, ssr=1,
-                                    input_order="native",
-                                    output_order="bitreversed")
-    _gm = SDFGoldenModel(lane_full, dit=False)
-    # same dynamic-width emission as generate(): 74 bits per lane stage
-    write_preload_pack_vh(_gm.stage_preloads,
-                          os.path.join(outdir, "fft_preloads.vh"))
 
     tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                      "tb", "tb_fft_ssr.cpp")
+                      "tb", "tb_fft_ssr_r22.cpp" if r22 else "tb_fft_ssr.cpp")
     gargs = [
-        "+define+FFTGEN_PRELOADS",
-        "+define+TB_SSR=%d" % R,
-        "+incdir+.",
         f"-GNUM_POINTS={N}",
         f"-GSSR={R}",
         f"-GSAMPLE_WIDTH={cfg.sample_width}",
@@ -248,21 +240,42 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GSCALING_PACK=32'h{pack_m:08x}",
         f"-GINTERN_WIDTH={intern_m}",
         "-GPIPE_DEPTH=10",
-        f"-GINVERSE={1 if cfg.inverse else 0}",
+        f"-GINVERSE={1 if cfg.inverse else '0'}",
     ]
-    cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
-           "--top-module", "fft_ssr", "-Wno-fatal",
-           "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
-                      f"-DTB_OUTPUT_WIDTH={cfg.output_width} "
-                      f"-DTB_SSR={R}",
-           *gargs,
-           "fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
-           "fft_cross.v", tb]
+    if r22:
+        # fft_ssr_r22 defaults TWIDDLE_FILE/WN_FILE to the written names
+        cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+               "--top-module", "fft_ssr_r22", "-Wno-fatal",
+               "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                          f"-DTB_OUTPUT_WIDTH={cfg.output_width} "
+                          f"-DTB_SSR={R}",
+               *gargs,
+               "fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
+               "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
+               "fft_cross.v", tb]
+        binary = "Vfft_ssr_r22"
+    else:
+        gargs = ["+define+FFTGEN_PRELOADS", "+define+TB_SSR=%d" % R,
+                 "+incdir+.", *gargs]
+        # per-lane post-warm preloads (r2 lane engines)
+        from golden import SDFGoldenModel
+        _gm = SDFGoldenModel(lane_cfg, dit=False)
+        write_preload_pack_vh(_gm.stage_preloads,
+                              os.path.join(outdir, "fft_preloads.vh"))
+        cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+               "--top-module", "fft_ssr", "-Wno-fatal",
+               "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                          f"-DTB_OUTPUT_WIDTH={cfg.output_width} "
+                          f"-DTB_SSR={R}",
+               *gargs,
+               "fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
+               "fft_cross.v", tb]
+        binary = "Vfft_ssr"
     r = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}
 
-    r = subprocess.run([os.path.join("obj_dir", "Vfft_ssr")],
+    r = subprocess.run([os.path.join("obj_dir", binary)],
                        cwd=outdir, capture_output=True, text=True)
     if r.returncode != 0:
         return {"rc": r.returncode, "log": r.stderr[-2000:], "outdir": outdir}

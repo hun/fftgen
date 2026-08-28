@@ -101,9 +101,17 @@ class TestStageMode(unittest.TestCase):
                 self.assertTrue(cfg.is_r22)
                 self.assertIn("mode=r22", repr(cfg))
 
-    def test_r22_rejects_ssr(self):
+    def test_r22_ssr_orders(self):
+        # SSR r22 shares the SSR v1 native -> native contract
+        for r in (2, 4, 8):
+            cfg = FFTConfig(num_points=16 * r, ssr=r, stage_mode="r22",
+                            output_order="native")
+            self.assertTrue(cfg.is_r22)
         with self.assertRaises(ValueError):
-            FFTConfig(num_points=16, ssr=2, stage_mode="r22")
+            FFTConfig(num_points=32, ssr=2, stage_mode="r22")  # bitrev out
+        with self.assertRaises(ValueError):
+            FFTConfig(num_points=32, ssr=2, stage_mode="r22",
+                      output_order="native", input_order="bitreversed")
 
     def test_r22_rejects_other_orders(self):
         for kw in (dict(input_order="bitreversed"),

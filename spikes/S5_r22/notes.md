@@ -518,3 +518,19 @@ NOTE for step 5: golden_ssr.py's r22 lane latency ("M + sum(3D+10)")
 was written against the OLD, wrong wrapper formula and must be
 re-derived (extra lane delay = 8*npairs + [leftover 0] + 1 vs the
 golden's 3D+1 stages -- to be pinned against the verified RTL).
+
+## SSR r22 PRODUCTION: generate_ssr(r22) verified (P7 step 5)
+
+- The lane (fft_top_r22 REORDER_OUT=1) is cycle-exact vs the model lane:
+  _extra = 8*npairs + 1 (RTL 3D+9/pair + 11/leftover + 1 quant reg, minus
+  the golden 3D+1/pair), lane latency = core+M. The old _SSRLane
+  formula (M + sum(3D+10)) was written against the pre-step-1 wrapper
+  and is replaced.
+- p_off = 1 for the r22 crossbar pairing (first lane-valid word carries
+  position 0); empirically settled, R=2/4, M odd/even.
+- config: r22 now accepts ssr>1 under the SSR native->native contract.
+- fft_ssr_r22 lanes get INVERSE; lane ROM = write_r22_twiddle_mem(M)
+  (conjugated w/ cfg.inverse), cross unchanged.
+- tests/test_rtl_ssr_r22.py: R=2/4/8 sizes incl. the M=2 leftover-only
+  lane (N=16 R=8), fwd+inv -- 6 tests/15 subtests green within the
+  documented R/2+1 tolerance. r2 suite unchanged (136 total).

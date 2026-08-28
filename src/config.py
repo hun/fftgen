@@ -125,18 +125,23 @@ class FFTConfig:
                 f"stage_mode must be one of {VALID_STAGE_MODES}, "
                 f"got {self.stage_mode!r}")
         if self.stage_mode == "r22":
-            # P7 step 1 verified subset (spikes/S5_r22/rtl_check_prod.py):
-            # DIF chain, native -> bitreversed, R = 1. SSR lanes and the
-            # DIT / reorder corners open with their own verification
-            # steps (P7 step 5 / DIT wiring); until then refuse cleanly.
-            if self.ssr != 1:
+            # P7 verified subsets: DIF chain only. R=1 covers native ->
+            # bitreversed (steps 1-4); R>1 reuses that exact lane core
+            # behind the unchanged crossbar (step 5) and shares the SSR
+            # v1 native -> native contract.
+            if self.input_order != "native":
                 raise ValueError(
-                    f"stage_mode='r22' supports ssr=1 only for now "
-                    f"(SSR r22 arrives with P7 step 5), got ssr={self.ssr}")
-            if self.input_order != "native" or self.output_order != "bitreversed":
+                    "stage_mode='r22' is DIF-only: input_order must be "
+                    f"'native', got {self.input_order!r}")
+            if self.ssr == 1 and self.output_order != "bitreversed":
                 raise ValueError(
-                    "stage_mode='r22' supports native -> bitreversed only "
-                    f"for now, got {self.input_order} -> {self.output_order}")
+                    "stage_mode='r22' (R=1) supports native -> bitreversed "
+                    f"only for now, got output_order={self.output_order!r}")
+            if self.ssr > 1 and self.output_order != "native":
+                raise ValueError(
+                    f"stage_mode='r22' with ssr={self.ssr} shares the SSR "
+                    "contract: output_order must be 'native', got "
+                    f"{self.output_order!r}")
         if not is_power_of_two(self.num_points) or self.num_points < 2:
             raise ValueError(
                 f"num_points must be a power of two >= 2, got {self.num_points}")

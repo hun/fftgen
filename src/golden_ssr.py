@@ -43,9 +43,12 @@ class _SSRLane:
     """One R=1 engine: DIF core + ping-pong reorder -> native order.
 
     arch = "r2" (plain radix-2, ``fft_sdf``) or "r22" (radix-2^2,
-    ``fft_sdf_r22`` / ``R22SDFGoldenModel``). For r22 the RTL pipeline
-    (3*D+9 per pair, AREG/BREG) is deeper than the 3*D+1 golden stage,
-    so an extra delay aligns valid to the RTL's N+sum(3D+9)+M latency.
+    ``fft_sdf_r22`` / ``R22SDFGoldenModel``). The r22 RTL pipeline is
+    deeper than the 3*D+1 golden stage (the verified pipelined stage
+    emits position p at clock p + 3D + 9, plus the wrapper's registered
+    quantizer output), so an extra uniform delay of (valid, data,
+    markers) aligns the model lane to the RTL:
+    extra = 8*npairs + 1.
     """
 
     def __init__(self, m_cfg: FFTConfig, arch: str = "r2"):
@@ -56,17 +59,16 @@ class _SSRLane:
         core_cfg.output_order = "bitreversed"
         if arch == "r22":
             self.core = R22SDFGoldenModel(core_cfg)
-            # RTL r22 core LATENCY = M + sum(3*D+9) [+11]  (see rtl/fft_sdf_r22.v)
-            M = m_cfg.num_points
+            # RTL r22 core latency (verified, rtl/fft_sdf_r22.v):
+            #   sum(3*D + 9) per pair + 11 (odd-n leftover, D + NLAYERS)
+            #   + 1 (registered quantizer output)
             n = core_cfg.num_stages
-            pipelined = sum(3 * (M >> (2 * m + 2)) + 10 for m in range(n // 2))
-            if n % 2:
-                pipelined += 11
-            rtl_core_lat = M + pipelined
-            # golden core latency (3*D+1) + reorder M
-            golden_lane = self.core.latency + M
-            rtl_lane = rtl_core_lat + M
-            self._extra = rtl_lane - golden_lane
+            M = m_cfg.num_points
+            rtl_core_lat = sum(3 * (M >> (2 * m + 2)) + 9
+                               for m in range(n // 2)) \
+                + (11 if n % 2 else 0) + 1
+            # golden core latency (3*D+1 per pair + 11 leftover)
+            self._extra = rtl_core_lat - self.core.latency
             self._extra_q: deque = deque()
             # prefill extra delay with invalid entries
             for _ in range(max(0, self._extra)):
@@ -178,8 +180,9 @@ class SSRGoldenModel:
         self._cycles += 1
         # the lanes carry A_r[p] with p counted from THEIR first valid
         # output (they all share the same latency, hence lockstep)
-        # r22 lane has one extra output register (m_re_r) vs r2, so p
-        # lags by one; compensate for bit-exact alignment.
+        # lanes: the r22 model lane carries the RTL's extra pipeline
+        # depth in _extra; the crossbar phase convention (p counts from
+        # the first lane-valid word) then lags the data by one word
         p_off = 1 if self.arch == "r22" else 0
         p = (self._cycles - self.lanes[0].latency - p_off) % M
         self._dbg_p = p
