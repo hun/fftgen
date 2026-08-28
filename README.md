@@ -32,8 +32,20 @@ All implementation phases (P0–P7) are complete; see the phase table in
   golden contract (few-LSB rounding placement, identical SQNR); covers DIF,
   fwd/inv, widths and scaling schedules as for `r2` — R = 1 native →
   bitreversed, R = 2/4/8 on the SSR native → native contract.
-- **SSR (R = 2, 4, 8)**: bit-exact fwd+inv; R = 2 N = 8192 and the R = 4 / R = 8
-  corner configs close 500 MHz post-route on KU5P.
+- **SSR (R = 2, 4, 8)**: bit-exact fwd+inv (and spot-verified at production size:
+  N = 2048 R = 2 native → native, both directions, `ok: 12254 samples` for
+  values + `tuser`/`tlast`). Timing after the P7 step-8 crossbar fix: **500 MHz met
+  post-synth through N = 2048 at R = 2 and N = 4096 at R = 4** (both arches);
+  the largest SSR sizes and R = 8 are met at **450 MHz** (worst +0.057 post-synth,
+  see the datasheet's "achievable clock" note). The pre-step-8 claim that
+  R = 2 N = 8192 closed 500 MHz post-route belonged to the old crossbar netlist
+  and no longer holds — step 8 removed the N-independent -0.020 intra-DSP cap
+  and exposed the lane-reorder BRAM clock-to-out hop at the largest sizes.
+- **SSR corner orders** (FFT `native → bitreversed`, IFFT `bitreversed → native`):
+  **not generatable** — SSR v1 is native → native only, in all three layers
+  (config guard, generator assert, golden model). Planned as **P8** for the
+  R = 2 / radix-2² subset a fast-convolution drop-in needs:
+  [doc/plan_p8_ssr_orders.md](doc/plan_p8_ssr_orders.md).
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors (both `--stage-mode` values).
