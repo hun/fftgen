@@ -78,11 +78,9 @@ module fft_sdf_r22 #(
             chain_lat = ll;
         end
     endfunction
-    function integer data_lat;       // full datapath (pairs + leftover)
-        begin
-            data_lat = chain_lat(NSTAGES / 2) + ((NSTAGES % 2) ? 11 : 0);
-        end
-    endfunction
+    // full datapath latency: pairs + odd-n leftover (D + NLAYERS = 11)
+    localparam integer CORE_LAT = chain_lat(NSTAGES / 2)
+                                  + ((NSTAGES % 2) ? 11 : 0);
     function integer up_lat;         // latency of the pairs upstream of g
         input integer gg;
         begin
@@ -103,7 +101,7 @@ module fft_sdf_r22 #(
     endfunction
 
     // +1: the registered quantizer output below
-    localparam integer LATENCY = data_lat() + 1;
+    localparam integer LATENCY = CORE_LAT + 1;
     localparam integer CNT_W   = $clog2(LATENCY + 1);
 
     wire run = ce && s_axis_tvalid;
