@@ -44,25 +44,6 @@
 // the golden model, which pins the per-cycle behaviour, not the layer
 // distribution.
 //
-// DSP CODING RULE (both halves are REQUIRED for 500 MHz; proven by
-// spikes/S5_r22/dsp_probe, one stage, KU5P @2 ns):
-//   1. the im/re products must be staggered by one clock (above), AND
-//   2. the multiply/sum operands must be declared `reg signed` at their
-//      NATURAL widths with the products assigned straight into
-//      `reg signed [MWB-1:0]` -- no hand-rolled sign-extension wires on
-//      the multiplier operands and no width change at the combine.
-// Hand-rolling the extensions adds fabric glue between the DSP ports
-// and the registers it must absorb, and Vivado then merges the re/im
-// combine into a single ALU pass with the product MREG bypassed: an
-// intra-DSP A/B-reg -> PREADD -> MULT -> ALU -> PREG hop of 1.85 ns
-// (WNS -0.020, 96 failing endpoints per stage). With the stagger alone
-// or the natural widths alone it still collapses; with BOTH the DSP
-// absorbs its full register budget and the stage closes (+0.187). This
-// is the same trap PLAN.md records for the Gauss/Karatsuba attempt
-// ("hand-rolled extensions just add fabric glue that blocks AREG/DREG
-// absorption"). Marking the product registers `(* dont_touch = "true" *)`
-// is NOT a workaround: it makes it worse (-0.484).
-//
 // Writes and depths (from the verified piped model, +1 for the
 // AREG/BREG stage):
 //   ram    depth 0 (raw input)        gate k    (the async read gets

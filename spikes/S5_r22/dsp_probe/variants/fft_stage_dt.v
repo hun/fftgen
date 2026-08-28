@@ -44,25 +44,6 @@
 // the golden model, which pins the per-cycle behaviour, not the layer
 // distribution.
 //
-// DSP CODING RULE (both halves are REQUIRED for 500 MHz; proven by
-// spikes/S5_r22/dsp_probe, one stage, KU5P @2 ns):
-//   1. the im/re products must be staggered by one clock (above), AND
-//   2. the multiply/sum operands must be declared `reg signed` at their
-//      NATURAL widths with the products assigned straight into
-//      `reg signed [MWB-1:0]` -- no hand-rolled sign-extension wires on
-//      the multiplier operands and no width change at the combine.
-// Hand-rolling the extensions adds fabric glue between the DSP ports
-// and the registers it must absorb, and Vivado then merges the re/im
-// combine into a single ALU pass with the product MREG bypassed: an
-// intra-DSP A/B-reg -> PREADD -> MULT -> ALU -> PREG hop of 1.85 ns
-// (WNS -0.020, 96 failing endpoints per stage). With the stagger alone
-// or the natural widths alone it still collapses; with BOTH the DSP
-// absorbs its full register budget and the stage closes (+0.187). This
-// is the same trap PLAN.md records for the Gauss/Karatsuba attempt
-// ("hand-rolled extensions just add fabric glue that blocks AREG/DREG
-// absorption"). Marking the product registers `(* dont_touch = "true" *)`
-// is NOT a workaround: it makes it worse (-0.484).
-//
 // Writes and depths (from the verified piped model, +1 for the
 // AREG/BREG stage):
 //   ram    depth 0 (raw input)        gate k    (the async read gets
@@ -318,25 +299,31 @@ module fft_stage_r22 #(
                         : (k3 < ONE_D ? c1_r_re : c3_r_re);
     wire [CB-1:0] m_im = (k3 >= THREE_D) ? {{(CB-BW){sd_r_im[BW-1]}}, sd_r_im}
                         : (k3 < ONE_D ? c1_r_im : c3_r_im);
-    reg signed [CB-1:0] m_r_re, m_r_im;           // the AREG (operand)
-    reg signed [TWIDDLE_WIDTH-1:0] tr_r2, ti_r2; // the BREG (twiddle)
+    reg [CB-1:0] m_r_re, m_r_im;                 // the AREG (operand)
+    reg [TWIDDLE_WIDTH-1:0] tr_r2, ti_r2;        // the BREG (twiddle)
+    wire signed [MWB-1:0] m_im_w = {{(MWB-CB){m_r_im[CB-1]}}, m_r_im};
+    wire signed [MWB-1:0] tr_w = {{(MWB-TWIDDLE_WIDTH){tr_r2[TWIDDLE_WIDTH-1]}}, tr_r2};
+    wire signed [MWB-1:0] ti_w = {{(MWB-TWIDDLE_WIDTH){ti_r2[TWIDDLE_WIDTH-1]}}, ti_r2};
 
     // L2b: the im-path products (MREG) + the frozen re-path operands
     // (the re multiply runs one cycle later so the DSP C-port pairing
     // P -/+ C sees the same pair -- see the header)
-    reg signed [MWB-1:0] prod_im_tr, prod_im_ti;
-    reg signed [CB-1:0] m_rh_re;                 // frozen re operand
-    reg signed [TWIDDLE_WIDTH-1:0] tr_rh, ti_rh; // frozen twiddle
+    reg [MWB-1:0] prod_im_tr, prod_im_ti;
+    reg [CB-1:0] m_rh_re;                        // frozen re operand
+    reg [TWIDDLE_WIDTH-1:0] tr_rh, ti_rh;        // frozen twiddle
+    wire signed [MWB-1:0] m_rh_w = {{(MWB-CB){m_rh_re[CB-1]}}, m_rh_re};
+    wire signed [MWB-1:0] tr_h_w = {{(MWB-TWIDDLE_WIDTH){tr_rh[TWIDDLE_WIDTH-1]}}, tr_rh};
+    wire signed [MWB-1:0] ti_h_w = {{(MWB-TWIDDLE_WIDTH){ti_rh[TWIDDLE_WIDTH-1]}}, ti_rh};
 
     // L3: the re-path products (MREG) + the im products at the C ports
     // (CREG). re = m_re*tr - m_im*ti, im = m_re*ti + m_im*tr.
-    reg signed [MWB-1:0] prod_re_tr, prod_re_ti;
-    reg signed [MWB-1:0] c_ti, c_tr;
+    (* dont_touch = "true" *) reg [MWB-1:0] prod_re_tr, prod_re_ti;
+    reg [MWB-1:0] c_ti, c_tr;
 
     // ------------------------------------------------------------------
     // L4: re/im combine (the DSP ALU/PREG)
     // ------------------------------------------------------------------
-    reg signed [MWB-1:0] p_re, p_im;
+    reg [PW-1:0] p_re, p_im;
 
     // ------------------------------------------------------------------
     // L5: round-half-up staging (the k7-selected shift; the delayed y0)
@@ -385,7 +372,7 @@ module fft_stage_r22 #(
             tr_rh <= {TWIDDLE_WIDTH{1'b0}}; ti_rh <= {TWIDDLE_WIDTH{1'b0}};
             m_r_re <= {CB{1'b0}}; m_r_im <= {CB{1'b0}};
             tr_r2 <= {TWIDDLE_WIDTH{1'b0}}; ti_r2 <= {TWIDDLE_WIDTH{1'b0}};
-            p_re <= {MWB{1'b0}}; p_im <= {MWB{1'b0}};
+            p_re <= {PW{1'b0}}; p_im <= {PW{1'b0}};
             shift_p_re <= {PW{1'b0}}; shift_p_im <= {PW{1'b0}};
             y0_r_re <= {WIDTH{1'b0}}; y0_r_im <= {WIDTH{1'b0}};
             out_re <= {WIDTH{1'b0}};
@@ -422,30 +409,32 @@ module fft_stage_r22 #(
 
             // ---- L2b: the im-path products (MREG) + the frozen re-path
             // operands --------------------------------------------
-            prod_im_ti <= m_r_im * ti_r2;
-            prod_im_tr <= m_r_im * tr_r2;
+            prod_im_ti <= m_im_w * ti_w;
+            prod_im_tr <= m_im_w * tr_w;
             m_rh_re <= m_r_re;
             tr_rh   <= tr_r2;
             ti_rh   <= ti_r2;
 
             // ---- L3: the re-path products (MREG) + the im products at
             // the C ports (CREG) ---------------------------------
-            prod_re_tr <= m_rh_re * tr_rh;
-            prod_re_ti <= m_rh_re * ti_rh;
+            prod_re_tr <= m_rh_w * tr_h_w;
+            prod_re_ti <= m_rh_w * ti_h_w;
             c_ti <= prod_im_ti;
             c_tr <= prod_im_tr;
 
             // ---- L4: the re/im combine (the ALU/PREG) ------------
-            p_re <= prod_re_tr - c_ti;
-            p_im <= prod_re_ti + c_tr;
+            p_re <= {{(PW-MWB){prod_re_tr[MWB-1]}}, prod_re_tr}
+                  - {{(PW-MWB){c_ti[MWB-1]}}, c_ti};
+            p_im <= {{(PW-MWB){prod_re_ti[MWB-1]}}, prod_re_ti}
+                  + {{(PW-MWB){c_tr[MWB-1]}}, c_tr};
 
             // ---- L5: the round-half-up staging ------------------
             if (k7 >= THREE_D) begin
-                shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_S1);
-                shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_S1);
+                shift_p_re <= round_shift_pw(p_re, TD_PLUS_S1);
+                shift_p_im <= round_shift_pw(p_im, TD_PLUS_S1);
             end else begin
-                shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_BOTH);
-                shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_BOTH);
+                shift_p_re <= round_shift_pw(p_re, TD_PLUS_BOTH);
+                shift_p_im <= round_shift_pw(p_im, TD_PLUS_BOTH);
             end
             y0_r_re <= round_shift_bw(y0_raw5_re, SIGMA1)[WIDTH-1:0];
             y0_r_im <= round_shift_bw(y0_raw5_im, SIGMA1)[WIDTH-1:0];

@@ -534,3 +534,65 @@ golden's 3D+1 stages -- to be pinned against the verified RTL).
 - tests/test_rtl_ssr_r22.py: R=2/4/8 sizes incl. the M=2 leftover-only
   lane (N=16 R=8), fwd+inv -- 6 tests/15 subtests green within the
   documented R/2+1 tolerance. r2 suite unchanged (136 total).
+
+## P7 step 7a: 500 MHz closure of the r22 production stage (dsp_probe)
+
+First timing run of the exported r22 core (N=2048, 16b, KU5P @2 ns,
+build/timing_r22_n2048): post-synth WNS **-0.020 / 480 failing
+endpoints**, every one of them an INTRA-DSP hop
+`DSP_A_B_DATA -> DSP_PREADD_DATA -> DSP_MULTIPLIER -> DSP_M_DATA
+(passthrough) -> DSP_ALU -> DSP_OUTPUT` -- 1.85 ns of pure DSP logic,
+480 = 4 product DSPs x 24 bits x 5 pairs. So the stage never used the
+DSP48 **MREG**: Vivado merged the L3 re/im combine into a single ALU
+pass and paid for it by dropping one product register (the exact shape
+S3 documented for the PCOUT->PCIN cascade lanes, and the same
+-0.020/ns constant-across-N path the pre-NLAYERS-10 r2 stage had).
+
+`spikes/S5_r22/dsp_probe/` = one `fft_stage_r22` (D=128, 16b/18b),
+OOC on KU5P @2 ns; ~2 min per variant, and reproduces the full-core
+result exactly (-0.020 / 96 endpoints = 4 DSPs x 24 bits).
+
+| variant | im/re stagger | operand coding | WNS | fail EP |
+|---|---|---|---|---|
+| `cur`   (HEAD) | no  | hand-rolled sign-ext wires | -0.020 | 96 |
+| `stag`         | yes | hand-rolled sign-ext wires | -0.020 | 96 |
+| `norig`        | no  | natural width, `reg signed`| -0.020 | 96 |
+| **`nat`**      |**yes**| **natural width, `reg signed`** | **+0.187** | **0** |
+| `dt` (stag + `(* dont_touch = "true" *)` on the products) | yes | ext wires | -0.484 | 122 |
+
+**Both** levers are needed, and the attribute is a trap (it forces the
+product register to survive AND keeps the merged ALU pass, so the path
+grows to 5 levels through DSP_OUTPUT).
+
+1. **Stagger** (the r2 stage's C-port pairing): the im-operand products
+   (`m_im*tr`, `m_im*ti`) are registered one clock AHEAD of the re-operand
+   products and reach the re DSPs through their C ports; the re operands
+   and the twiddle are frozen into a second AREG/BREG hop. Two products
+   in ONE clock always leaves the tool a spare register stage, which it
+   spends on the operand path so the multiply+combine collapse into one
+   ALU pass.
+2. **Natural-width signed operands**: the multiply must read
+   `reg signed [CB-1:0] * reg signed [TW-1:0]` assigned straight into
+   `reg signed [MWB-1:0]`, and the combine must stay at MWB (the sign
+   extension to PW moves to the consumer, i.e. into the shift stage).
+   The pre-existing hand-rolled `wire signed [MWB-1:0] *_w` extensions
+   put fabric glue on both DSP ports; that blocks the absorption (the
+   same trap PLAN records for the Gauss experiment).
+
+LATENCY-NEUTRAL: the retime adds one hop to the product path
+(prod_im -> prod_re -> p -> shift) and DROPS the `shift_p2` alignment
+register, so the pfifo write happens on the SAME clock with the SAME
+value. Consequences inside the stage: the shift-select tap moves k6 ->
+k7 (k7 was already in the phase chain, unused), the pfifo write gate
+k8 and the y0/out mux path are untouched, stage latency stays 3D+9.
+The golden `_R22DIFStage` models the per-cycle contract (pfifo write /
+output phase), not the RTL layer distribution, so it is UNCHANGED --
+verified: `rtl_check_prod.py` 27/27 BIT-EXACT (values + markers +
+freeze masks), `tests/` 139 passed / 229 subtests (r22 RTL, SSR r22,
+export), and the exported N=2048 tree simulates `ok: 6144 samples`.
+
+Full core after the fix (build/timing_r22_n2048, KU5P @2 ns):
+post-synth **WNS +0.082, 0 failing endpoints**, 20 DSP48 (r2: 36),
+5251 LUT / 3677 FF / 7.5 BRAM. The critical path is now plain fabric
+(the L0 input-capture CARRY8 butterfly chain), i.e. the DSP is off the
+limiting path.

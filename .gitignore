@@ -4,3 +4,10 @@ build/
 *.egg-info/
 .pytest_cache/
 .coverage
+build_*/
+.Xil/
+vivado.jou
+vivado.log
+*.jou
+\#*.tmp
+synth_n*/

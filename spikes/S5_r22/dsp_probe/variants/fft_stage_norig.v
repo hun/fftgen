@@ -22,46 +22,11 @@
 //   L2a  the DSP AREG/BREG operand capture: the product mux (k3) and
 //        the BRAM-twiddle DOUT registered so the DSP48E2 uses its
 //        input registers (the A/B inputs are not combinational)
-//   L2b  the IM-path products (the DSP MREG) + freeze of the RE-path
-//        operands. The re multiply deliberately runs ONE CYCLE LATER
-//        so the DSP ALU sees a matched P (own MREG) / C (CREG, fed by
-//        the im MREG) pair -- the fft_sdf (r2) proven C-port pairing.
-//        Computing all four products in one clock instead lets Vivado
-//        merge the re/im combine into a single ALU pass and bypass one
-//        product MREG: an intra-DSP BREG->PREADD->MULT->ALU->PREG hop
-//        of 1.85 ns that misses 500 MHz (P7 step 7 timing run).
-//   L3   the RE-path products (MREG) + the im-path products captured
-//        at the re DSPs' C-port registers (CREG)
-//   L4   re/im combine (the DSP ALU/PREG)
-//   L5   round-half-up staging (products by the k7-selected shift;
+//   L2b  the 4 multiplies (the DSP MREG)
+//   L3   re/im combine (the DSP ALU/PREG)
+//   L4   round-half-up staging (products by the k6-selected shift;
 //        y0 from the 5-deep y0_raw chain)
-//   L6   writes + output mux (per-depth gates)
-//
-// The product path is one hop LONGER than the pre-P7 draft (prod_im,
-// prod_re, p, shift) and the old shift_p2 alignment register is GONE,
-// so the absolute cycle of every externally visible event (pfifo write,
-// output mux, latency 3D+9) is unchanged -- the retime is invisible to
-// the golden model, which pins the per-cycle behaviour, not the layer
-// distribution.
-//
-// DSP CODING RULE (both halves are REQUIRED for 500 MHz; proven by
-// spikes/S5_r22/dsp_probe, one stage, KU5P @2 ns):
-//   1. the im/re products must be staggered by one clock (above), AND
-//   2. the multiply/sum operands must be declared `reg signed` at their
-//      NATURAL widths with the products assigned straight into
-//      `reg signed [MWB-1:0]` -- no hand-rolled sign-extension wires on
-//      the multiplier operands and no width change at the combine.
-// Hand-rolling the extensions adds fabric glue between the DSP ports
-// and the registers it must absorb, and Vivado then merges the re/im
-// combine into a single ALU pass with the product MREG bypassed: an
-// intra-DSP A/B-reg -> PREADD -> MULT -> ALU -> PREG hop of 1.85 ns
-// (WNS -0.020, 96 failing endpoints per stage). With the stagger alone
-// or the natural widths alone it still collapses; with BOTH the DSP
-// absorbs its full register budget and the stage closes (+0.187). This
-// is the same trap PLAN.md records for the Gauss/Karatsuba attempt
-// ("hand-rolled extensions just add fabric glue that blocks AREG/DREG
-// absorption"). Marking the product registers `(* dont_touch = "true" *)`
-// is NOT a workaround: it makes it worse (-0.484).
+//   L5   writes + output mux (per-depth gates)
 //
 // Writes and depths (from the verified piped model, +1 for the
 // AREG/BREG stage):
@@ -70,10 +35,10 @@
 //   sram/  depth 0 (the CURRENT      gate k1   (the arrival clock =
 //   dram   combinational s_x/d_x)              the reads' capture)
 //   dline  depth 0 (the CURRENT d_x) gate k1
-//   pfifo  depth 7 (shift_p)         gate k8   (the operand phase,
+//   pfifo  depth 7 (shift_p2)        gate k8   (the operand phase,
 //                                          [0,2D) U [3D,4D))
 //   output mux  depth 7 (y0_r)       gate k8; pfifo lag D
-//   shift select                      gate k7   (the product's shift)
+//   shift select                      gate k6   (the product's capture)
 //
 // Pointers: rp/sp/pwp/pr are derived from the PHASE (k mod the ring
 // sizes): a chained stage's phase is its OWN step index (K_PRELOAD =
@@ -320,31 +285,21 @@ module fft_stage_r22 #(
                         : (k3 < ONE_D ? c1_r_im : c3_r_im);
     reg signed [CB-1:0] m_r_re, m_r_im;           // the AREG (operand)
     reg signed [TWIDDLE_WIDTH-1:0] tr_r2, ti_r2; // the BREG (twiddle)
-
-    // L2b: the im-path products (MREG) + the frozen re-path operands
-    // (the re multiply runs one cycle later so the DSP C-port pairing
-    // P -/+ C sees the same pair -- see the header)
-    reg signed [MWB-1:0] prod_im_tr, prod_im_ti;
-    reg signed [CB-1:0] m_rh_re;                 // frozen re operand
-    reg signed [TWIDDLE_WIDTH-1:0] tr_rh, ti_rh; // frozen twiddle
-
-    // L3: the re-path products (MREG) + the im products at the C ports
-    // (CREG). re = m_re*tr - m_im*ti, im = m_re*ti + m_im*tr.
-    reg signed [MWB-1:0] prod_re_tr, prod_re_ti;
-    reg signed [MWB-1:0] c_ti, c_tr;
+    reg signed [MWB-1:0] prod_rr, prod_ri, prod_ir, prod_ii;  // the DSP MREG
 
     // ------------------------------------------------------------------
-    // L4: re/im combine (the DSP ALU/PREG)
+    // L3: re/im combine (the DSP ALU/PREG)
     // ------------------------------------------------------------------
     reg signed [MWB-1:0] p_re, p_im;
 
     // ------------------------------------------------------------------
-    // L5: round-half-up staging (the k7-selected shift; the delayed y0)
+    // L4: round-half-up staging (the k6-selected shift; the delayed y0)
     // ------------------------------------------------------------------
-    reg [PW-1:0] shift_p_re, shift_p_im;   // the pfifo write value
+    reg [PW-1:0] shift_p_re, shift_p_im;
+    reg [PW-1:0] shift_p2_re, shift_p2_im;   // the pfifo write value
     (* shreg_extract = "no" *) reg [WIDTH-1:0] y0_r_re, y0_r_im;
 
-    // L6 gates
+    // L5 gates
     wire w_gate_ram = (k < TWO_D);
     wire w_gate_sd  = (k1 >= TWO_D && k1 < THREE_D);
     wire w_gate_dl  = (k1 >= THREE_D);
@@ -378,15 +333,13 @@ module fft_stage_r22 #(
             y0_raw3_re <= {BW{1'b0}}; y0_raw3_im <= {BW{1'b0}};
             y0_raw4_re <= {BW{1'b0}}; y0_raw4_im <= {BW{1'b0}};
             y0_raw5_re <= {BW{1'b0}}; y0_raw5_im <= {BW{1'b0}};
-            prod_im_tr <= {MWB{1'b0}}; prod_im_ti <= {MWB{1'b0}};
-            prod_re_tr <= {MWB{1'b0}}; prod_re_ti <= {MWB{1'b0}};
-            c_ti <= {MWB{1'b0}}; c_tr <= {MWB{1'b0}};
-            m_rh_re <= {CB{1'b0}};
-            tr_rh <= {TWIDDLE_WIDTH{1'b0}}; ti_rh <= {TWIDDLE_WIDTH{1'b0}};
+            prod_rr <= {MWB{1'b0}}; prod_ri <= {MWB{1'b0}};
+            prod_ir <= {MWB{1'b0}}; prod_ii <= {MWB{1'b0}};
             m_r_re <= {CB{1'b0}}; m_r_im <= {CB{1'b0}};
             tr_r2 <= {TWIDDLE_WIDTH{1'b0}}; ti_r2 <= {TWIDDLE_WIDTH{1'b0}};
             p_re <= {MWB{1'b0}}; p_im <= {MWB{1'b0}};
             shift_p_re <= {PW{1'b0}}; shift_p_im <= {PW{1'b0}};
+            shift_p2_re <= {PW{1'b0}}; shift_p2_im <= {PW{1'b0}};
             y0_r_re <= {WIDTH{1'b0}}; y0_r_im <= {WIDTH{1'b0}};
             out_re <= {WIDTH{1'b0}};
             out_im <= {WIDTH{1'b0}};
@@ -420,37 +373,29 @@ module fft_stage_r22 #(
             m_r_re <= m_re;   m_r_im <= m_im;
             tr_r2 <= tr;      ti_r2 <= ti;
 
-            // ---- L2b: the im-path products (MREG) + the frozen re-path
-            // operands --------------------------------------------
-            prod_im_ti <= m_r_im * ti_r2;
-            prod_im_tr <= m_r_im * tr_r2;
-            m_rh_re <= m_r_re;
-            tr_rh   <= tr_r2;
-            ti_rh   <= ti_r2;
+            // ---- L2b: the products (the DSP MREG) ----------------
+            prod_rr <= m_r_re * tr_r2;
+            prod_ri <= m_r_re * ti_r2;
+            prod_ir <= m_r_im * tr_r2;
+            prod_ii <= m_r_im * ti_r2;
 
-            // ---- L3: the re-path products (MREG) + the im products at
-            // the C ports (CREG) ---------------------------------
-            prod_re_tr <= m_rh_re * tr_rh;
-            prod_re_ti <= m_rh_re * ti_rh;
-            c_ti <= prod_im_ti;
-            c_tr <= prod_im_tr;
+            // ---- L3: the re/im combine (the ALU) ----
+            p_re <= prod_rr - prod_ii;
+            p_im <= prod_ri + prod_ir;
 
-            // ---- L4: the re/im combine (the ALU/PREG) ------------
-            p_re <= prod_re_tr - c_ti;
-            p_im <= prod_re_ti + c_tr;
-
-            // ---- L5: the round-half-up staging ------------------
-            if (k7 >= THREE_D) begin
+            // ---- L4: the round-half-up staging ----
+            if (k6 >= THREE_D) begin
                 shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_S1);
                 shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_S1);
             end else begin
                 shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_BOTH);
                 shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_BOTH);
             end
+            shift_p2_re <= shift_p_re;  shift_p2_im <= shift_p_im;
             y0_r_re <= round_shift_bw(y0_raw5_re, SIGMA1)[WIDTH-1:0];
             y0_r_im <= round_shift_bw(y0_raw5_im, SIGMA1)[WIDTH-1:0];
 
-            // ---- L6: the writes and the output ------------------
+            // ---- L5: the writes and the output ----
             if (w_gate_ram) begin
                 ram_re[rp] <= in_re;
                 ram_im[rp] <= in_im;
@@ -466,8 +411,8 @@ module fft_stage_r22 #(
                 dline_im[sp] <= d_x_im[WIDTH-1:0];
             end
             if (w_gate_pf) begin
-                pfifo_re[pwp] <= shift_p_re[WIDTH-1:0];
-                pfifo_im[pwp] <= shift_p_im[WIDTH-1:0];
+                pfifo_re[pwp] <= shift_p2_re[WIDTH-1:0];
+                pfifo_im[pwp] <= shift_p2_im[WIDTH-1:0];
             end
             out_re <= out_is_y0 ? y0_r_re : pfifo_re[pr_r];
             out_im <= out_is_y0 ? y0_r_im : pfifo_im[pr_r];
