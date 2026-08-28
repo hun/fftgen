@@ -21,23 +21,6 @@
 // slot at or after the pipeline has filled (CB_LAT stages), then every
 // word emits.
 //
-// DSP48 PIPELINING of the pre-twiddle (P7 step 8): the four partial
-// products of one lane are NOT formed in the same clock. The two
-// IM-operand products (pp3/pp4) come from the EARLIER operand hop
-// (q/wa) and the two RE-operand ones (pp1/pp2) from the later hop
-// (d/wq) -- the same word, one cycle apart, because q->d and wa->wq
-// are plain delay copies. pp3/pp4 are then copied into the C-port regs
-// (pc3/pc4) so the combine sees a matched MREG/C-port pair and the
-// product MREGs survive. Without the stagger Vivado merges the combine
-// into the multiply's cycle and bypasses one product register: the
-// intra-DSP A/B-reg -> PREADD -> MULT -> ALU -> PREG hop of 1.85 ns,
-// which is the -0.020 ns / N-independent SSR WNS every r2 AND r22
-// config measured with (doc/datasheet.md timing notes; probe matrix
-// spikes/S5_r22/dsp_probe/xbar_probe.py). Every register EDGE of the
-// existing pipeline is kept, so CB_LAT, the pd taps and the marker
-// alignment are unchanged -- verified bit-exact (values + tuser/tlast)
-// against SSRGoldenModel for R = 2/4/8, fwd + inv.
-//
 // v1 implements R in {2, 4}: the R-point DFT unrolls as log2(R) radix-2
 // layers over the pre-twiddled lanes (W_R coefficients for R <= 4 need
 // no multipliers). R >= 8 requires constant-multiplier layers at
@@ -138,18 +121,12 @@ module fft_cross #(
     reg signed [OUT_WIDTH-1:0] d_im [0:R-1];
     // ---- stage 1b products (each maps to one DSP) --------------------
     // pp1 = dre*wre ; pp2 = dre*wim ; pp3 = dim*wre ; pp4 = dim*wim
-    reg signed [AW-1:0] pp1 [0:R-1];
-    reg signed [AW-1:0] pp2 [0:R-1];
-    // the IM-operand products ride one DSP hop EARLY (from q/wa -- the
-    // same value as d/wq one clock later) and are re-aligned to the
-    // re-path products by the C-port regs below, so the combine sees a
-    // matched MREG/C-port pair and the DSP keeps its MREG. Same two
-    // levers as fft_stage_r22 (see its header): without them Vivado
-    // merges the combine into the multiply's cycle (1.85 ns intra-DSP).
-    reg signed [AW-1:0] pp3 [0:R-1];
-    reg signed [AW-1:0] pp4 [0:R-1];
-    reg signed [AW-1:0] pc3 [0:R-1];
-    reg signed [AW-1:0] pc4 [0:R-1];
+    reg signed [PW-1:0] pp1 [0:R-1];
+    reg signed [PW-1:0] pp2 [0:R-1];
+    // the IM-operand products ride one DSP hop EARLY (from q/wa instead
+    // of d/wq) so the combine sees a matched MREG / C-port pair
+    reg signed [PW-1:0] pp3 [0:R-1];
+    reg signed [PW-1:0] pp4 [0:R-1];
     // ---- stage 1c combine --------------------------------------------
     reg signed [AW-1:0] b_re [0:R-1];
     reg signed [AW-1:0] b_im [0:R-1];
@@ -301,25 +278,24 @@ module fft_cross #(
                     // left shift by td replaces the constant-coefficient
                     // multiply (differs from golden's 131071-multiply by
                     // <1 LSB, within documented SSR tolerance).
-                    // im-operand products from the EARLIER operand hop
+                    // IM-operand products from the EARLIER operand hop
+                    // (q/wa): the same value as d/wq one clock later, so
+                    // the stagger costs NO pipeline stage
                     if (gp == 0) begin
-                        pp3[gp] <= q_im[gp] <<< TWIDDLE_DECIMAL;
-                        pp4[gp] <= {AW{1'b0}};
+                        pp3[gp] <= $signed(q_im[gp]) <<< TWIDDLE_DECIMAL;
+                        pp4[gp] <= {PW{1'b0}};
                     end else begin
-                        pp3[gp] <= q_im[gp] * wa_re[gp];
-                        pp4[gp] <= q_im[gp] * wa_im[gp];
+                        pp3[gp] <= $signed(q_im[gp]) * wa_re[gp];
+                        pp4[gp] <= $signed(q_im[gp]) * wa_im[gp];
                     end
-                    // re-operand products (MREG) + the im products at the
-                    // combine DSPs' C ports (CREG)
+                    // RE-operand products (the DSP MREG)
                     if (gp == 0) begin
-                        pp1[gp] <= d_re[gp] <<< TWIDDLE_DECIMAL;
-                        pp2[gp] <= {AW{1'b0}};
+                        pp1[gp] <= $signed(d_re[gp]) <<< TWIDDLE_DECIMAL;
+                        pp2[gp] <= {PW{1'b0}};
                     end else begin
-                        pp1[gp] <= d_re[gp] * wq_re[gp];
-                        pp2[gp] <= d_re[gp] * wq_im[gp];
+                        pp1[gp] <= $signed(d_re[gp]) * wq_re[gp];
+                        pp2[gp] <= $signed(d_re[gp]) * wq_im[gp];
                     end
-                    pc3[gp] <= pp3[gp];
-                    pc4[gp] <= pp4[gp];
                 end
             end
         end
@@ -394,8 +370,8 @@ module fft_cross #(
             // stage 2a: combine partial products -> complex bins
             // B_r = (pp1 - pp4) + j*(pp2 + pp3)
             for (i = 0; i < R; i = i + 1) begin
-                b_re[i] <= pp1[i] - pc4[i];
-                b_im[i] <= pp2[i] + pc3[i];
+                b_re[i] <= $signed(ext(pp1[i])) - $signed(ext(pp4[i]));
+                b_im[i] <= $signed(ext(pp2[i])) + $signed(ext(pp3[i]));
             end
 
             // stage 2b: lane-DFT layer(s), full precision

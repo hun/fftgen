@@ -11,3 +11,4 @@ vivado.log
 *.jou
 \#*.tmp
 synth_n*/
+xb_*/

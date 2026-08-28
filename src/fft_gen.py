@@ -196,9 +196,10 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
             f.write(f"{re_} {im_} {u} {l}\n")
         n_expected = len(got)
 
-    # RTL sources
-    rtl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                           "rtl")
+    # RTL sources (FFTGEN_RTL_DIR overrides -- lets the spike/probe
+    # harnesses verify candidate rtl/ copies without touching the repo)
+    rtl_dir = os.environ.get("FFTGEN_RTL_DIR") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "rtl")
     r22 = cfg.is_r22
     for fn in (("fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
                 "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",

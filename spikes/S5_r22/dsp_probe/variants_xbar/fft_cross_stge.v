@@ -21,23 +21,6 @@
 // slot at or after the pipeline has filled (CB_LAT stages), then every
 // word emits.
 //
-// DSP48 PIPELINING of the pre-twiddle (P7 step 8): the four partial
-// products of one lane are NOT formed in the same clock. The two
-// IM-operand products (pp3/pp4) come from the EARLIER operand hop
-// (q/wa) and the two RE-operand ones (pp1/pp2) from the later hop
-// (d/wq) -- the same word, one cycle apart, because q->d and wa->wq
-// are plain delay copies. pp3/pp4 are then copied into the C-port regs
-// (pc3/pc4) so the combine sees a matched MREG/C-port pair and the
-// product MREGs survive. Without the stagger Vivado merges the combine
-// into the multiply's cycle and bypasses one product register: the
-// intra-DSP A/B-reg -> PREADD -> MULT -> ALU -> PREG hop of 1.85 ns,
-// which is the -0.020 ns / N-independent SSR WNS every r2 AND r22
-// config measured with (doc/datasheet.md timing notes; probe matrix
-// spikes/S5_r22/dsp_probe/xbar_probe.py). Every register EDGE of the
-// existing pipeline is kept, so CB_LAT, the pd taps and the marker
-// alignment are unchanged -- verified bit-exact (values + tuser/tlast)
-// against SSRGoldenModel for R = 2/4/8, fwd + inv.
-//
 // v1 implements R in {2, 4}: the R-point DFT unrolls as log2(R) radix-2
 // layers over the pre-twiddled lanes (W_R coefficients for R <= 4 need
 // no multipliers). R >= 8 requires constant-multiplier layers at
@@ -394,8 +377,8 @@ module fft_cross #(
             // stage 2a: combine partial products -> complex bins
             // B_r = (pp1 - pp4) + j*(pp2 + pp3)
             for (i = 0; i < R; i = i + 1) begin
-                b_re[i] <= pp1[i] - pc4[i];
-                b_im[i] <= pp2[i] + pc3[i];
+                b_re[i] <= $signed(ext(pp1[i])) - $signed(ext(pc4[i]));
+                b_im[i] <= $signed(ext(pp2[i])) + $signed(ext(pc3[i]));
             end
 
             // stage 2b: lane-DFT layer(s), full precision
