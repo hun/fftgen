@@ -135,20 +135,6 @@ module fft_stage_r22 #(
     (* ram_style = "distributed" *)
     reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
     reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
-    integer _i;
-    initial begin
-        for (_i = 0; _i < 2*DEPTH; _i = _i + 1) begin
-            ram_re[_i] = {WIDTH{1'b0}};   ram_im[_i] = {WIDTH{1'b0}};
-        end
-        for (_i = 0; _i < DEPTH; _i = _i + 1) begin
-            sram_re[_i] = {WIDTH{1'b0}};  sram_im[_i] = {WIDTH{1'b0}};
-            dram_re[_i] = {WIDTH{1'b0}};  dram_im[_i] = {WIDTH{1'b0}};
-            dline_re[_i] = {WIDTH{1'b0}}; dline_im[_i] = {WIDTH{1'b0}};
-        end
-        for (_i = 0; _i < 2*DEPTH; _i = _i + 1) begin
-            pfifo_re[_i] = {WIDTH{1'b0}};  pfifo_im[_i] = {WIDTH{1'b0}};
-        end
-    end
 
 
     // phase counter (free-running, aligned to the input stream by
@@ -206,6 +192,7 @@ module fft_stage_r22 #(
     // (visible at i+1) is exactly the product's twiddle.
     localparam integer ROMW = (NPTS > 1) ? $clog2(NPTS) : 1;
     (* ram_style = "block" *)
+    (* ram_style = "distributed" *)
     reg signed [TWIDDLE_WIDTH*2-1:0] tw_rom [0:NPTS-1];
     initial $readmemh(TWIDDLE_FILE, tw_rom);
     localparam [ROMW-1:0] SLICE0 = 0;

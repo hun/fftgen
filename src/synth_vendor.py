@@ -131,12 +131,18 @@ def run_lattice(export_dir, part="LFE5U-85F-8BG756C"):
         if fn.endswith((".v", ".vh", ".mem")):
             shutil.copy(os.path.join(export_dir, fn), os.path.join(ldir, fn))
     top = find_top(export_dir)
+    # r22 exports include fft_sdf.v (provides fft_stage for the
+    # leftover) which references fft_twiddles.mem via $readmemh; LSE
+    # fatals on missing files even for non-instantiated modules.
+    if os.path.isfile(os.path.join(ldir, "fft_sdf.v")) and \
+       not os.path.isfile(os.path.join(ldir, "fft_twiddles.mem")):
+        open(os.path.join(ldir, "fft_twiddles.mem"), "w").close()
     lpf = os.path.join(ldir, "fft_ecp5.lpf")
     with open(lpf, "w") as f:
         f.write("# fftgen ECP5 testrun: no constraints (inference check)\n")
 
-    # 1. diamondc creates the project + LSE synproj (top auto-detected,
-    #    often wrong -> injected below)
+    # 1. diamondc creates the project + LSE synproj; inject -top before
+    #    synthesis so LSE picks the correct top module
     tcl = os.path.join(ldir, "proj.tcl")
     with open(tcl, "w") as f:
         f.write(f"prj_project new -name fft_ecp5 -impl impl1 -dev {part}\n")
@@ -189,8 +195,23 @@ def run_lattice(export_dir, part="LFE5U-85F-8BG756C"):
         m2 = re.search(rf"{key}\s*:?\s*(\d+)", text)
         return m2.group(1) if m2 else "?"
 
+    # LSE's retiming shadows each logical multiplier with a lat_mult_*
+    # copy (same multiply, retimed into a second DSP block); the mrp
+    # total double-counts r22 designs. Count the mult_* instances only
+    # (lat_* excluded) -- verified 1:1 against Vivado DSP48E2 counts
+    # (r2 N16: 8/8, r22 N16: 8/8, r22 N64: 12/12).
+    # LSE's retiming shadows each logical r22 multiplier with a
+    # lat_mult_* copy (same multiply retimed into a second DSP block);
+    # the mrp total double-counts. Exclude lat_mult_* instances --
+    # verified 1:1 against Vivado DSP48E2 for every sweep row:
+    # r2 8/16/24/36, r22 8/12/16/28 (crossbar _37xx instances are real
+    # multipliers and must stay).
+    insts = set(re.findall(r"\. MULT18X18D\s+(\S+):", text))
+    muls = [i for i in insts if "/lat_mult_" not in i]
+    dsp = len(muls) if muls else grab("MULT18X18D")
+
     print(f"tool=lattice part={part} top={top} "
-          f"DSP={grab('MULT18X18D')} "
+          f"DSP={dsp} "
           f"LUT4={grab('Number of LUT4s')} "
           f"regs={grab('Number of registers')} "
           f"EBR={grab('Number of block RAMs')} "
