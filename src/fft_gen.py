@@ -161,8 +161,8 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     import shutil
     os.makedirs(outdir, exist_ok=True)
     N, R = cfg.num_points, cfg.ssr
-    if cfg.input_order != "native" or (cfg.output_order != "native"
-                                       and not cfg.ssr_corner_supported()):
+    if (cfg.input_order != "native" or cfg.output_order != "native") \
+            and not cfg.ssr_corner_supported():
         raise ValueError(
             f"generate_ssr supports native -> native plus the P8 corner-order "
             f"subset {sorted(SSR_CORNER_ORDERS)}; got ssr={R} "

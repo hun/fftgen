@@ -335,6 +335,142 @@ class SSRGoldenModel:
         return outs
 
 
+class SSRCornerInverseModel:
+    """P8 (R = 2, r22): SSR IFFT, corner order bitreversed -> native.
+
+    Contract (the FLAT corner conventions, mirroring R=1 DIT and the P8
+    forward FFT):
+
+        slot e = (2c+q) IN  carries the bin  X[bitrev_N(e)] = X[qM + bitrev_M(c)]
+        slot e = (2c+q) OUT carries the time sample x[e] = x[2c+q]
+
+    Concatenating the P8 forward FFT (slot e emits X[bitrev_N(e)]) with
+    this IFFT is therefore the identity on x -- exactly the property a
+    fast-convolution TX/RX chain relies on.
+
+    Transpose structure: the R-point step runs FIRST, the per-lane engines
+    LAST. For R = 2 the R-point inverse is add/sub, and the input word
+    already carries both q values at the same p = bitrev_M(c), so per clock:
+
+        a0 = round_shift(x0 + x1, 1)               -> lane 0 (twiddle W^0 = 1)
+        a1 = round_shift(x0 - x1, 1) * conj(W_N^p) -> lane 1
+
+    Each lane input is then reordered bitrev_M -> native (the same ping-pong
+    as R=1's fft_reorder) and fed to the EXISTING verified M-point DIF-IDFT
+    engine (REORDER_OUT = 1, native-in native-out). Lane r emits
+    (1/M) sum_p a_r[p] w_M^{-jp} at native j, i.e. x[2c+q] -- flat native.
+
+    Rounding (mirrors the forward crossbar): the add/sub is exact (one
+    guard bit), the fused >>1 (s_x = log2 R) is round-half-up, the
+    post-twiddle product is kept EXACT, and the wrapper quantizes exactly
+    once to sample_width (the lane-input contract). a0 needs no requantise:
+    the halved sum of two in-range samples fits sample_width exactly.
+    """
+
+    def __init__(self, cfg: FFTConfig, arch: str = "r22"):
+        import copy
+        if arch != "r22" or cfg.ssr != 2 or not cfg.inverse:
+            raise ValueError("SSRCornerInverseModel is R=2/r22/IFFT only")
+        if not cfg.ssr_corner_supported():
+            raise NotImplementedError(f"not in the P8 corner subset: {cfg}")
+        N = cfg.num_points
+        M = N // 2
+        self.cfg = cfg
+        self.M = M
+        self.lm = M.bit_length() - 1
+        lane_cfg = copy.copy(cfg)
+        lane_cfg.num_points = M
+        lane_cfg.ssr = 1
+        # existing verified r22 lanes: DIF-IDFT core + output reorder,
+        # i.e. M-point native-in native-out inverse engines
+        self.lanes = [_SSRLane(lane_cfg, arch="r22") for _ in range(2)]
+        # per-lane input reorders: bitrev-M arrival -> native order
+        self.reorders = [ReorderModel(M) for _ in range(2)]
+        # conjugated twiddle row r = 1: W_N^{-p} (lane 0 needs no multiply)
+        full = canonical_twiddles(N, cfg.twiddle_width,
+                                  cfg.twiddle_decimal, inverse=True)
+        self.w1 = [full[p] for p in range(M)]
+        # wrapper pipeline depth: add/sub+twiddle -> quantize register
+        self.WRAP = 2
+        self._conv = self.WRAP + M + self.lanes[0].latency
+        self.latency = self._conv
+        self._cycles = 0
+        self._synced = False
+
+    def reset(self):
+        from collections import deque
+        for ln in self.lanes:
+            ln.core.reset()
+            ln.reorder.reset()
+            if ln.arch == "r22" and ln._extra > 0:
+                ln._extra_q = deque()
+                for _ in range(ln._extra):
+                    ln._extra_q.append((False, 0, 0, 0, 0))
+        for ro in self.reorders:
+            ro.reset()
+        self._cycles = 0
+        self._synced = False
+
+    def tick(self, word_re: Sequence[int], word_im: Sequence[int],
+             mk: Sequence[Tuple[int, int]]):
+        M = self.M
+        p = _bitrev(self._cycles % M, self.lm)
+        self._cycles += 1
+        # R-point inverse step + fused >>1 (s_x = log2 R = 1), round-half-up
+        a0r = round_shift(word_re[0] + word_re[1], 1)
+        a0i = round_shift(word_im[0] + word_im[1], 1)
+        a1r = round_shift(word_re[0] - word_re[1], 1)
+        a1i = round_shift(word_im[0] - word_im[1], 1)
+        sw, sd = self.cfg.sample_width, self.cfg.sample_decimal
+        wr, wi = self.w1[p]
+        # exact product, then ONE quantize to sample_width (lane input)
+        t1r = a1r * wr - a1i * wi
+        t1i = a1r * wi + a1i * wr
+        a1r, a1i = quantize_output(t1r, t1i,
+                                   sd + self.cfg.twiddle_decimal, sw, sd)
+        outs, mks = [], []
+        for r in range(2):
+            a_r = (a0r, a0i) if r == 0 else (a1r, a1i)
+            vr, cr, ci, ex = self.reorders[r].tick(
+                True, a_r[0], a_r[1], mk[r])
+            u, l = (0, 0) if ex is None else ex
+            v2, or_, oi, ou, ol = self.lanes[r].tick(vr, cr, ci, u, l)
+            if not v2:
+                outs.append((0, 0)); mks.append((0, 0))
+            else:
+                outs.append((or_, oi)); mks.append((ou, ol))
+        if not self._synced:
+            if self._cycles > self._conv:
+                self._synced = True
+            else:
+                return False, [(0, 0)] * 2, [(0, 0)] * 2
+        return True, outs, mks
+
+    def process_stream(self, samples: Sequence[Tuple[int, int]],
+                       markers=None) -> List[Tuple[int, int, int, int]]:
+        R, M = 2, self.M
+        assert len(samples) % (R * M) == 0
+        if markers is None:
+            markers = [(0, 0)] * len(samples)
+        outs = []
+        n_words = len(samples) // R
+        drain = ((self.latency + R - 1) // R) + 2
+        for j in range(n_words + drain):
+            if j < n_words:
+                word = samples[j * R:(j + 1) * R]
+                mk = markers[j * R:(j + 1) * R]
+            else:
+                word = [(0, 0)] * R
+                mk = [(0, 0)] * R
+            valid, owords, omks = self.tick(
+                [w[0] for w in word], [w[1] for w in word], mk)
+            if valid:
+                for q in range(R):
+                    outs.append((owords[q][0], owords[q][1],
+                                 omks[q][0], omks[q][1]))
+        return outs
+
+
 def ssr_emission_to_native(num_points: int, ssr: int) -> List[int]:
     """perm[e] = natural sample index carried by emission slot e."""
     M = num_points // ssr

@@ -31,6 +31,11 @@ VALID_STAGE_MODES = ("r2", "r22")
 # Tuple key: (stage_mode, ssr, input_order, output_order, inverse).
 SSR_CORNER_ORDERS = {
     ("r22", 2, "native", "bitreversed", False),   # FFT nat->bitrev (P8 step 1)
+    ("r22", 2, "bitreversed", "native", True),    # IFFT bitrev->nat (P8 step 4a),
+    #                                   reuse-verified-blocks route (crossbar-
+    #                                   first + per-lane input reorder); the
+    #                                   BOTH flat emission conventions: slot e
+    #                                   carries index bitrev_N(e) in and x[e] out
 }
 
 
@@ -151,11 +156,15 @@ class FFTConfig:
             # bitreversed (steps 1-4); R>1 reuses that exact lane core
             # behind the unchanged crossbar (step 5) and shares the SSR
             # v1 native -> native contract, except for the P8 corner-order
-            # subset below (SSR_CORNER_ORDERS).
-            if self.input_order != "native":
+            # subset below (SSR_CORNER_ORDERS). The subset tuple fully
+            # determines (input_order, output_order, inverse), so a config
+            # is either in it or it must be all-native.
+            if self.input_order != "native" \
+                    and not self.ssr_corner_supported():
                 raise ValueError(
                     "stage_mode='r22' is DIF-only: input_order must be "
-                    f"'native', got {self.input_order!r}")
+                    f"'native' (or the P8 corner subset "
+                    f"{sorted(SSR_CORNER_ORDERS)}), got {self.input_order!r}")
             if self.ssr == 1 and self.output_order != "bitreversed":
                 raise ValueError(
                     "stage_mode='r22' (R=1) supports native -> bitreversed "
@@ -166,7 +175,7 @@ class FFTConfig:
                     f"stage_mode='r22' with ssr={self.ssr} shares the SSR "
                     "contract: output_order must be 'native', got "
                     f"{self.output_order!r} (supported corner-order subset: "
-                    f"{SSR_CORNER_ORDERS})")
+                    f"{sorted(SSR_CORNER_ORDERS)})")
         elif self.ssr > 1 and (self.input_order != "native"
                                or self.output_order != "native") \
                 and not self.ssr_corner_supported():

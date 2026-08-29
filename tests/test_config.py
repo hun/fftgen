@@ -117,6 +117,12 @@ class TestStageMode(unittest.TestCase):
         # P8 step 1: the forward corner order at R=2 is now legal
         self.assertTrue(FFTConfig(num_points=32, ssr=2,
                                   stage_mode="r22").ssr_corner_supported())
+        # P8 step 4a: the INVERSE corner order at R=2 (bitrev -> native)
+        inv_c = FFTConfig(num_points=32, ssr=2, inverse=True,
+                          input_order="bitreversed", output_order="native",
+                          stage_mode="r22")
+        self.assertTrue(inv_c.ssr_corner_supported())
+        self.assertIn("inverse=True", str(inv_c))
         for kw in (dict(num_points=32, ssr=4, stage_mode="r22"),      # R=4
                    dict(num_points=32, ssr=8, stage_mode="r22"),      # R=8
                    dict(num_points=32, ssr=2, stage_mode="r22",

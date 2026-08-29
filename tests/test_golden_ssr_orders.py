@@ -24,7 +24,8 @@ import unittest
 
 from config import FFTConfig, SSR_CORNER_ORDERS
 from golden import fft_fixed_batch, _bitrev
-from golden_ssr import SSRGoldenModel, ssr_emission_perm
+from golden_ssr import (SSRGoldenModel, SSRCornerInverseModel,
+                        ssr_emission_perm)
 
 
 def _frames(N, count, seed=7, bits=12):
@@ -157,6 +158,123 @@ class TestSSROrderContract(unittest.TestCase):
                 with self.assertRaises(ValueError) as cm:
                     FFTConfig(**kw)
                 self.assertNotIsInstance(cm.exception, AssertionError)
+
+
+class TestSSRCornerInverseModel(unittest.TestCase):
+    """P8 step 4a: the corner-order IFFT model (bitrev -> native, R=2).
+
+    Two properties, both exact up to rounding:
+
+    1. Numpy identity -- feeding bin X[bitrev_N(e)] at slot e must produce
+       x[e] (the IDFT of FFT(x) is x). Any phase/twiddle/index error shows
+       as a value blow-up, not a rounding delta.
+
+    2. ROUND TRIP through the verified corner FFT model -- the customer's
+       actual chain: FFT(corner) -> IFFT(corner) must return the input
+       scaled by a power of two, with the frame markers intact. This is the
+       property the TX/RX fast-convolution pair relies on.
+    """
+
+    def _inv(self, N):
+        cfg = FFTConfig(num_points=N, ssr=2, inverse=True,
+                        input_order="bitreversed", output_order="native",
+                        stage_mode="r22")
+        return cfg, SSRCornerInverseModel(cfg, arch="r22")
+
+    def _numpy_check(self, N):
+        import numpy as np
+        cfg, m = self._inv(N)
+        rng = random.Random(3)
+        x = np.array([rng.randint(-2 ** 12, 2 ** 12 - 1) for _ in range(N)],
+                     dtype=float)
+        X = np.fft.fft(x)
+        # the FINAL spectrum as a fixed-point core actually carries it: the
+        # forward shift schedule divides by 2^log2(N), so feed X/N and expect
+        # x/N -- NOT the raw FFT (its O(N)-larger values would saturate the
+        # 16-bit lane input and tell us nothing).
+        k = N.bit_length() - 1
+        L = N.bit_length() - 1
+        br = _bitrev
+        samples = [(int(round(X[br(e, L)].real / (2 ** k))),
+                    int(round(X[br(e, L)].imag / (2 ** k))))
+                   for e in range(N)]
+        mk = [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+        pad = 40
+        samples2 = [(0, 0)] * (pad * N) + samples + [(0, 0)] * (20 * N)
+        mks = []
+        for _ in range(pad):
+            mks += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+        mks += mk
+        for _ in range(20):
+            mks += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+        outs = m.process_stream(samples2, markers=mks)
+        sofs = [i for i, o in enumerate(outs) if o[2] == 1]
+        w = next((outs[s:s + N] for s in sofs
+                  if s + N <= len(outs)
+                  and any(o[0] != 0 or o[1] != 0
+                          for o in outs[s:s + N])), None)
+        self.assertIsNotNone(w, "no real frame emitted")
+        self.assertEqual(w[0][2], 1, "SOF not on first slot")
+        self.assertEqual(w[-1][3], 1, "EOF not on last slot")
+        worst = max(abs(o[0] - x[i] / (2 ** k)) for i, o in enumerate(w))
+        self.assertLessEqual(worst, 3,
+                             f"N={N}: IDFT(X/N) != x/N, worst |d|={worst}")
+
+    def test_numpy_identity(self):
+        for N in (16, 64, 128):
+            with self.subTest(N=N):
+                self._numpy_check(N)
+
+    def test_round_trip_through_corner_fft(self):
+        # corner FFT model (verified) -> corner IFFT model = scaled x
+        for N in (16, 64):
+            with self.subTest(N=N):
+                running = self._round_trip(N)
+                self.assertTrue(running, f"N={N}: round trip broke")
+
+    def _round_trip(self, N):
+        real = _frames(N, 2)
+        lead = tail = 20
+        fwd = FFTConfig(num_points=N, ssr=2, output_order="bitreversed",
+                        stage_mode="r22")
+        fm = SSRGoldenModel(fwd, arch="r22")
+        allf = [[(0, 0)] * N] * lead + real + [[(0, 0)] * N] * tail
+        samples = [s for fr in allf for s in fr]
+        markers = []
+        for _ in allf:
+            markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+        fat = fm.process_stream(samples, markers=markers)
+        # slice the real frames out of the FFT emission (non-zero windows
+        # located by SOF), feed slot-for-slot into the IFFT
+        sofs = [i for i, o in enumerate(fat) if o[2] == 1]
+        wins = [fat[s:s + N] for s in sofs if s + N <= len(fat)]
+        wins = [w for w in wins if any(o[0] != 0 or o[1] != 0 for o in w)]
+        self.assertEqual(len(wins), 2, f"N={N}: FFT real frames")
+        cfg, inv = self._inv(N)
+        lead2 = tail2 = 20
+        allf2 = [[(0, 0)] * N] * lead2 + [[(o[0], o[1]) for o in w]
+                                          for w in wins] + [[(0, 0)] * N] * tail2
+        samples2 = [s for fr in allf2 for s in fr]
+        markers2 = []
+        for _ in allf2:
+            markers2 += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+        iat = inv.process_stream(samples2, markers=markers2)
+        sofs2 = [i for i, o in enumerate(iat) if o[2] == 1]
+        wins2 = [iat[s:s + N] for s in sofs2 if s + N <= len(iat)]
+        wins2 = [w for w in wins2 if any(o[0] != 0 or o[1] != 0 for o in w)]
+        if len(wins2) < 2:
+            return False
+        # FFT model shifts by log2(N) per stage pair schedule; find the
+        # power-of-two scale that recovers the input
+        got = wins2[-2:] if len(wins2) >= 2 else wins2
+        for sh in range(0, 9):
+            sc = 2 ** sh
+            errs = [max(abs(o[0] - (s[0] / sc)), abs(o[1] - (s[1] / sc)))
+                    for w, r in zip(got, real)
+                    for o, s in zip(w, r)]
+            if max(errs) <= 2.5:
+                return True
+        return False
 
 
 if __name__ == "__main__":
