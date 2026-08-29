@@ -711,6 +711,10 @@ stages. `r2` `13` stages / `r22` `6` pairs+`1` would all be instantiated (`max` 
 - Artix-7 @250 MHz secondary gate not yet run (KU5P is the primary
   target; the architecture is family-portable by construction).
 
+A debugging post-mortem of the P8 inverse bring-up is kept at
+`doc/lessons_debugging.md` (probe traps, Verilator internals access,
+expression-sizing gotchas) -- worth reading before the next RTL bring-up.
+
 Deliberate sequencing choices: golden-before-RTL (P1) is the load-bearing
 decision — everything downstream is then mechanical comparison. SSR comes
 late because it composes already-verified pieces.
