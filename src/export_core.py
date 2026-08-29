@@ -99,6 +99,10 @@ def core_files(cfg: FFTConfig):
         # fft_sdf.v carries the plain fft_stage module used for the
         # odd-n leftover; NO fft_preloads.vh dependency (the r22
         # leftover preloads are parity-computed inside fft_sdf_r22.v)
+        if cfg.input_order == "bitreversed":
+            # P8 4b corner-order IFFT: transpose wrapper + lanes, no crossbar
+            return ["fft_ssr_r22_inv.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                    "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v"]
         if cfg.ssr > 1:
             return ["fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
                     "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
@@ -114,6 +118,12 @@ def latency_cycles(cfg: FFTConfig) -> int:
     """Declared streaming latency in enabled cycles (from the golden
     models -- single source of truth)."""
     if cfg.is_r22:
+        if cfg.input_order == "bitreversed":
+            # P8 4b corner-order IFFT (bitrev -> native, R=2): the
+            # transpose route -- wrapper (2) + M-point input reorder (M)
+            # + the DIF-IDFT lane's own latency
+            from golden_ssr import SSRCornerInverseModel
+            return SSRCornerInverseModel(cfg, arch="r22").latency
         # verified RTL chain: sum(3D+9) per pair + 11 (odd-n leftover)
         # + 1 (registered quantizer output); SSR adds the lane reorder
         # M and the crossbar on top (mirrors golden_ssr's lane model)
@@ -575,17 +585,24 @@ def params_txt(cfg: FFTConfig, extra: dict) -> str:
     mode = cfg.stage_mode
     lines = [
         f"core                = " + (
+            "fft_ssr_r22_inv" if (cfg.input_order == "bitreversed") else
             "fft_ssr_r22" if (cfg.ssr > 1 and mode == "r22") else
             "fft_ssr" if cfg.ssr > 1 else
             "fft_sdf_r22" if mode == "r22" else "fft_sdf"),
         f"stage_mode          = {mode}",
+        f"tolerance           = {0 if cfg.input_order == 'bitreversed' else 0 if cfg.ssr == 1 else cfg.ssr // 2 + 1}",
         f"num_points          = {cfg.num_points}",
         f"ssr                 = {cfg.ssr}",
         f"inverse             = {int(cfg.inverse)}",
         f"input_order         = {cfg.input_order}",
         f"output_order        = {cfg.output_order}",
-        f"topology            = {'DIT' if cfg.is_dit else 'DIF'}",
-        f"reorder_out         = {int(reorder_out(cfg))}",
+        f"topology            = "
+        + ("transpose (DIF lanes)" if cfg.input_order == 'bitreversed'
+           else 'DIT' if cfg.is_dit else 'DIF'),
+        f"reorder_out         = "
+        + ("1 (lane output; +2 lane input reorders)"
+           if cfg.input_order == 'bitreversed'
+           else str(int(reorder_out(cfg)))),
         f"num_stages          = {cfg.num_stages}",
         (f"stage_pairs         = {cfg.num_stages // 2}"
          + (" + 1 leftover (D=1, trivial)" if cfg.num_stages % 2 else "")
@@ -640,6 +657,14 @@ def params_txt(cfg: FFTConfig, extra: dict) -> str:
                          f" = {bits:7d} bits -> {mem_style_bits(bits)}"
                          f"  (x{cfg.ssr} lanes)")
         rbits = 2 * lc.num_points * cfg.output_width
+        if cfg.input_order == "bitreversed":
+            # P8 4b corner-inverse: the transpose adds the per-lane INPUT
+            # reorders (bitrev_M arrival -> native) in front of each lane;
+            # each lane also keeps its own output reorder (below)
+            rbits_in = 2 * lc.num_points * cfg.sample_width
+            lines.append(f"  lane in-reorder: {2 * lc.num_points:4d} x "
+                         f"{cfg.sample_width:2d}b = {rbits_in:7d} bits -> "
+                         f"{mem_style_bits(rbits_in)}  (x{cfg.ssr} lanes)")
         if reorder_out(cfg):
             lines.append(f"  lane reorder: {2 * lc.num_points:5d} x "
                          f"{cfg.output_width:2d}b = {rbits:7d} bits -> "
@@ -668,11 +693,14 @@ def params_txt(cfg: FFTConfig, extra: dict) -> str:
 def readme_txt(cfg: FFTConfig, args) -> str:
     ssr = cfg.ssr > 1
     r22 = cfg.is_r22
-    top = ("fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
+    corner_inv = cfg.input_order == "bitreversed"
+    top = ("fft_ssr_r22_inv" if corner_inv else
+           "fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
            else "fft_top")
     files = (([] if ssr else ["fft_core.v"]) + core_files(cfg))
     srcs = " ".join(files)
-    tbname = ("tb_fft_ssr_r22.cpp" if (ssr and r22) else
+    tbname = ("tb_fft_ssr_r22_inv.cpp" if corner_inv else
+              "tb_fft_ssr_r22.cpp" if (ssr and r22) else
               "tb_fft_ssr.cpp" if ssr else "tb_fft_sdf.cpp")
     binary = "V" + top
 
@@ -695,11 +723,15 @@ def readme_txt(cfg: FFTConfig, args) -> str:
         ]
     if ssr:
         contents += [
-            ("  fft_ssr_r22.v     SSR top: r22 lanes + crossbar" if r22 else
+            ("  fft_ssr_r22_inv.v SSR corner-order IFFT top (transpose route)"
+             if corner_inv else
+             "  fft_ssr_r22.v     SSR top: r22 lanes + crossbar" if r22 else
              "  fft_ssr.v         SSR top: R lane engines + crossbar"),
             ("  fft_top_r22.v     r22 lane wrapper (+ fft_reorder)" if r22 else
              "  fft_top.v         generic lane wrapper (+ fft_reorder)"),
-            "  fft_cross.v       cross-lane combine (shared r2/r22)",
+            ("  (no fft_cross: the R-point step runs FIRST in the transpose)"
+             if corner_inv else
+             "  fft_cross.v       cross-lane combine (shared r2/r22)"),
         ]
     if r22:
         contents += [
@@ -710,7 +742,9 @@ def readme_txt(cfg: FFTConfig, args) -> str:
     else:
         contents += ["  fft_twiddles.mem  twiddle ROM ($readmemh)"]
     if ssr:
-        contents += ["  fft_wn.mem        crossbar pre-twiddle ROM"]
+        contents += [("  fft_w1_inv.mem    wrapper twiddle ROM W_N^{-p} ($readmemh)"
+                      if corner_inv else
+                      "  fft_wn.mem        crossbar pre-twiddle ROM")]
     if not r22:
         contents += [
             "  fft_preloads.vh   post-warm FSM preload pack (74 bits/stage)",
@@ -734,13 +768,14 @@ def readme_txt(cfg: FFTConfig, args) -> str:
                  "    -GINVERSE=%d -GPIPE_DEPTH=10"
                  % (cfg.num_points, cfg.ssr, scaling_pack(engine_cfg(cfg)),
                     intern_width(lane_cfg(cfg)), int(cfg.inverse)))
-        if r22:
+        if r22 and not corner_inv:
             # P8: REORDER_OUT selects the emission order (1 = native ->
             # native, 0 = native -> bitreversed). It MUST be passed: the
             # RTL default is 1, so an exported corner-order tree would
             # otherwise simulate the wrong order against its own
             # expected.txt (caught by tests/test_export.py).
             gargs += " \\\n    -GREORDER_OUT=%d" % (1 if reorder_out(cfg) else 0)
+        # fft_ssr_r22_inv defaults W1_FILE/LANE_TW_FILE to the written names
 
     sim = [
         "  verilator --cc --exe --build -j 4 --top-module %s \\" % top,
@@ -762,7 +797,12 @@ def readme_txt(cfg: FFTConfig, args) -> str:
         "    python3 compare.py      # expected.txt vs actual.txt, exit 0 = pass",
     ]
 
-    if r22 and not ssr:
+    if corner_inv:
+        note = ("compare.py checks BIT-EXACT values (tolerance 0: the corner\n"
+                "IFFT has ONE quantization point, the wrapper's a1 quantize,\n"
+                "mirrored exactly by the RTL) plus tuser/tlast positionally\n"
+                "and exactly.")
+    elif r22 and not ssr:
         note = ("compare.py checks BIT-EXACT values against the r22\n"
                 "re-pinned contract (spikes/S5_r22/notes.md): 1-2 LSB vs an\n"
                 "r2 build, identical SQNR. tuser/tlast are positional.")
@@ -799,14 +839,19 @@ def readme_txt(cfg: FFTConfig, args) -> str:
 def synth_tcl(cfg: FFTConfig, part: str, clk_mhz: float) -> str:
     ssr = cfg.ssr > 1
     r22 = cfg.is_r22
-    top = ("fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
+    corner_inv = cfg.input_order == "bitreversed"
+    top = ("fft_ssr_r22_inv" if corner_inv else
+           "fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
            else "fft_top")
     # fft_core.v (generated wrapper) leads so its fft_preloads.vh include
     # is parsed before fft_sdf.v regardless of tool define semantics
     files = (([] if ssr else ["fft_core.v"]) + core_files(cfg))
     srcs = " \\\n".join(f"    [file join $rtl_dir {f}]" for f in files)
     mems = (["fft_twiddles_r22.mem"] if (r22 and not ssr) else
-            ["fft_twiddles_r22_lane.mem", "fft_wn.mem"] if (r22 and ssr)
+            ["fft_twiddles_r22_lane.mem", "fft_wn.mem"] if (r22 and ssr and
+                                                            not corner_inv)
+            else ["fft_twiddles_r22_lane.mem", "fft_w1_inv.mem"]
+            if (r22 and corner_inv)
             else ["fft_twiddles.mem"] + (
                 ["fft_twiddles_lane.mem", "fft_wn.mem"] if ssr else []))
     mem_copy = "\n".join(
@@ -814,7 +859,17 @@ def synth_tcl(cfg: FFTConfig, part: str, clk_mhz: float) -> str:
     preload_define = ("" if r22 else
         "set_property verilog_define {FFTGEN_PRELOADS=1} [current_fileset]\n")
     generics = ""
-    if ssr and r22:
+    if corner_inv:
+        generics = (
+            "synth_design -top fft_ssr_r22_inv -generic NUM_POINTS=%d \\\n"
+            "    -generic SSR=%d -generic SCALING_PACK=32'h%08x \\\n"
+            "    -generic INTERN_WIDTH=%d -generic INVERSE=%d \\\n"
+            "    -generic PIPE_DEPTH=10 \\\n"
+            "    -generic W1_FILE=\"fft_w1_inv.mem\" \\\n"
+            "    -generic LANE_TW_FILE=\"fft_twiddles_r22_lane.mem\""
+            % (cfg.num_points, cfg.ssr, scaling_pack(engine_cfg(cfg)),
+               intern_width(engine_cfg(cfg)), int(cfg.inverse)))
+    elif ssr and r22:
         # REORDER_OUT must be synthesized exactly as the simulation builds it:
         # it selects the emission order (and whether the lane reorder buffers
         # exist at all). Omitting it silently synthesizes a native-order core
@@ -908,15 +963,25 @@ def write_tb_vectors(cfg: FFTConfig, outdir: str, num_frames: int,
     frames = [random_frame(N, cfg.sample_width, rng) for _ in range(num_frames)]
 
     if cfg.ssr > 1:
-        from golden_ssr import SSRGoldenModel
+        if cfg.input_order == "bitreversed":
+            # P8 4b corner-order IFFT: the transpose-route model
+            from golden_ssr import SSRCornerInverseModel as _PROBE
+        else:
+            from golden_ssr import SSRGoldenModel as _PROBE
         # pad frames let the pipeline fill before emission syncs -- same
         # arithmetic as fft_gen.generate_ssr so the vectors match 1:1
         M = N // cfg.ssr
-        probe = SSRGoldenModel(cfg, arch=cfg.stage_mode)
+        probe = _PROBE(cfg, arch=cfg.stage_mode)
         pad = (probe.latency + M - 1) // M + 2
         frames += [random_frame(N, cfg.sample_width, rng)
                    for _ in range(pad)]
-        samples = [s for fr in frames for s in fr]
+        if cfg.input_order == "bitreversed":
+            # slot e must carry the natural frame's sample bitrev_N(e)
+            br = [int(format(k, "0%db" % cfg.num_stages)[::-1], 2)
+                  for k in range(N)]
+            samples = [fr[br[j]] for fr in frames for j in range(N)]
+        else:
+            samples = [s for fr in frames for s in fr]
         mk = []
         for _ in range(len(frames)):
             mk += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
@@ -1005,7 +1070,8 @@ def main():
     R = int(par.get("ssr", "1") or 1)
     # SSR quantizes twice (lane output, then the crossbar rescale); R = 1 is
     # bit-exact and must stay that way.
-    tol = 0 if R == 1 else R // 2 + 1
+    tol = int(par.get("tolerance")
+                 or (0 if R == 1 else R // 2 + 1))
 
     exp = read(os.path.join(here, "expected.txt"))
     act = read(os.path.join(here, "actual.txt"))
@@ -1077,10 +1143,11 @@ def export(cfg: FFTConfig, args) -> dict:
     # twiddle ROM contents
     from fft_gen import (write_twiddle_mem, write_lane_twiddle_mem,
                          write_wn_mem, write_preload_pack_vh,
-                         write_r22_twiddle_mem)
+                         write_r22_twiddle_mem, write_w1_inv_mem)
     if cfg.is_r22:
         # R=1 r22: one pair-sliced ROM; SSR r22: per-lane r22 ROM +
-        # the (r2-identical) crossbar WN table
+        # the crossbar WN table (corner-inverse: the wrapper's W_N^{-p}
+        # row instead -- no crossbar)
         if cfg.ssr == 1:
             write_r22_twiddle_mem(cfg, os.path.join(
                 outdir, "fft_twiddles_r22.mem"))
@@ -1091,8 +1158,13 @@ def export(cfg: FFTConfig, args) -> dict:
             lc.output_order = "bitreversed"
             write_r22_twiddle_mem(lc, os.path.join(
                 outdir, "fft_twiddles_r22_lane.mem"))
-            write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
-            written += ["fft_twiddles_r22_lane.mem", "fft_wn.mem"]
+            written.append("fft_twiddles_r22_lane.mem")
+            if cfg.input_order == "bitreversed":
+                write_w1_inv_mem(cfg, os.path.join(outdir, "fft_w1_inv.mem"))
+                written.append("fft_w1_inv.mem")
+            else:
+                write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
+                written.append("fft_wn.mem")
     else:
         write_twiddle_mem(cfg, os.path.join(outdir, "fft_twiddles.mem"))
         written.append("fft_twiddles.mem")
@@ -1178,7 +1250,9 @@ def export(cfg: FFTConfig, args) -> dict:
         write_tb_vectors(cfg, outdir, args.num_frames, args.seed)
         written += ["stimulus.txt", "expected.txt"]
         os.makedirs(os.path.join(outdir, "tb"), exist_ok=True)
-        tbname = ("tb_fft_ssr_r22.cpp" if (cfg.is_r22 and cfg.ssr > 1) else
+        tbname = ("tb_fft_ssr_r22_inv.cpp"
+                  if cfg.input_order == "bitreversed" else
+                  "tb_fft_ssr_r22.cpp" if (cfg.is_r22 and cfg.ssr > 1) else
                   "tb_fft_ssr.cpp" if cfg.ssr > 1 else "tb_fft_sdf.cpp")
         shutil.copy(os.path.join(TB, tbname),
                     os.path.join(outdir, "tb", tbname))

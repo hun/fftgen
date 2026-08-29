@@ -24,6 +24,36 @@ input, `a1 = (x0-x1)/2 = 0`, so the lane-1 path (and any twiddle mistake) is
 structurally unexercised. A passing "constant" test proves permute-free reuse,
 never a twiddle.
 
+## RESOLVED (second bring-up, rtl/fft_ssr_r22_inv.v committed)
+
+The divergence was the **twiddle pairing, one stage off**: the ROM read
+happened at the SAME stage as the add/sub, so the coefficient captured at
+clock k was word k's while the add/sub was still computing word k-1's (the
+`a1` path lags the input by one register via `q`). The pair met at the
+multiply with a one-word bin skew -- every `b1` value was `a1 * W_N^{-(p+1)}`
+instead of `a1 * W_N^{-p}`, which is a rotation, not an LSB error, so the
+"constant" impulse test (all bins equal) still passed. Fix: read the ROM at
+S0 (`wa <= rom[bitrev(cq)]`) and add ONE coefficient hop (`wq <= wa` at S1)
+so the twiddle and the add/sub are the same generation when they reach the
+product at S2. The round/saturate path was never wrong.
+
+Second real lesson this round: **the lane-0 (a0) path must ride every stage
+the lane-1 path does.** Each pipeline restructure that added a stage to the
+multiply path but not to the a0 carry put the two lanes' reorders one word
+out of lockstep -- the flat output interleave then pairs lane 0's word k with
+lane 1's word k-1, which no per-lane check sees. Keep `a0` in lockstep with
+`a1` by construction (same register count), and verify with the probe's r0/r1
+columns before touching the reorders.
+
+Third: **the DSP PREG boundary is load-bearing, not optional.** The first
+N=2048 synth of the wrapper (product, combine, round and saturate all in one
+combinational cloud feeding `r1`) measured WNS -2.24 ns: the DSP's ALU
+combine AND the fabric round+sat shared the multiply's cycle. Registering the
+partial products (DSP MREG) and the combine separately took it to -0.53 ns
+post-synth; the remaining path is the lane's own dline-BRAM -> combine hop,
+the same one the forward r22/r22b cores carry (see doc/datasheet.md for the
+post-route number).
+
 ## The probe traps (all were MY harness bugs, not RTL bugs)
 
 1. **Mixed number bases.** `stimulus.txt` is hex; `expected.txt` /

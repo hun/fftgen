@@ -173,6 +173,36 @@ report_utilization -file util.txt
 report_timing_summary -delay_type max -max_paths 5 -file timing.txt
 """
 
+TCL_R22_INV = """\
+set part    [lindex $argv 0]
+set npts    [lindex $argv 1]
+set ssr     [lindex $argv 2]
+set pack    [lindex $argv 3]
+set intern  [lindex $argv 4]
+create_project -in_memory -part $part
+add_files -fileset sources_1 [list \\
+    @RTL@/fft_ssr_r22_inv.v \\
+    @RTL@/fft_top_r22.v \\
+    @RTL@/fft_sdf_r22.v \\
+    @RTL@/fft_stage_r22.v \\
+    @RTL@/fft_sdf.v \\
+    @RTL@/fft_reorder.v ]
+set_property top fft_ssr_r22_inv [current_fileset]
+set w1_abs  [file normalize [file join [pwd] fft_w1_inv.mem]]
+set tw_abs  [file normalize [file join [pwd] fft_twiddles_r22_lane.mem]]
+synth_design -top fft_ssr_r22_inv \\
+    -generic NUM_POINTS=$npts -generic SSR=$ssr \\
+    -generic W1_FILE=$w1_abs -generic LANE_TW_FILE=$tw_abs \\
+    -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \\
+    -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
+    -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
+    -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \\
+    -generic PIPE_DEPTH=10 -generic INVERSE=1
+create_clock -period @NS@ -name clk [get_ports clk]
+report_utilization -file util.txt
+report_timing_summary -delay_type max -max_paths 5 -file timing.txt
+"""
+
 UTIL_ROWS = ["CLB LUTs", "CLB Registers", "LUT as Memory",
              "Block RAM Tile", "URAM", "DSPs"]
 
@@ -212,6 +242,25 @@ def artifacts_r2(n, r, outdir):
         intern = cfg.sample_width + max(0, cfg.num_stages - sum(cfg.shifts)) + 1
     bits = write_preload_pack_vh(gm.stage_preloads, os.path.join(outdir, "fft_preloads.vh"))
     return {"pack": pack, "intern": intern, "preload_bits": bits}
+
+
+def artifacts_r22i(n, outdir):
+    """P8 4b corner-inverse IFFT artifacts: M-point r22 lane ROM + the
+    wrapper's W_N^{-p} row (no crossbar, no WN table)."""
+    from config import FFTConfig
+    from fft_gen import write_w1_inv_mem, write_r22_twiddle_mem as _wr
+    full = FFTConfig(num_points=n, ssr=2, inverse=True,
+                     input_order="bitreversed", output_order="native",
+                     stage_mode="r22")
+    lane = dataclasses.replace(full, num_points=n // 2, ssr=1,
+                               input_order="native",
+                               output_order="bitreversed")
+    _wr(lane, os.path.join(outdir, "fft_twiddles_r22_lane.mem"))
+    write_w1_inv_mem(full, os.path.join(outdir, "fft_w1_inv.mem"))
+    pack = sum((sh & 3) << (2 * s) for s, sh in enumerate(lane.shifts))
+    intern = lane.sample_width + max(0, lane.num_stages
+                                     - sum(lane.shifts)) + 1
+    return {"pack": pack, "intern": intern, "preload_bits": 0}
 
 
 def artifacts_r22(n, outdir, r=1):
@@ -303,7 +352,9 @@ def run_one(args):
     t0 = time.time()
     gen = {}
     try:
-        if arch in ("r22", "r22b"):
+        if arch == "r22i":
+            gen = artifacts_r22i(n, outdir)
+        elif arch in ("r22", "r22b"):
             gen = artifacts_r22(n, outdir, r=r)
         else:
             gen = artifacts_r2(n, r, outdir)
@@ -313,7 +364,14 @@ def run_one(args):
         return tag, res, False
 
     # write TCL
-    if arch in ("r22", "r22b"):
+    if arch == "r22i":
+        tcl = TCL_R22_INV.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
+        tcl_path = os.path.join(outdir, "synth.tcl")
+        open(tcl_path, "w").write(tcl)
+        cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
+               "-source", "synth.tcl", "-tclargs", PART, str(n), str(r),
+               str(gen["pack"]), str(gen["intern"])]
+    elif arch in ("r22", "r22b"):
         if r == 1:
             tcl = TCL_R22.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
             tcl_path = os.path.join(outdir, "synth.tcl")
@@ -370,11 +428,13 @@ def main():
                     default=[64, 128, 256, 512, 1024, 2048, 4096, 8192])
     ap.add_argument("--r4", nargs="*", type=int, default=[64, 256, 1024, 4096])
     ap.add_argument("--r8", nargs="*", type=int, default=[64, 256, 1024])
-    ap.add_argument("--arch", choices=["r2", "r22", "both", "r22b", "all"],
+    ap.add_argument("--arch", choices=["r2", "r22", "both", "r22b", "r22i", "all"],
                     default="both",
                     help="which architecture(s) to sweep (default: both); "
                          "r22b = the P8 corner-order core (native -> bitrev, "
-                         "R=2 only), all = r2 + r22 + r22b")
+                         "R=2 only), r22i = the corner-order IFFT "
+                         "(bitrev -> native, R=2 only), all = r2 + r22 + "
+                         "r22b + r22i")
     ap.add_argument("-j", type=int, default=4, help="parallel vivado jobs")
     ap.add_argument("--jobs-dir", default=os.path.join(ROOT, "build", "datasheet"),
                     help="output directory for per-config results")
@@ -383,7 +443,8 @@ def main():
     args = ap.parse_args()
 
     archs = {"r2": ["r2"], "r22": ["r22"], "both": ["r2", "r22"],
-             "r22b": ["r22b"], "all": ["r2", "r22", "r22b"]}[args.arch]
+             "r22b": ["r22b"], "r22i": ["r22i"],
+             "all": ["r2", "r22", "r22b", "r22i"]}[args.arch]
 
     # Build config list: r22 for R=1 and R=2 (P7), r2 for all R
     configs = []
@@ -397,10 +458,13 @@ def main():
             configs.append((n, 2, "r2"))
         if "r22" in archs:
             configs.append((n, 2, "r22"))
-        if "r22b" in archs:
-            # P8: the corner order exists ONLY at R=2 (bitrev_R must be the
-            # identity) -- no R=1/R=4/R=8 rows are meaningful for r22b.
-            configs.append((n, 2, "r22b"))
+        if "r22b" in archs or "r22i" in archs:
+            # P8: the corner orders exist ONLY at R=2 (bitrev_R must be the
+            # identity) -- no R=1/R=4/R=8 rows are meaningful.
+            if "r22b" in archs:
+                configs.append((n, 2, "r22b"))
+            if "r22i" in archs:
+                configs.append((n, 2, "r22i"))
     for n in args.r4:
         if "r2" in archs:
             configs.append((n, 4, "r2"))

@@ -56,11 +56,16 @@ bitreversed`** order at **R = 2, radix-2², any N** is implemented and verified
 bitreversed` in the exporter, exported and self-verifying). It costs nothing
 in DSPs, drops the lane reorder buffers entirely (e.g. -4 BRAM36 at N = 2048)
 and lowers latency by M clocks. The matching **IFFT `bitreversed → native` at
-R = 2** is **open**: the golden model is done and verified (the transpose
-reuse-verified-blocks route -- `SSRCornerInverseModel`), and the RTL bring-up
-is stalled on one isolated stage, the wrapper's lane-1 twiddled output
-(`b1`, see [doc/plan_p8_ssr_orders.md](doc/plan_p8_ssr_orders.md) and
-[doc/lessons_debugging.md](doc/lessons_debugging.md)).
+R = 2** is implemented and verified too (the transpose reuse-verified-blocks
+route: R-point inverse first, per-lane input reorders, the existing DIF-IDFT
+lanes -- `rtl/fft_ssr_r22_inv.v`, sweep arch `r22i` in the datasheet,
+`--input-order bitreversed --inverse` in the exporter). It is **bit-exact**
+(tolerance 0 -- one quantization point, mirrored exactly), self-verifying in
+the exported tree, and the FFT(corner) -> IFFT(corner) round trip recovers
+the input at 2^-log2(N); the two lane input reorders cost ~4 BRAM36 at
+N = 2048. Timing and the remaining open work: see
+[doc/plan_p8_ssr_orders.md](doc/plan_p8_ssr_orders.md) and
+[doc/lessons_debugging.md](doc/lessons_debugging.md).
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors (both `--stage-mode` values).

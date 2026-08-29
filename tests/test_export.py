@@ -45,10 +45,14 @@ def _verilator_run(outdir, cfg):
     """Build + run the exported tree exactly as README.txt documents."""
     ssr = cfg.ssr > 1
     r22 = cfg.is_r22
-    top = ("fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
+    top = ("fft_ssr_r22_inv" if cfg.input_order == "bitreversed" else
+           "fft_ssr_r22" if (ssr and r22) else "fft_ssr" if ssr
            else "fft_top")
     if ssr:
-        files = (["fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
+        files = (["fft_ssr_r22_inv.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                  "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v"]
+                 if cfg.input_order == "bitreversed" else
+                 ["fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
                   "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
                   "fft_cross.v"] if r22 else
                  ["fft_ssr.v", "fft_top.v", "fft_sdf.v", "fft_reorder.v",
@@ -57,7 +61,8 @@ def _verilator_run(outdir, cfg):
         files = (["fft_core.v", "fft_sdf_r22.v", "fft_stage_r22.v",
                   "fft_sdf.v"] if r22 else
                  ["fft_core.v", "fft_sdf.v", "fft_reorder.v"])
-    tbname = ("tb_fft_ssr_r22.cpp" if (ssr and r22) else
+    tbname = ("tb_fft_ssr_r22_inv.cpp" if cfg.input_order == "bitreversed" else
+              "tb_fft_ssr_r22.cpp" if (ssr and r22) else
               "tb_fft_ssr.cpp" if ssr else "tb_fft_sdf.cpp")
     cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
            "--top-module", top, "-Wno-fatal",
@@ -323,6 +328,55 @@ class TestExportCornerOrder(unittest.TestCase):
         self.assertNotEqual(c.returncode, 0,
                             "wrong emission order passed the shipped check")
         self.assertIn("FAIL", c.stdout + c.stderr)
+
+
+class TestExportCornerInverse(unittest.TestCase):
+    """P8 4b: the corner-order IFFT export (bitrev -> native, R=2, r22)
+    must ship the same vectors as generate_ssr, build from the README
+    command alone, and self-verify BIT-EXACT (tolerance 0) via the shipped
+    compare.py."""
+
+    def test_export_corner_inverse_ships_and_verifies(self):
+        from fft_gen import generate_ssr
+        from config import FFTConfig
+        N = 32
+        outdir = os.path.join(ROOT, "build", "export_tst_corner_inv")
+        args = {"num_points": N, "ssr": 2, "inverse": True,
+                "input_order": "bitreversed", "output_order": "native",
+                "stage_mode": "r22", "num_frames": 2, "outdir": outdir}
+        cfg, res = _export(args)
+        # artifacts identical to the suite flow (same seed)
+        ref = os.path.join(ROOT, "build", "export_tst_corner_inv_ref")
+        generate_ssr(FFTConfig(num_points=N, ssr=2, inverse=True,
+                               input_order="bitreversed",
+                               output_order="native", stage_mode="r22"),
+                     ref, num_frames=2, seed=1)
+        for fn in ("stimulus.txt", "expected.txt",
+                   "fft_twiddles_r22_lane.mem", "fft_w1_inv.mem"):
+            with open(os.path.join(ref, fn)) as f1, \
+                    open(os.path.join(outdir, fn)) as f2:
+                self.assertEqual(f1.read(), f2.read(), fn)
+        # no crossbar ships with the transpose wrapper
+        self.assertFalse(os.path.isfile(os.path.join(outdir, "fft_cross.v")))
+        self.assertFalse(os.path.isfile(os.path.join(outdir, "fft_wn.mem")))
+        # the documented comparison tolerance is 0 (bit-exact)
+        par = open(os.path.join(outdir, "params.txt")).read()
+        self.assertIn("tolerance           = 0", par)
+        self.assertIn("fft_ssr_r22_inv", par)
+        # build + run + self-verify from the shipped files alone
+        _verilator_run(outdir, cfg)
+        c = subprocess.run([sys.executable, "compare.py"], cwd=outdir,
+                           capture_output=True, text=True)
+        self.assertEqual(c.returncode, 0,
+                         f"compare.py failed:\n{c.stdout}{c.stderr}")
+        self.assertIn("PASS", c.stdout)
+        self.assertIn("tolerance 0", c.stdout)
+        self.assertIn("0 tuser/tlast position mismatches", c.stdout)
+        # synth.tcl builds the SAME top with the wrapper's ROM generics
+        tcl = open(os.path.join(outdir, "vivado", "synth.tcl")).read()
+        self.assertIn("-top fft_ssr_r22_inv", tcl)
+        self.assertIn('W1_FILE="fft_w1_inv.mem"', tcl)
+        self.assertNotIn("REORDER_OUT", tcl)
 
 
 if __name__ == "__main__":

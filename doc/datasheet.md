@@ -182,10 +182,56 @@ size, and the savings are the per-lane reorder buffers simply not existing.
   the same +0.015 floor that R=2 measures at almost every other size, so the
   corner order did not introduce a new limit -- it stopped being outrun.
   Both meet 450 MHz.
-- Contract difference to design in: total latency is **M clocks lower** (the
-  lane reorder buffer's worth), so the frame period is unchanged but the
-  first sample of a frame emerges earlier. `params.txt` of a corner-order
-  export records `reorder_out = 0` and `compare.py` checks the new order.
+
+## R=2 corner-order IFFT (`r22i`): bitreversed -> native, P8
+
+The transpose of the forward corner (doc/plan_p8_ssr_orders.md 3b): the
+R-point inverse runs FIRST (add/sub + `W_N^{-p}`, one quantize to
+sample_width), then each lane's arrival is reordered bitrev_M -> native and
+fed to the EXISTING M-point DIF-IDFT lane (`fft_top_r22`, INVERSE=1,
+REORDER_OUT=1). The wrapper is `rtl/fft_ssr_r22_inv.v` -- a 5-stage pipeline
+(input -> add/sub+twiddle -> partial products at the DSP MREG -> fabric
+combine -> round+sat). Cost over the forward corner: the two per-lane input
+reorders (~4 BRAM36 at N=2048) and the wrapper's 4 DSPs (one complex
+multiply); both lanes keep their own output reorder.
+
+| N | r22b LUTs | r22i LUTs | dLUT | r22i LUTRAM | r22i DSP | r22i BRAM | r22b WNS | r22i WNS | r22i FEP |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 64 | 3099 | 3398 | +299 | 1143 | 20 | 2 | +0.015 | -0.020 | 104 |
+| 128 | 3338 | 3486 | +148 | 813 | 28 | 7 | +0.015 | -0.020 | 104 |
+| 256 | 4263 | 4524 | +261 | 1375 | 28 | 7 | +0.015 | -0.252 | 111 |
+| 512 | 4698 | 4993 | +295 | 1375 | 36 | 8 | +0.015 | -0.252 | 111 |
+| 1024 | 6284 | 6762 | +478 | 2495 | 36 | 8 | +0.015 | -0.252 | 111 |
+| 2048 | 7585 | 8188 | +603 | 3207 | 44 | 16 | +0.015 | -0.527 | 141 |
+| 4096 | 11349 | 11738 | +389 | 5647 | 44 | 31 | -0.095 | -0.527 | 159 |
+| 8192 | 16627 | 17108 | +481 | 9511 | 52 | 64 | -0.144 | -0.527 | 188 |
+
+- **DSPs = forward corner + 4** at every size (the wrapper's complex
+  multiply; the lanes' 40 are identical).
+- **The +LUTs and +BRAM are the two per-lane input reorders** (and the
+  wrapper's round/sat fabric) -- the forward corner deliberately has no lane
+  reorders at all, so the inverse's extra memory is the price of the
+  transpose route. It is exactly the ~4 BRAM36 the plan quoted for N=2048
+  (the r22i row shows +8 over r22b because the lane output reorders -- which
+  r22b removes -- are present here too).
+- **WNS: -0.020 (N=64/128) -> -0.252 -> -0.527 (N>=2048)**, all on the
+  LANE's own delay-line BRAM -> combine path (`dline_*_bram -> c3_*`), the
+  same path the forward r22/r22b cores carry at +0.015. The extra reorders
+  and wrapper displace the placement, so the lane's path stops being hidden
+  behind a longer one. The shipping bar is the routed result: N=2048
+  post-route WNS **-0.67 (141 FEP)** with BOTH the default and the
+  aggressive directive recipe (`impl_aggr_inv.tcl`) -- the lane dline->c3
+  path is placement-bound (the input reorders push the dline BRAMs apart),
+  not strategy-bound. At 450 MHz (2.222 ns) the worst row (N>=2048, -0.527
+  post-synth) is +0.195 and MEETS; the forward corner's +0.015 @ 500 MHz is
+  not reached. Open item: the r22 DIT lane (removes the input reorders
+  entirely) or an r22 memory-policy pass on the dline.
+- Values are **bit-exact vs the golden model** (tolerance 0 -- the inverse
+  has ONE quantization point, the wrapper's a1 quantize, mirrored exactly by
+  the RTL); `compare.py` in the export checks that, plus positional markers.
+  The exported N=2048 tree self-verifies PASS bit-exact (15314 samples).
+- The FFT(corner) -> IFFT(corner) round trip recovers the input at
+  2^-log2(N) -- the TX/RX fast-convolution pair (tests/test_rtl_ssr_orders.py).
 
 
 ### Reading the table

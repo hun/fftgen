@@ -115,6 +115,24 @@ def write_wn_mem(cfg: FFTConfig, path: str) -> None:
                 f.write(_hex(packed, cfg.twiddle_width * 2) + "\n")
 
 
+def write_w1_inv_mem(cfg: FFTConfig, path: str) -> None:
+    """Corner-inverse wrapper twiddle ROM (P8 4b, rtl/fft_ssr_r22_inv.v):
+    M words, word p holds W_N^{-p} -- the conjugated inverse table, the
+    same values SSRCornerInverseModel.w1 indexes by bitrev_M(counter)."""
+    from twiddles import canonical_twiddles
+    N = cfg.num_points
+    M = N // cfg.ssr
+    tw = canonical_twiddles(N, cfg.twiddle_width, cfg.twiddle_decimal,
+                            inverse=True)
+    with open(path, "w") as f:
+        for p in range(M):
+            re, im = tw[p]
+            packed = ((re & ((1 << cfg.twiddle_width) - 1))
+                      << cfg.twiddle_width) \
+                     | (im & ((1 << cfg.twiddle_width) - 1))
+            f.write(_hex(packed, cfg.twiddle_width * 2) + "\n")
+
+
 def write_preload_pack_vh(stage_preloads, path: str) -> int:
     """Pack golden-model post-warm stage preloads into ``fft_preloads.vh``.
 
@@ -149,26 +167,26 @@ def write_preload_pack_vh(stage_preloads, path: str) -> int:
 
 def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                  seed: int = 1, quiet: bool = True,
-                 pad_frames: int = None) -> dict:
+                 pad_frames: int = None,
+                 stimulus: Optional[List] = None) -> dict:
     """SSR build: R lanes of M-point fft_top + fft_cross. v1 contract:
-    native input, native (block-contiguous) output.
+    native input, native (block-contiguous) output. P8 (R=2, r22): the
+    corner orders -- FFT native -> bitrev (fft_ssr_r22 REORDER_OUT=0) and
+    IFFT bitrev -> native (fft_ssr_r22_inv, the transpose route).
 
     Pipeline fill consumes ~latency/M input frames before the first
     complete output frame emerges; `pad_frames` (default: enough to
     cover fill) filler frames are PREPENDED so the last `num_frames`
     input frames emerge fully. The comparison locates the frame offset
-    by search and verifies the overlapping tail."""
+    by search and verifies the overlapping tail.
+
+    `stimulus`: optional flat (re, im, u, l) stream fed verbatim instead
+    of generated random frames (the corner-FFT -> corner-IFFT RTL
+    round-trip test injects the FFT's actual output here)."""
     import shutil
     os.makedirs(outdir, exist_ok=True)
     N, R = cfg.num_points, cfg.ssr
-    if cfg.input_order == "bitreversed":
-        # P8 step 4a: the corner-order IFFT golden model is done and
-        # committed (tests pass); the RTL bring-up is OPEN (the lane-1
-        # twiddle stage diverges -- see doc/plan_p8_ssr_orders.md), so
-        # refuse to generate rather than ship wrong vectors.
-        raise NotImplementedError(
-            "corner-order IFFT (input_order=bitreversed): golden model done, "
-            "RTL bring-up open -- not generatable yet")
+    corner_inv = cfg.input_order == "bitreversed"
     if (cfg.input_order != "native" or cfg.output_order != "native") \
             and not cfg.ssr_corner_supported():
         raise ValueError(
@@ -178,24 +196,46 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
             f"stage_mode={cfg.stage_mode!r}")
     M = N // R
 
-    from golden_ssr import SSRGoldenModel as _P
+    if corner_inv:
+        # P8 4b: corner-order IFFT (bitrev -> native, R=2, r22) -- the
+        # transpose route: R-point inverse first, per-lane input reorder,
+        # existing DIF-IDFT lanes (rtl/fft_ssr_r22_inv.v).
+        from golden_ssr import SSRCornerInverseModel as _P
+    else:
+        from golden_ssr import SSRGoldenModel as _P
     if pad_frames is None:
         pad_frames = (_P(cfg, arch=cfg.stage_mode).latency + M - 1) // M + 2
 
-    rng = __import__("random").Random(seed)
-    frames = [[(rng.randint(-2 ** (cfg.sample_width - 1),
-                              2 ** (cfg.sample_width - 1) - 1),
-                rng.randint(-2 ** (cfg.sample_width - 1),
-                            2 ** (cfg.sample_width - 1) - 1))
-               for _ in range(N)]
-              for _ in range(num_frames + pad_frames)]
-    samples = [s for fr in frames for s in fr]
-    markers = []
-    for f in range(num_frames + pad_frames):
-        markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
+    if stimulus is not None:
+        samples = [s[:2] for s in stimulus]
+        markers = [s[2:] for s in stimulus]
+    else:
+        rng = __import__("random").Random(seed)
+        frames = [[(rng.randint(-2 ** (cfg.sample_width - 1),
+                                  2 ** (cfg.sample_width - 1) - 1),
+                    rng.randint(-2 ** (cfg.sample_width - 1),
+                                2 ** (cfg.sample_width - 1) - 1))
+                   for _ in range(N)]
+                  for _ in range(num_frames + pad_frames)]
+        if corner_inv:
+            # input order is bitreversed: slot e must carry the natural
+            # frame's sample bitrev_N(e) -- same convention as the R=1 DIT
+            # flow in generate()
+            br = [int(format(k, f"0{N.bit_length() - 1}b")[::-1], 2)
+                  for k in range(N)]
+            samples = [fr[br[j]] for fr in frames for j in range(N)]
+        else:
+            samples = [s for fr in frames for s in fr]
+        markers = []
+        for f in range(num_frames + pad_frames):
+            markers += [(1, 0)] + [(0, 0)] * (N - 2) + [(0, 1)]
 
-    from golden_ssr import SSRGoldenModel
-    m = SSRGoldenModel(cfg, arch=cfg.stage_mode)
+    if corner_inv:
+        from golden_ssr import SSRCornerInverseModel
+        m = SSRCornerInverseModel(cfg, arch=cfg.stage_mode)
+    else:
+        from golden_ssr import SSRGoldenModel
+        m = SSRGoldenModel(cfg, arch=cfg.stage_mode)
 
     # stimulus: flat natural samples, hex
     with open(os.path.join(outdir, "stimulus.txt"), "w") as f:
@@ -215,11 +255,17 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     rtl_dir = os.environ.get("FFTGEN_RTL_DIR") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "rtl")
     r22 = cfg.is_r22
-    for fn in (("fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
-                "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
-                "fft_cross.v") if r22 else
-               ("fft_sdf.v", "fft_reorder.v", "fft_top.v",
-                "fft_cross.v", "fft_ssr.v")):
+    if corner_inv:
+        rtl_files = ("fft_ssr_r22_inv.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                     "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v")
+    elif r22:
+        rtl_files = ("fft_ssr_r22.v", "fft_top_r22.v", "fft_sdf_r22.v",
+                     "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v",
+                     "fft_cross.v")
+    else:
+        rtl_files = ("fft_sdf.v", "fft_reorder.v", "fft_top.v",
+                     "fft_cross.v", "fft_ssr.v")
+    for fn in rtl_files:
         shutil.copy(os.path.join(rtl_dir, fn), outdir)
 
     # lane config artifacts: twiddle mem + preload pack + scaling pack
@@ -227,13 +273,18 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     lane_cfg = dataclasses.replace(cfg, num_points=M, ssr=1,
                                    input_order="native",
                                    output_order="bitreversed")
-    if r22:
+    if corner_inv:
         write_r22_twiddle_mem(lane_cfg, os.path.join(
             outdir, "fft_twiddles_r22_lane.mem"))
+        write_w1_inv_mem(cfg, os.path.join(outdir, "fft_w1_inv.mem"))
+    elif r22:
+        write_r22_twiddle_mem(lane_cfg, os.path.join(
+            outdir, "fft_twiddles_r22_lane.mem"))
+        write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
     else:
         write_lane_twiddle_mem(lane_cfg, os.path.join(outdir,
                                                       "fft_twiddles_lane.mem"))
-    write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
+        write_wn_mem(cfg, os.path.join(outdir, "fft_wn.mem"))
 
     intern_m = (cfg.sample_width
                 + max(0, lane_cfg.num_stages - sum(lane_cfg.shifts)) + 1)
@@ -241,8 +292,10 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     for s_, sh in enumerate(lane_cfg.shifts):
         pack_m |= (sh & 3) << (2 * s_)
 
+    tb_name = ("tb_fft_ssr_r22_inv.cpp" if corner_inv else
+               "tb_fft_ssr_r22.cpp" if r22 else "tb_fft_ssr.cpp")
     tb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                      "tb", "tb_fft_ssr_r22.cpp" if r22 else "tb_fft_ssr.cpp")
+                      "tb", tb_name)
     gargs = [
         f"-GNUM_POINTS={N}",
         f"-GSSR={R}",
@@ -257,7 +310,17 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         "-GPIPE_DEPTH=10",
         f"-GINVERSE={1 if cfg.inverse else '0'}",
     ]
-    if r22:
+    if corner_inv:
+        cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
+               "--top-module", "fft_ssr_r22_inv", "-Wno-fatal",
+               "-CFLAGS", f"-DTB_SAMPLE_WIDTH={cfg.sample_width} "
+                          f"-DTB_OUTPUT_WIDTH={cfg.output_width} "
+                          f"-DTB_SSR={R}",
+               *gargs,
+               "fft_ssr_r22_inv.v", "fft_top_r22.v", "fft_sdf_r22.v",
+               "fft_stage_r22.v", "fft_sdf.v", "fft_reorder.v", tb]
+        binary = "Vfft_ssr_r22_inv"
+    elif r22:
         # P8: one knob drives both halves (lane reorder off <-> crossbar
         # names its WN row by bitrev(counter)); they must agree.
         gargs.append(f"-GREORDER_OUT={0 if cfg.output_order == 'bitreversed' else 1}")
@@ -302,7 +365,10 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         exp = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
     with open(os.path.join(outdir, "actual.txt")) as f:
         act = [tuple(int(x) for x in ln.split()) for ln in f if ln.strip()]
-    tol = R // 2 + 1
+    # The corner-inverse has ONE quantization point (the wrapper's a1
+    # quantize), mirrored exactly by the RTL -- so it is BIT-EXACT vs the
+    # golden model, unlike the crossbar's double-quantized forward paths.
+    tol = 0 if corner_inv else R // 2 + 1
 
     def samp_close(e, a):
         # values compared with tolerance; markers verified separately
