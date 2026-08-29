@@ -13,7 +13,7 @@ Scope deliberately excludes R = 4/8 and the r2 arch (see §5).
 | 2 RTL, forward `native -> bitrev` | DONE | `fft_cross.EMIT_BREV` + `fft_ssr_r22.REORDER_OUT`; `tests/test_rtl_ssr_orders.py` |
 | 3 export + verification bar | DONE | `-GREORDER_OUT` in the sim command AND `synth.tcl`; shipped `compare.py`; sweep arch `r22b` |
 | 4 r22 **DIT lane** (for the IFFT `bitrev -> native`) | NOT STARTED | the only real work left; ~1-2 days |
-| 5 datasheet/README refresh for `r22b` | in progress | sweep running |
+| 5 datasheet/README refresh for `r22b` | **done** | full 60-config sweep (arch `all`), r22b section in doc/datasheet.md |
 
 Usable today: **FFT `native -> bitreversed`, R=2, N=2048, r22** -- exported,
 self-verifying, and cheaper than the native core (no lane reorder at all).
