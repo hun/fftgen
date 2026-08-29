@@ -358,6 +358,12 @@ module fft_stage_r22 #(
     wire w_gate_pf  = (k8 < TWO_D || k8 >= THREE_D);
     wire out_is_y0  = (k8 >= THREE_D);
 
+    // y0 rounding staging: a part-select on a function-call result
+    // (round_shift_bw(...)[WIDTH-1:0]) is rejected by Quartus's parser;
+    // Vivado/Verilator/yosys/LSE accept it, so route through wires.
+    wire signed [BW-1:0] y0_sh_re = round_shift_bw(y0_raw5_re, SIGMA1);
+    wire signed [BW-1:0] y0_sh_im = round_shift_bw(y0_raw5_im, SIGMA1);
+
     always @(posedge clk) begin
         if (rst) begin
             k      <= K_PRELOAD[KW-1:0];
@@ -457,8 +463,8 @@ module fft_stage_r22 #(
                 shift_p_re <= round_shift_pw({{1{p_re[MWB-1]}}, p_re}, TD_PLUS_BOTH);
                 shift_p_im <= round_shift_pw({{1{p_im[MWB-1]}}, p_im}, TD_PLUS_BOTH);
             end
-            y0_r_re <= round_shift_bw(y0_raw5_re, SIGMA1)[WIDTH-1:0];
-            y0_r_im <= round_shift_bw(y0_raw5_im, SIGMA1)[WIDTH-1:0];
+            y0_r_re <= y0_sh_re[WIDTH-1:0];
+            y0_r_im <= y0_sh_im[WIDTH-1:0];
 
             // ---- L6: the writes and the output ------------------
             if (w_gate_ram) begin

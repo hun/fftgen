@@ -335,40 +335,23 @@ module fft_stage #(
     localparam integer MEM_BITS = 2 * DEPTH * WIDTH;
     localparam integer MEM_STYLE = (MEM_BITS <= 1024) ? 0 :
                                    (MEM_BITS < 262144) ? 1 : 2;
-    generate
-        if (MEM_STYLE == 0) begin : g_mem
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
-        end else if (MEM_STYLE == 1) begin : g_mem
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
-        end else begin : g_mem
-            // ultra: only reached at N*WIDTH >= 262144 (N >= 16384 at
-            // 16-bit). Geometry unverified (doc/mem_cutoffs.md proves a
-            // fixed 4Kx72 shape); widths other than 18/36/72 need
-            // explicit packing or Vivado may fall back to BRAM.
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
-        end
-    endgenerate
+    // Delay-ring / product-FIFO memories declared at module level with
+    // DIRECT references (no * hierarchical names): Quartus cannot
+    // infer RAM through hierarchical references -- the rings silently
+    // became register arrays (13.9k regs vs 9.5k with direct refs). The
+    // Xilinx per-size ram_style pinning (distributed <= 1024 bits, block
+    // < 262144, else ultra; doc/mem_cutoffs.md) is replaced by "auto",
+    // which matches Vivado's heuristic at those thresholds (re-check the
+    // datasheet util numbers on re-synthesis). LSE/yosys infer these as
+    // LUTRAM either way.
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] ram_im [0:2*DEPTH-1];
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
 
     reg [RAMW-1:0] wptr /*verilator public_flat*/;                      // first-half write pointer
     reg [RAMW-1:0] pwp /*verilator public_flat*/;                       // product FIFO write pointer
@@ -524,13 +507,13 @@ module fft_stage #(
             // at pwp; PASS reads the product written D cycles earlier at
             // pr = pwp - D), so the read/write windows align.
             if (pipe_comp[8]) begin
-                g_mem.pfifo_re[pwp] <= shift_p_re[WIDTH-1:0];
-                g_mem.pfifo_im[pwp] <= shift_p_im[WIDTH-1:0];
+                pfifo_re[pwp] <= shift_p_re[WIDTH-1:0];
+                pfifo_im[pwp] <= shift_p_im[WIDTH-1:0];
                 out_re <= shift_s_re[WIDTH-1:0];
                 out_im <= shift_s_im[WIDTH-1:0];
             end else begin
-                out_re <= g_mem.pfifo_re[pr_r];
-                out_im <= g_mem.pfifo_im[pr_r];
+                out_re <= pfifo_re[pr_r];
+                out_im <= pfifo_im[pr_r];
             end
 
             // L8: round + shift staging (ungated; only consumed by L9)
@@ -675,11 +658,11 @@ module fft_stage #(
             // L0: capture -- first-half RAM write (PASS only) + BRAM
             // output register (registered read) + input + twiddle
             if (!in_compute) begin
-                g_mem.ram_re[wptr] <= in_re;
-                g_mem.ram_im[wptr] <= in_im;
+                ram_re[wptr] <= in_re;
+                ram_im[wptr] <= in_im;
             end
-            d_bram_re <= g_mem.ram_re[raddr_r];      // BRAM output register
-            d_bram_im <= g_mem.ram_im[raddr_r];
+            d_bram_re <= ram_re[raddr_r];      // BRAM output register
+            d_bram_im <= ram_im[raddr_r];
             a_reg_re <= in_re;
             a_reg_im <= in_im;
             if (TWIDDLE_MEM == 2) begin

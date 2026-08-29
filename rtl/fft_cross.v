@@ -218,8 +218,14 @@ module fft_cross #(
     localparam integer FPW = AW + TWIDDLE_WIDTH;
     localparam integer FLW = TWIDDLE_WIDTH + 18;   // lo product width
     localparam integer FHW = TWIDDLE_WIDTH + AW - 18 + 1; // hi product
+    // Q(td) * sqrt(2)/2, round-half-up. Computed WITHOUT $rtoi: Quartus
+    // rejects the system function in constant expressions (synthesis
+    // error 10174), while Vivado/Verilator accept it -- the implicit
+    // real -> integer localparam conversion truncates, so + 0.5 first
+    // gives exactly round-half-up (matches golden's
+    // round((2**td) * 2**-0.5), verified for R=8 configs).
     localparam real    C8_REAL = 0.7071067811865476 * (2 ** TWIDDLE_DECIMAL);
-    localparam signed [TWIDDLE_WIDTH-1:0] C8 = $rtoi(C8_REAL + 0.5);
+    localparam signed [TWIDDLE_WIDTH-1:0] C8 = C8_REAL + 0.5;
     reg signed [AW-1:0] e_re [0:3];       // even-q first-layer partials
     reg signed [AW-1:0] e_im [0:3];
     reg signed [AW-1:0] qq_re [0:3];      // Q_k (odd q = 2k+1) h2a

@@ -48,24 +48,19 @@ module fft_reorder #(
     localparam integer MEM_BITS = 2 * N * WIDTH;
     localparam integer MEM_STYLE = (MEM_BITS <= 1024) ? 0 :
                                    (MEM_BITS < 262144) ? 1 : 2;
-    generate
-        if (MEM_STYLE == 0) begin : g_mem
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] mem_re [0:2*N-1];
-            (* ram_style = "distributed" *)
-            reg signed [WIDTH-1:0] mem_im [0:2*N-1];
-        end else if (MEM_STYLE == 1) begin : g_mem
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] mem_re [0:2*N-1];
-            (* ram_style = "block" *)
-            reg signed [WIDTH-1:0] mem_im [0:2*N-1];
-        end else begin : g_mem
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] mem_re [0:2*N-1];
-            (* ram_style = "ultra" *)
-            reg signed [WIDTH-1:0] mem_im [0:2*N-1];
-        end
-    endgenerate
+    // Delay-ring / product-FIFO memories declared at module level with
+    // DIRECT references (no * hierarchical names): Quartus cannot
+    // infer RAM through hierarchical references -- the rings silently
+    // became register arrays (13.9k regs vs 9.5k with direct refs). The
+    // Xilinx per-size ram_style pinning (distributed <= 1024 bits, block
+    // < 262144, else ultra; doc/mem_cutoffs.md) is replaced by "auto",
+    // which matches Vivado's heuristic at those thresholds (re-check the
+    // datasheet util numbers on re-synthesis). LSE/yosys infer these as
+    // LUTRAM either way.
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] mem_im [0:2*N-1];
+    (* ram_style = "auto" *)
+    reg signed [WIDTH-1:0] mem_re [0:2*N-1];
     reg mk_user [0:2*N-1];   // 1 b/entry: stays distributed at any depth
     reg mk_last [0:2*N-1];
 
@@ -104,13 +99,13 @@ module fft_reorder #(
             m_last_r     <= 1'b0;
         end else if (run) begin
             // write current sample into the current buffer at natural pos
-            g_mem.mem_re[waddr] <= s_axis_tdata_re;
-            g_mem.mem_im[waddr] <= s_axis_tdata_im;
+            mem_re[waddr] <= s_axis_tdata_re;
+            mem_im[waddr] <= s_axis_tdata_im;
             mk_user[waddr] <= s_axis_tuser;
             mk_last[waddr] <= s_axis_tlast;
             // read previous frame's sample at bit-reversed position
-            m_re_r   <= g_mem.mem_re[raddr];
-            m_im_r   <= g_mem.mem_im[raddr];
+            m_re_r   <= mem_re[raddr];
+            m_im_r   <= mem_im[raddr];
             m_user_r <= mk_user[raddr];
             m_last_r <= mk_last[raddr];
             m_valid_r <= have_prev;

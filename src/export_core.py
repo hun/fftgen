@@ -17,6 +17,7 @@ suite (see README.txt written alongside the files).
 
 import argparse
 import os
+import re
 import shutil
 import sys
 
@@ -68,6 +69,46 @@ def lane_cfg(cfg: FFTConfig) -> FFTConfig:
 
 def intern_width(cfg: FFTConfig) -> int:
     return cfg.sample_width + max(0, cfg.num_stages - sum(cfg.shifts)) + 1
+def bake_ssr_wrapper(cfg: FFTConfig, src_path: str, out_path: str) -> None:
+    """Rewrite the SSR top's parameter defaults from ``cfg``.
+
+    rtl/fft_ssr.v / fft_ssr_r22.v / fft_ssr_r22_inv.v are generic
+    parameterized modules; the R=1 flow bakes every parameter into a
+    generated fft_core.v, but the SSR export historically copied the
+    generic tops and passed the values as Vivado ``-generic`` overrides
+    (synth_design in vivado/synth.tcl). Any other synthesis flow then
+    silently synthesized the DEFAULT size (e.g. N=8). Bake the values
+    so every flow sees the configured core.
+    """
+    lc = lane_cfg(cfg)
+    lc.input_order = "native"
+    lc.output_order = "bitreversed"
+    pack = 0
+    for s_, sh in enumerate(lc.shifts):
+        pack |= (sh & 3) << (2 * s_)
+    subs = {
+        "NUM_POINTS": cfg.num_points,
+        "SSR": cfg.ssr,
+        "SAMPLE_WIDTH": cfg.sample_width,
+        "SAMPLE_DECIMAL": cfg.sample_decimal,
+        "OUTPUT_WIDTH": cfg.output_width,
+        "OUTPUT_DECIMAL": cfg.output_decimal,
+        "TWIDDLE_WIDTH": cfg.twiddle_width,
+        "TWIDDLE_DECIMAL": cfg.twiddle_decimal,
+        "SCALING_PACK": "32'h%08x" % pack,
+        "INTERN_WIDTH": intern_width(lc),
+        "INVERSE": 1 if cfg.inverse else 0,
+    }
+    if cfg.is_r22:
+        subs["REORDER_OUT"] = 0 if cfg.output_order == "bitreversed" else 1
+    src = open(src_path).read()
+    for name, value in subs.items():
+        src = re.sub(
+            r"(parameter\s+(?:integer\s+)?" + name + r"\s*=\s*)[^,)\n]+",
+            r"\g<1>" + str(value), src, count=1)
+    with open(out_path, "w") as f:
+        f.write(src)
+
 
 
 def scaling_pack(cfg: FFTConfig) -> int:
@@ -1212,6 +1253,13 @@ def export(cfg: FFTConfig, args) -> dict:
                     os.path.join(outdir, lane_top))
         if lane_top not in written:
             written.append(lane_top)
+        # bake the SSR top's parameters (the Vivado flow passed them as
+        # -generic overrides; bake so any synthesis flow -- Quartus, LSE,
+        # yosys -- sees the configured core, not the module defaults)
+        ssr_top = ("fft_ssr_r22_inv.v" if cfg.input_order == "bitreversed"
+                   else "fft_ssr_r22.v" if cfg.is_r22 else "fft_ssr.v")
+        bake_ssr_wrapper(cfg, os.path.join(outdir, ssr_top),
+                        os.path.join(outdir, ssr_top))
 
     # records
     with open(os.path.join(outdir, "fft_params.vh"), "w") as f:
