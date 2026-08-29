@@ -704,10 +704,13 @@ stages. `r2` `13` stages / `r22` `6` pairs+`1` would all be instantiated (`max` 
   R=2 radix-2² is DONE** (P8 forward half, `--output-order bitreversed`;
   sweeps as arch `r22b`); it is cheaper than the native core (no lane reorder
   buffers) and verified bit-exact within the SSR tolerance with positional
-  markers. The matching **IFFT bitrev→native at R=2 still needs the radix-2²
-  DIT lane** (the P7 stretch item) -- the remaining P8 work, scoped in
-  `doc/plan_p8_ssr_orders.md`. R>2 corner orders are not expressible without an
-  R-wide bitrev_N buffer (bitrev_4/8 are not affine mod R) -- out of scope.
+  markers. The matching **IFFT bitrev→native at R=2**: golden model DONE (the
+transpose route — crossbar-first + per-lane reorder + the existing DIF-IDFT
+lanes, so the r22 DIT lane is NOT required), RTL bring-up OPEN with one
+isolated divergence (the wrapper's lane-1 twiddled output). Scope and the
+post-mortem: `doc/plan_p8_ssr_orders.md` + `doc/lessons_debugging.md`. R>2
+corner orders are not expressible without an R-wide bitrev_N buffer
+(bitrev_4/8 are not affine mod R) -- out of scope.
 - Artix-7 @250 MHz secondary gate not yet run (KU5P is the primary
   target; the architecture is family-portable by construction).
 

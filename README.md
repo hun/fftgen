@@ -56,7 +56,11 @@ bitreversed`** order at **R = 2, radix-2², any N** is implemented and verified
 bitreversed` in the exporter, exported and self-verifying). It costs nothing
 in DSPs, drops the lane reorder buffers entirely (e.g. -4 BRAM36 at N = 2048)
 and lowers latency by M clocks. The matching **IFFT `bitreversed → native` at
-R = 2** still requires the radix-2² DIT lane and is the remaining work item.
+R = 2** is **open**: the golden model is done and verified (the transpose
+reuse-verified-blocks route -- `SSRCornerInverseModel`), and the RTL bring-up
+is stalled on one isolated stage, the wrapper's lane-1 twiddled output
+(`b1`, see [doc/plan_p8_ssr_orders.md](doc/plan_p8_ssr_orders.md) and
+[doc/lessons_debugging.md](doc/lessons_debugging.md)).
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors (both `--stage-mode` values).

@@ -4,7 +4,7 @@
 and IFFT (`bitreversed → native`) engines at **R = 2, N = 2048, stage_mode = r22**.
 Scope deliberately excludes R = 4/8 and the r2 arch (see §5).
 
-## STATUS (steps 0-3 of 5 done; the forward half is shipped)
+## STATUS (forward half shipped; inverse: model done, RTL open)
 
 | step | state | evidence |
 |---|---|---|
@@ -13,7 +13,7 @@ Scope deliberately excludes R = 4/8 and the r2 arch (see §5).
 | 2 RTL, forward `native -> bitrev` | DONE | `fft_cross.EMIT_BREV` + `fft_ssr_r22.REORDER_OUT`; `tests/test_rtl_ssr_orders.py` |
 | 3 export + verification bar | DONE | `-GREORDER_OUT` in the sim command AND `synth.tcl`; shipped `compare.py`; sweep arch `r22b` |
 | 4a corner-order IFFT, GOLDEN MODEL | **DONE** | `SSRCornerInverseModel` (transpose: crossbar-first + per-lane reorder + existing DIF-IDFT lanes); numpy identity + corner-FFT round trip; mutations caught; committed 473b54a |
-| 4b corner-order IFFT, RTL | **OPEN** | wrapper `rtl/fft_ssr_r22_inv.v` drafted; bring-up proved wrapper+reorder exact in-situ, but the wrapper's lane-1 twiddled output (`b1`) diverges from the model -- the final output does not align. Reverted (not committed) to keep the tree green; `generate_ssr` raises NotImplementedError for this config until fixed. The absolute bottleneck for any buyer: the lane-1 `a1*W_N^{-p}` stage (stage B/C of the wrapper). | Debugging post-mortem: `doc/lessons_debugging.md` |
+| 4b corner-order IFFT, RTL | **OPEN** | wrapper `rtl/fft_ssr_r22_inv.v` drafted; bring-up proved wrapper+reorder exact in-situ, but the wrapper's lane-1 twiddled output (`b1`) diverges from the model -- the final output does not align. Reverted (not committed) to keep the tree green; `generate_ssr` raises NotImplementedError for this config until fixed. The absolute bottleneck for any buyer: the lane-1 `a1*W_N^{-p}` stage (stage B/C of the wrapper). Debugging post-mortem: `doc/lessons_debugging.md` |
 | 5 datasheet/README refresh for `r22b` | **done** | full 60-config sweep (arch `all`), r22b section in doc/datasheet.md |
 
 Usable today: **FFT `native -> bitreversed`, R=2, N=2048, r22** -- exported,
@@ -139,34 +139,33 @@ path (the reorder RAM's ~1.25 ns clock-to-out hop disappears from the lane
 output — the very thing that forced the `q/d` register in P5a); re-sweep to
 confirm, expect ≥ today's `+0.015`.
 
-### 3b. IFFT `bitreversed → native` — needs the r22 DIT lane (the real work)
+### 3b. IFFT `bitreversed → native` — the transpose route (as built)
 
-Per (*) the incoming word `(c, q)` carries `X[qM + bitrev_M(c)]`: correct block
-(lane) assignment, `M`-reversed local index. But the inverse factorization that
-the current wrapper implements is *lane-transform first*, so a `bitrev_M`-ordered
-bin stream must be consumed by an engine that turns bit-reversed input into
-native output — i.e. an **M-point radix-2² DIT lane**, which does not exist:
-`config.py:132` says `stage_mode='r22' is DIF-only`, and PLAN lists "r22 DIT
-into the generator" as the P7 stretch goal.
+Per (*) the incoming word `(c, q)` carries `X[qM + bitrev_M(c)]` — correct block
+assignment, `M`-reversed local index. The inverse is the **transpose** of the
+forward network, so the R-point step runs FIRST rather than last. Choosing the
+transpose makes the r22 DIT lane unnecessary: at R=2 the R-point inverse is
+add/sub, and the arriving word already carries both q values at the same p, so
+per clock:
 
-Steps:
-1. **Fold DIT into `fft_stage_r22` / `fft_sdf_r22`** (the P7 stretch item):
-   the r2² pair butterfly is its own transpose modulo twiddle conjugation, so
-   this is expected to be a re-indexing of the existing stage + `fft_twiddles`
-   for the DIT exponent map, not a new datapath. Reuse the P3 `build_dit`
-   route as the template, and the step-7 DSP lessons (natural-width
-   `reg signed` operands + staggered im/re) from day one — that path already
-   closes at 500 MHz in the DIF direction.
-2. **SSR wrapper order plumbing**: lane `.REORDER_OUT(0)` + a bit-reversed
-   *input* index, i.e. the lane stream feeding the DIT lane in `bitrev_M`
-   order (which is what the wire already carries, per (*)), and the crossbar's
-   `p` counter bit-reversed for the `W_N^{+rp}` rows.
-3. `SSRGoldenModel` gains `input_order`/`output_order` (drop the two
-   `NotImplementedError`s), reusing `ssr_emission_to_native()` plus a
-   `bitrev_N` pre-permutation on the input side.
-4. `config.py`/`fft_gen.py`: lift the guards for the *verified subset*
-   `{R=2} × {r22} × {nat→bitrev fwd, bitrev→nat inv}` only; everything else
-   keeps raising, with the r2 gap fixed to raise properly too.
+    a0 = round_shift(x0 + x1, 1)               -> lane 0 (twiddle W^0 = 1)
+    a1 = round_shift(x0 - x1, 1) * conj(W_N^p) -> lane 1
+
+then a per-lane bitrev→native reorder (the EXISTING `fft_reorder`) feeds the
+EXISTING verified M-point DIF-IDFT lane (`fft_top_r22`, TOPOLOGY=0, INVERSE=1,
+REORDER_OUT=1). Output slot e ↦ x[e] (flat native), so FFT(corner) ∘
+IFFT(corner) is the identity — see `SSRCornerInverseModel` (committed 473b54a).
+
+- Model: DONE (numpy identity + corner-FFT round trip; mutations caught).
+- RTL: wrapper `rtl/fft_ssr_r22_inv.v` drafted but REVERTED — bring-up proved
+  the wrapper+reorder bit-exact in-situ, with the ONE remaining divergence the
+  wrapper's lane-1 twiddled output `b1 = sat(round(a1 * W_N^-p))` (stage B/C).
+  See `doc/lessons_debugging.md`; `generate_ssr` refuses the config until it
+  is fixed.
+- Memory: the two per-lane input reorders cost ~4 BRAM36 at N=2048. If that
+  matters, the r22 DIT lane (P7 stretch item) removes them entirely at the
+  price of new butterfly topology + its own DSP/timing pass — an optimization
+  option, not the plan.
 
 ## 4. Verification gates (same bar as P7 — nothing ships without all four)
 
@@ -184,7 +183,8 @@ Steps:
   clock today, so it would throttle R = 4/8 back toward 1 sample/clock) plus the
   URAM-bank collision rule re-checked. Separate phase, separate quote.
 - **r2 arch corner orders**: likely free once the plumbing exists (its DIT
-  lanes already exist from P3) — do it as a follow-on *reuse* win, not now.
+  lanes already exist from P3, and they would also make the inverse route
+  reorder-free) — do it as a follow-on *reuse* win, not now.
 - **R = 2 at other N**: should come for free from the same generators; verify
   N = 512 / 4096 as a sanity pair in gate 2, but don't re-sweep the world.
 
@@ -192,13 +192,10 @@ Steps:
 
 | item | estimate |
 |---|---|
-| step 0 (guard fix) + FFT side 3a + gates 0–3 | ~0.5 day — 3 code lines + model + sweep |
-| 3b items 2–4 (SSR plumbing, model, config, verification) | ~0.5 day |
-| 3b item 1 (**r22 DIT lane**) | 1–2 days — new topology, needs its own DSP/timing pass (P7 needed a full day of probing to find the MREG fix; expect the same class of work here) |
-| **total** | **~2.5–3 days** |
-
-The forward half (3a) is the cheap, immediate one and is *better* than the
-current core in area and latency; the IFFT half is where the cost genuinely is.
+| step 0 (guard fix) + FFT side 3a + gates 0–3 | **DONE** — the forward half shipped (exported, swept, documented) |
+| inverse model (transpose route, 3b) | **DONE** — `SSRCornerInverseModel`, committed 473b54a |
+| inverse RTL (3b) | **OPEN** — the divergence is isolated to the wrapper's `b1` stage; a bounded fix (the harness and exact-permutation test already exist in `tests/test_rtl_ssr_orders.py`). ~0.5–1 day: fix `b1`, verify, export, sweep |
+| r22 DIT lane (optional, removes the ~4 BRAM36 of reorders) | 1–2 days — only if memory is the binding constraint; not required by the plan |
 
 ## 7. One integration question that could shrink this further
 
