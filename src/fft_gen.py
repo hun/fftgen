@@ -161,6 +161,14 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     import shutil
     os.makedirs(outdir, exist_ok=True)
     N, R = cfg.num_points, cfg.ssr
+    if cfg.input_order == "bitreversed":
+        # P8 step 4a: the corner-order IFFT golden model is done and
+        # committed (tests pass); the RTL bring-up is OPEN (the lane-1
+        # twiddle stage diverges -- see doc/plan_p8_ssr_orders.md), so
+        # refuse to generate rather than ship wrong vectors.
+        raise NotImplementedError(
+            "corner-order IFFT (input_order=bitreversed): golden model done, "
+            "RTL bring-up open -- not generatable yet")
     if (cfg.input_order != "native" or cfg.output_order != "native") \
             and not cfg.ssr_corner_supported():
         raise ValueError(

@@ -12,7 +12,8 @@ Scope deliberately excludes R = 4/8 and the r2 arch (see §5).
 | 1 golden model | DONE | `_SSRLane(reorder_out=)`, `emit_brev`, `ssr_emission_perm`; `tests/test_golden_ssr_orders.py` |
 | 2 RTL, forward `native -> bitrev` | DONE | `fft_cross.EMIT_BREV` + `fft_ssr_r22.REORDER_OUT`; `tests/test_rtl_ssr_orders.py` |
 | 3 export + verification bar | DONE | `-GREORDER_OUT` in the sim command AND `synth.tcl`; shipped `compare.py`; sweep arch `r22b` |
-| 4 r22 **DIT lane** (for the IFFT `bitrev -> native`) | NOT STARTED | the only real work left; ~1-2 days |
+| 4a corner-order IFFT, GOLDEN MODEL | **DONE** | `SSRCornerInverseModel` (transpose: crossbar-first + per-lane reorder + existing DIF-IDFT lanes); numpy identity + corner-FFT round trip; mutations caught; committed 473b54a |
+| 4b corner-order IFFT, RTL | **OPEN** | wrapper `rtl/fft_ssr_r22_inv.v` drafted; bring-up proved wrapper+reorder exact in-situ, but the wrapper's lane-1 twiddled output (`b1`) diverges from the model -- the final output does not align. Reverted (not committed) to keep the tree green; `generate_ssr` raises NotImplementedError for this config until fixed. The absolute bottleneck for any buyer: the lane-1 `a1*W_N^{-p}` stage (stage B/C of the wrapper). |
 | 5 datasheet/README refresh for `r22b` | **done** | full 60-config sweep (arch `all`), r22b section in doc/datasheet.md |
 
 Usable today: **FFT `native -> bitreversed`, R=2, N=2048, r22** -- exported,
