@@ -33,9 +33,9 @@ for t, (re, im) in enumerate(samples, start=1):
         adly = getattr(st, "a_dly", None)
         print(f"c={t:02d} s{g} pipe="
               f"{''.join('1' if b else '0' for b in st.pipe_comp[:4])} "
-              f"d={st.d_reg} bfls={st.bfly_sum} "
-              f"adly={adly if adly else '-'} mreg={st.mreg} "
-              f"combS={st.comb_sum}")
+              f"d={st.d_bram} bfls={st.bfly_s} "
+              f"adly={adly if adly else '-'} mreg={st.prod1} "
+              f"combS={st.comb_s}")
     print(f"   OUT res={res}")
 
 # drain

@@ -428,7 +428,9 @@ Behavioral contract:
 - the datapath is a **pure clock-enable freeze**: while `ce=0` or
   `tvalid=0` every value holds; no sample is lost, altered, or duplicated;
 - `m_axis_tvalid` is low during reset/fill and whenever frozen — consumers
-  never see stale data twice;
+  never see stale data twice (the SSR crossbar `fft_cross` implements the
+  same rule — `out_valid` is gated on `run` — regression-tested in
+  tests/test_rtl_ssr_freeze.py);
 - `tuser`/`tlast` ride at the fixed latency `L`, uninterpreted by the
   datapath; their only job is off-by-one detection (the golden model asserts
   marker alignment every frame);
@@ -443,12 +445,24 @@ Latency: the first valid output appears after exactly `L` enabled cycles
 stages where present) — a deterministic constant derived by the generator,
 printed to `params.txt`, and asserted per configuration in the test suite.
 
+SSR frame sync (crossbar + golden model): fill frames are dropped and
+emission starts at the first p==0 slot after the pipeline fills (mature
+= scnt > CB_LAT+1 — the p0 word whose output cycle is mature; frame 2's
+first word for M >= 8). A single-frame stream produces no output — the
+generator prepends `pad_frames` fillers; direct consumers must supply
+>= 2 frames.
+
 ## 9. DSP mapping & reset policy
 
 - **Asymmetric ports by design:** sample data occupies the DSP A/pre-adder
   port (`sample_width ≤ 25/27`), twiddles occupy the B port
   (`twiddle_width ≤ 18`) — mirroring the DSP48 hard macro (7-series E1,
-  UltraScale+/Versal E2/58 presets).
+  UltraScale+/Versal E2/58 presets). The bound is on the *effective*
+  internal width `INTERN_WIDTH + 1` (the stage butterfly width), where
+  `INTERN_WIDTH = sample_width + max(0, num_stages − Σshifts) + 1` — so a
+  weak scaling schedule lowers the ceiling. `fft_gen` rejects
+  out-of-envelope configs at the RTL boundary
+  (`_check_dsp_envelope`), keeping the golden models free of the limit.
 - The 10-layer chain is written to absorb the full DSP48E2 register
   budget: the im-path product DSPs take AREG=2, BREG=2, DREG=1, ADREG=1,
   MREG=1, CREG=1, PREG=1 (audited netlist-level, PLAN.md P5a).

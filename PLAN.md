@@ -564,6 +564,15 @@ Behavioral contract:
 - `m_axis_tvalid` marks cycles carrying valid output samples (low during
   reset/fill and whenever the datapath is frozen); `tuser(0)`/`tlast` are
   transported at the fixed latency `L`, uninterpreted by the datapath.
+  (The SSR crossbar `fft_cross` follows the same rule — `out_valid` is
+  gated on `run` — and is regression-tested by tests/test_rtl_ssr_freeze.py.)
+- SSR frame sync: the crossbar drops fill frames and starts emission at
+  the first p==0 slot after the pipeline fills (mature = scnt >
+  CB_LAT+1 — the p0 word whose output cycle is mature; frame 2's first
+  word for M >= 8); the golden model (SSRGoldenModel) syncs to the same
+  word. A single-frame stream therefore produces NO output — the
+  generator prepends `pad_frames` fillers, and any direct consumer must
+  supply >= 2 frames.
 - The reorder buffer consumes input markers and regenerates output markers
   (it owns the frame boundary); the golden model asserts marker alignment
   every frame as an off-by-one guard.

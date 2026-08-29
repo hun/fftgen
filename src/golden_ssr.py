@@ -42,7 +42,8 @@ Output markers ride through the lanes: SOF enters with sample n=0
 (lane R-1) and emerges on lane R-1 at p=M-1.
 """
 
-from typing import List, Sequence, Tuple
+from collections import deque
+from typing import List, Optional, Sequence, Tuple
 import math
 
 from config import FFTConfig, SSR_CORNER_ORDERS
@@ -70,6 +71,10 @@ class _SSRLane:
         core_cfg = copy.copy(m_cfg)
         core_cfg.input_order = "native"
         core_cfg.output_order = "bitreversed"
+        # extra delay FIFO + depth: only used by the r22 arch (deeper RTL
+        # pipeline than the golden stage); None for plain radix-2
+        self._extra_q: Optional[deque] = None
+        self._extra = 0
         if arch == "r22":
             self.core = R22SDFGoldenModel(core_cfg)
             # RTL r22 core latency (verified, rtl/fft_sdf_r22.v):
@@ -82,14 +87,12 @@ class _SSRLane:
                 + (11 if n % 2 else 0) + 1
             # golden core latency (3*D+1 per pair + 11 leftover)
             self._extra = rtl_core_lat - self.core.latency
-            self._extra_q: deque = deque()
+            self._extra_q = deque()
             # prefill extra delay with invalid entries
             for _ in range(max(0, self._extra)):
                 self._extra_q.append((False, 0, 0, 0, 0))
         else:
             self.core = SDFGoldenModel(core_cfg, dit=False)
-            self._extra = 0
-            self._extra_q = None
         self.arch = arch
         self.reorder_out = reorder_out
         self.reorder = ReorderModel(m_cfg.num_points) if reorder_out else None
@@ -104,6 +107,7 @@ class _SSRLane:
         v1, re, im, uu, ll = self.core.tick(enabled, re, im, u, l)
         if self.arch == "r22" and self._extra > 0:
             # delay core valid+data to match RTL pipeline (3D+9 vs 3D+1)
+            assert self._extra_q is not None
             self._extra_q.append((v1, re, im, uu, ll))
             v1, re, im, uu, ll = self._extra_q.popleft()
         if self.reorder is None:
@@ -223,6 +227,13 @@ class SSRGoldenModel:
         p = _bitrev(p_seq, self.lm) if self.emit_brev else p_seq
         self._dbg_p = p
         self._dbg_lane = [(lo[1], lo[2], lo[0]) for lo in lane_out]
+        # Frame sync: emit from the first p==0 word after the pipeline
+        # is filled, dropping the fill frames. The RTL's fft_cross syncs
+        # to the same word (mature = scnt > CB_LAT+1; p_off here handles
+        # the r22 extra-depth lag in the lane convention). A single-frame
+        # stream never reaches a second p==0 slot and produces NO output
+        # -- callers must supply >= 2 frames (generate_ssr prepends
+        # pad_frames fillers).
         filled = self._cycles > self.lanes[0].latency + self.CB_LAT
         if not self._synced:
             if filled and p == 0:
@@ -290,6 +301,7 @@ class SSRGoldenModel:
                     sr = er
                     si = ei
                 else:
+                    assert c8 is not None
                     sr = er + round_shift(fr * c8,
                                           self.cfg.twiddle_decimal)
                     si = ei + round_shift(fi * c8,
@@ -401,7 +413,8 @@ class SSRCornerInverseModel:
         from collections import deque
         for ln in self.lanes:
             ln.core.reset()
-            ln.reorder.reset()
+            if ln.reorder is not None:
+                ln.reorder.reset()
             if ln.arch == "r22" and ln._extra > 0:
                 ln._extra_q = deque()
                 for _ in range(ln._extra):

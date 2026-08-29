@@ -189,6 +189,7 @@ if __name__ == "__main__":
                 bad += 1
                 mm = next((k for k in range(len(got))
                            if got[k] != exp[k]), None)
+                assert mm is not None
                 print(f'N={N} inv={int(inv)}: MISMATCH at {mm}: '
                       f'{got[mm]} vs {exp[mm]}')
     print(f'{ok} bit-exact, {bad} mismatched')

@@ -1265,23 +1265,6 @@ class ReorderModel:
         self.half = N // 2
         self.buf_re = [[0] * N for _ in range(2)]   # 2 halves, N each
         self.buf_im = [[0] * N for _ in range(2)]
-        self.wpos = 0            # natural write position within frame
-        self.frames_written = 0
-        self.out_valid = False
-        self._cycles = 0
-
-    def reset(self):
-        self.wpos = 0
-        self.frames_written = 0
-        self.out_valid = False
-        self._cycles = 0
-
-    def __init__(self, N: int):
-        self.N = N
-        self.n = N.bit_length() - 1
-        self.half = N // 2
-        self.buf_re = [[0] * N for _ in range(2)]   # 2 halves, N each
-        self.buf_im = [[0] * N for _ in range(2)]
         self.buf_extra = [[None] * N for _ in range(2)]  # markers ride along
         self.wpos = 0            # natural write position within frame
         self.frames_written = 0

@@ -188,8 +188,15 @@ module fft_stage_r22 #(
     localparam [KW-1:0] THREE_D = 3 * DEPTH;
 
     // twiddle ROM: full R2² table (N entries), this pair's slice at
-    // [ROM_BASE, ROM_BASE + 3D); slice 0 = T[g*4^m] (y1 = c1),
-    // slice 1 = T[2g*4^m] (y2 = sd), slice 2 = T[3g*4^m] (y3 = c3)
+    // [ROM_BASE, ROM_BASE + 3D); slice 0 = T[g*4^m] (c1, golden slot
+    // y2 = j+2D), slice 1 = T[2g*4^m] (sd, golden slot y1 = j+D),
+    // slice 2 = T[3g*4^m] (c3, golden slot y3 = j+3D).
+    // NOTE: this stage's internal y1/y2 labels are INVERTED vs the
+    // golden model's slot names (fft_fixed_batch_r22): golden y1 is the
+    // sum-difference product with T[2j*base], golden y2 the diff-path
+    // product with T[j*base]. The pairing below is correct; only the
+    // names differ. See spikes/S5_r22/piped_model.py for the RTL
+    // convention.
     //
     // the read is REGISTERED (a BRAM DOUT): every LUTRAM read must
     // land in a register before it fans into the DSP. The address is
@@ -206,9 +213,9 @@ module fft_stage_r22 #(
     localparam [ROMW-1:0] SLICE2 = 2 * DEPTH;
     // the L2 mux selects by the k3 phase (the operand's selection
     // phase); the READ is computed one clock earlier from (k2, g_r):
-    //   k3 >= 3D      -> sd  (y2), twiddle = T[2g*4^m]   = slice 1
-    //   k3 <  D       -> c1  (y1), twiddle = T[g*4^m]    = slice 0
-    //   D <= k3 < 3D  -> c3  (y3), twiddle = T[3g*4^m]   = slice 2
+    //   k3 >= 3D      -> sd  (golden y1), twiddle = T[2g*4^m] = slice 1
+    //   k3 <  D       -> c1  (golden y2), twiddle = T[g*4^m]  = slice 0
+    //   D <= k3 < 3D  -> c3  (golden y3), twiddle = T[3g*4^m] = slice 2
     wire phase_mux_y2 = (k2 >= THREE_D);
     wire phase_mux_y1 = (k2 <  ONE_D);
     wire [ROMW-1:0] rom_which = phase_mux_y2 ? SLICE1

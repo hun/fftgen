@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import dataclasses
 from typing import List, Optional, Sequence, Tuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
@@ -20,9 +21,30 @@ from config import FFTConfig, SSR_CORNER_ORDERS
 from golden import OrderedFFTModel
 from stimuli import freeze_mask, random_frame
 
-
 def _hex(v: int, width: int) -> str:
     return format(v & ((1 << width) - 1), "0%dx" % ((width + 3) // 4))
+
+
+def _check_dsp_envelope(cfg: FFTConfig) -> None:
+    """Reject RTL configs beyond the DSP48E2 27x18 operand ceiling.
+
+    The emitted datapaths code their multipliers for the 27x18 primitive
+    (BW = INTERN_WIDTH + 1 in fft_sdf.v / fft_stage_r22.v; the crossbar
+    multiplies OUTPUT_WIDTH x TWIDDLE_WIDTH). Larger operands silently
+    fall back to fabric multipliers -- functionally correct, but a
+    utilization/timing regression. The golden models support arbitrary
+    widths, so this check lives at the RTL boundary, not in config.py.
+    """
+    intern = (cfg.sample_width
+              + max(0, cfg.num_stages - sum(cfg.shifts)) + 1)
+    wide = max(intern + 1, cfg.output_width)
+    if wide > 27 or cfg.twiddle_width > 18:
+        raise ValueError(
+            "RTL DSP envelope: DSP48E2 operands are 27x18 bits, "
+            f"requiring max(intern_width+1, output_width) <= 27 and "
+            f"twiddle_width <= 18; got intern_width={intern}, "
+            f"output_width={cfg.output_width}, "
+            f"twiddle_width={cfg.twiddle_width}")
 
 
 def _hex_wide(v: int) -> str:
@@ -167,7 +189,7 @@ def write_preload_pack_vh(stage_preloads, path: str) -> int:
 
 def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
                  seed: int = 1, quiet: bool = True,
-                 pad_frames: int = None,
+                 pad_frames: Optional[int] = None,
                  stimulus: Optional[List] = None) -> dict:
     """SSR build: R lanes of M-point fft_top + fft_cross. v1 contract:
     native input, native (block-contiguous) output. P8 (R=2, r22): the
@@ -269,10 +291,10 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         shutil.copy(os.path.join(rtl_dir, fn), outdir)
 
     # lane config artifacts: twiddle mem + preload pack + scaling pack
-    import dataclasses
     lane_cfg = dataclasses.replace(cfg, num_points=M, ssr=1,
                                    input_order="native",
                                    output_order="bitreversed")
+    _check_dsp_envelope(lane_cfg)
     if corner_inv:
         write_r22_twiddle_mem(lane_cfg, os.path.join(
             outdir, "fft_twiddles_r22_lane.mem"))
@@ -409,11 +431,12 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     mk_bad = len(mk_mism)
     # require at least one full frame of overlapping verified samples
     ok = (n_cmp >= N) and not mism and not mk_bad
-    if mk_bad:
-        mism.append(("markers", mk_bad, "first@slot", d0 + mk_mism[0]))
     first_bad = None
     if mism:
         i = mism[0]
+        first_bad = (d0 + i, tail_a[i], exp[i])
+    elif mk_bad:
+        i = mk_mism[0]
         first_bad = (d0 + i, tail_a[i], exp[i])
     return {"rc": 0 if ok else 1, "outdir": outdir,
             "n_expected": len(exp), "n_actual": len(act),
@@ -432,6 +455,7 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
              seed: int = 1, freeze: Optional[str] = None,
              quiet: bool = True) -> dict:
     """Write artifacts + build + run + compare. Returns {'rc', 'outdir', ...}."""
+    _check_dsp_envelope(cfg)
     os.makedirs(outdir, exist_ok=True)
     N = cfg.num_points
     rng = __import__("random").Random(seed)
@@ -530,7 +554,6 @@ def generate(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         # Stage timing is independent of I/O ordering: build the model with
         # the core's natural orders so order-conversion configs don't trip
         # its guard.
-        import dataclasses
         from golden import SDFGoldenModel
         if cfg.is_dit:
             nat_in, nat_out = "bitreversed", "native"

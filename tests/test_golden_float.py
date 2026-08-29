@@ -7,11 +7,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from golden import fft_float_reference, fft_float_radix2
 
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+import numpy as np
+HAS_NUMPY = True
 
 
 def rand_complex(n, rng):

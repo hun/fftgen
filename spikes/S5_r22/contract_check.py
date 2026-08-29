@@ -150,7 +150,7 @@ def run_pair(cfg, rng):
     plain = fft_fixed_batch(samples, cfg)
 
     # r22: swap the first pair's butterfly, keep the rest identical
-    x = [[r, i] for r, i in samples]
+    x = [(r, i) for r, i in samples]
     r22_pair(x, N, tw, shifts, td, inverse=cfg.inverse)
     for s in range(2, n):
         D = N >> (s + 1)
@@ -161,13 +161,13 @@ def run_pair(cfg, rng):
                 i2 = i1 + D
                 ar, ai = x[i1]
                 br, bi = x[i2]
-                x[i1] = [round_shift(ar + br, sig),
-                         round_shift(ai + bi, sig)]
+                x[i1] = (round_shift(ar + br, sig),
+                         round_shift(ai + bi, sig))
                 dr, di = ar - br, ai - bi
                 cr, ci = tw[(j << s) % N]
                 pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
                 sh = td + sig
-                x[i2] = [round_shift(pr, sh), round_shift(pi, sh)]
+                x[i2] = (round_shift(pr, sh), round_shift(pi, sh))
     from quant import quantize_output
     r22 = [quantize_output(re, im, cfg.sample_decimal,
                            cfg.output_width, cfg.output_decimal)
@@ -228,7 +228,7 @@ def fft_fixed_batch_r22(samples, cfg):
     tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
     js = -1 if not cfg.inverse else 1
 
-    x = [[re, im] for re, im in samples]
+    x = [(re, im) for re, im in samples]
 
     m = 0
     while 2 * m + 1 < n:
@@ -268,13 +268,13 @@ def fft_fixed_batch_r22(samples, cfg):
                 i2 = i1 + D
                 ar, ai = x[i1]
                 br, bi = x[i2]
-                x[i1] = [round_shift(ar + br, sig),
-                         round_shift(ai + bi, sig)]
+                x[i1] = (round_shift(ar + br, sig),
+                         round_shift(ai + bi, sig))
                 dr, di = ar - br, ai - bi
                 cr, ci = tw[(j << s) % N]
                 pr, pi = complex_multiply_karatsuba(dr, di, cr, ci)
                 sh = td + sig
-                x[i2] = [round_shift(pr, sh), round_shift(pi, sh)]
+                x[i2] = (round_shift(pr, sh), round_shift(pi, sh))
 
     from quant import quantize_output
     return [quantize_output(re, im, cfg.sample_decimal,

@@ -527,6 +527,8 @@ def main():
     md += fmt_table(table, header) + "\n"
 
     # side-by-side per-R comparisons (when both arches present)
+    comp_header = []
+    comp_rows = []
     if "r2" in archs and "r22" in archs:
         comp_header = ["N", "R", "R2 DSP", "R22 DSP", "ΔDSP", "R2 LUTs", "R22 LUTs", "ΔLUT", "R2 WNS", "R22 WNS", "R2 BRAM", "R22 BRAM"]
         comp_rows_all = []
@@ -552,8 +554,6 @@ def main():
                 comp_rows_all.extend(comp_rows)
         md += "\n*ΔDSP negative = r22 saves DSPs (target ~-50%); ΔLUT shows fabric cost. R>1 r22 uses M=N/R-point r22 lanes + same crossbar.*\n"
         comp_rows = comp_rows_all
-    else:
-        comp_rows = []
 
     out_md = os.path.join(args.jobs_dir, "datasheet.md")
     out_csv = os.path.join(args.jobs_dir, "datasheet.csv")

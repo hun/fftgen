@@ -58,7 +58,7 @@ def run_one(args, jobs_dir):
             return name, cached, True
     os.makedirs(outdir, exist_ok=True)
     t0 = time.time()
-    gen = ds.artifacts(n, 1, outdir)
+    gen = ds.artifacts_r2(n, 1, outdir)
     tcl = (TCL.replace("@RTL@", os.path.join(ds.ROOT, "rtl"))
               .replace("@NS@", str(ds.CLK_NS))
               .replace("@PACK@", str(gen["pack"]))

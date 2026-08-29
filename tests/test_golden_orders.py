@@ -23,7 +23,7 @@ CORNERS = [("native", "bitreversed"), ("bitreversed", "native"),
 def bitrev_permute(seq):
     N = len(seq)
     b = N.bit_length() - 1
-    out = [None] * N
+    out = [(0, 0)] * N
     for k, v in enumerate(seq):
         out[int(format(k, f"0{b}b")[::-1], 2)] = v
     return out

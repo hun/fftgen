@@ -19,6 +19,7 @@ Plus the contract guards: the P8 subset must be constructible, everything
 outside it must raise ValueError from config (NOT an assert from the
 generator -- the r2 arch used to leak corner orders through).
 """
+from typing import Any, Dict, List
 import random
 import unittest
 
@@ -139,7 +140,7 @@ class TestSSROrderContract(unittest.TestCase):
         # R=4/8 corner orders need bitrev_R to be a real permutation; the
         # inverse corner needs an r22 DIT lane. None of these may reach the
         # generator, and none may raise anything as quiet as an assert.
-        bad = [
+        bad: List[Dict[str, Any]] = [
             dict(num_points=64, ssr=4, output_order="bitreversed",
                  stage_mode="r22"),                      # R=4 corner
             dict(num_points=64, ssr=8, output_order="bitreversed",
@@ -214,6 +215,7 @@ class TestSSRCornerInverseModel(unittest.TestCase):
                   and any(o[0] != 0 or o[1] != 0
                           for o in outs[s:s + N])), None)
         self.assertIsNotNone(w, "no real frame emitted")
+        assert w is not None
         self.assertEqual(w[0][2], 1, "SOF not on first slot")
         self.assertEqual(w[-1][3], 1, "EOF not on last slot")
         worst = max(abs(o[0] - x[i] / (2 ** k)) for i, o in enumerate(w))

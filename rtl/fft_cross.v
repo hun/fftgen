@@ -18,8 +18,14 @@
 //   * round-half-up rescale Q(od + td) -> Q(od), saturate to ow
 //
 // Emission is frame-synced: words are dropped until the first p == 0
-// slot at or after the pipeline has filled (CB_LAT stages), then every
-// word emits.
+// slot at or after the pipeline has filled (mature = scnt > CB_LAT+1,
+// i.e. the p0 word whose output cycle is mature), then every word
+// emits. The golden model (SSRGoldenModel) syncs to the same word.
+// Single-frame streams never reach a second p==0 slot and produce no
+// output (the generator prepends pad_frames fillers).
+//
+// PLAN.md 2.8 contract: out_valid is deasserted while the datapath is
+// frozen (ce or in_valid low) so a consumer never sees a word twice.
 //
 // DSP48 PIPELINING of the pre-twiddle (P7 step 8): the four partial
 // products of one lane are NOT formed in the same clock. The two
@@ -262,7 +268,7 @@ module fft_cross #(
     // ---- stage 3 valid ----------------------------------------------
     reg                 vlast;
 
-    assign out_valid = vlast && (synced || out_phase0);
+    assign out_valid = vlast && (synced || out_phase0) && run;
     // tapped at the datapath's own depth, so these ride the word they mark
     assign out_user  = mk_user[CB_LAT-1];
     assign out_last  = mk_last[CB_LAT-1];
@@ -314,10 +320,16 @@ module fft_cross #(
         for (gp = 0; gp < R; gp = gp + 1) begin : g_pre
             always @(posedge clk) begin
                 if (rst) begin
+                    q_re[gp]  <= {OW{1'b0}};  q_im[gp] <= {OW{1'b0}};
+                    wa_re[gp] <= {TWIDDLE_WIDTH{1'b0}};
+                    wa_im[gp] <= {TWIDDLE_WIDTH{1'b0}};
                     wq_re[gp] <= {TWIDDLE_WIDTH{1'b0}};
                     wq_im[gp] <= {TWIDDLE_WIDTH{1'b0}};
                     d_re[gp]  <= {OW{1'b0}};
                     d_im[gp]  <= {OW{1'b0}};
+                    pp1[gp]   <= {AW{1'b0}};  pp2[gp] <= {AW{1'b0}};
+                    pp3[gp]   <= {AW{1'b0}};  pp4[gp] <= {AW{1'b0}};
+                    pc3[gp]   <= {AW{1'b0}};  pc4[gp] <= {AW{1'b0}};
                     // NOTE: b_* are owned exclusively by the main block
                     // (combine stage) -- do not drive them here
                 end else if (run) begin
@@ -530,6 +542,13 @@ module fft_cross #(
                         3: begin
                             u_re[i] <= qq_re[i] - qq_im[i];
                             u_im[i] <= qq_re[i] + qq_im[i];
+                        end
+                        // sig_k is (INVERSE ? 3-i : i) with i in [0,4),
+                        // so 0..3 covers every reachable value; the
+                        // default is synthesis latch-hygiene only.
+                        default: begin
+                            u_re[i] <= {AW{1'b0}};
+                            u_im[i] <= {AW{1'b0}};
                         end
                     endcase
                     pq_re[i] <= pp2_re[i];

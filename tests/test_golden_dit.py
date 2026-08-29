@@ -17,17 +17,14 @@ from golden import (SDFGoldenModel, fft_fixed_batch_dit,
                     fft_float_radix2)
 from stimuli import random_frame
 
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+import numpy as np
+HAS_NUMPY = True
 
 
 def bitrev_permute(seq):
     N = len(seq)
     b = N.bit_length() - 1
-    out = [None] * N
+    out = [(0, 0)] * N
     for k, v in enumerate(seq):
         out[int(format(k, f"0{b}b")[::-1], 2)] = v
     return out

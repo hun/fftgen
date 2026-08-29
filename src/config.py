@@ -5,8 +5,8 @@ combinations are rejected before anything is generated. All widths are
 *signed* widths (two's complement).
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Optional, Sequence, Tuple, Union
 
 VALID_SSR = (1, 2, 4, 8)
 VALID_ORDERS = ("native", "bitreversed")
@@ -43,7 +43,7 @@ def is_power_of_two(n: int) -> bool:
     return n > 0 and (n & (n - 1)) == 0
 
 
-@dataclass
+@dataclass(init=False)
 class FFTConfig:
     """Complete FFT/IFFT core configuration (see PLAN.md section 1)."""
 
@@ -58,38 +58,65 @@ class FFTConfig:
     # Fixed-point widths (all signed/two's complement)
     sample_width: int = 16                # input I/Q width
     sample_decimal: int = 0               # input fractional bits
-    output_width: Optional[int] = None    # defaults to sample_width
-    output_decimal: Optional[int] = None  # defaults to sample_decimal
+    output_width: int = 16                # defaults to sample_width
+    output_decimal: int = 0               # defaults to sample_decimal
     twiddle_width: int = 18               # twiddle ROM word width
-    twiddle_decimal: Optional[int] = None # defaults to twiddle_width - 1
+    twiddle_decimal: int = 17             # defaults to twiddle_width - 1
 
     # Per-stage right-shift schedule ("auto" = conservative, cannot overflow;
     # otherwise an explicit list with one entry per stage, entries in 0..2)
-    scaling: object = "auto"
+    scaling: Union[str, Tuple[int, ...]] = "auto"
 
     # Stage architecture (see VALID_STAGE_MODES)
     stage_mode: str = "r2"
 
-    def __post_init__(self):
-        if self.output_width is None:
-            self.output_width = self.sample_width
-        if self.output_decimal is None:
-            self.output_decimal = self.sample_decimal
-        if self.twiddle_decimal is None:
-            self.twiddle_decimal = self.twiddle_width - 1
+    def __init__(self, num_points: int, inverse: bool = False, ssr: int = 1,
+                 input_order: str = "native",
+                 output_order: str = "bitreversed",
+                 sample_width: int = 16, sample_decimal: int = 0,
+                 output_width: Optional[int] = None,
+                 output_decimal: Optional[int] = None,
+                 twiddle_width: int = 18,
+                 twiddle_decimal: Optional[int] = None,
+                 scaling: Union[str, Sequence[int]] = "auto",
+                 stage_mode: str = "r2"):
+        """Normalized fields; Optional args default to pipeline-consistent
+        values (output_width -> sample_width, output_decimal ->
+        sample_decimal, twiddle_decimal -> twiddle_width - 1)."""
+        self.num_points = num_points
+        self.inverse = inverse
+        self.ssr = ssr
+        self.input_order = input_order
+        self.output_order = output_order
+        self.sample_width = sample_width
+        self.sample_decimal = sample_decimal
+        self.output_width = (sample_width if output_width is None
+                             else output_width)
+        self.output_decimal = (sample_decimal if output_decimal is None
+                               else output_decimal)
+        self.twiddle_width = twiddle_width
+        self.twiddle_decimal = (twiddle_width - 1 if twiddle_decimal is None
+                                else twiddle_decimal)
+        self.scaling = (scaling if isinstance(scaling, str)
+                        else tuple(scaling))
+        self.stage_mode = stage_mode
 
         self._validate()
 
-        if not isinstance(self.scaling, str) or self.scaling != "auto":
-            shifts = tuple(self.scaling)
-            if len(shifts) != self.num_stages:
+        if isinstance(self.scaling, str):
+            if self.scaling != "auto":
                 raise ValueError(
-                    f"scaling schedule has {len(shifts)} entries, "
+                    "scaling schedule must be 'auto' or an explicit "
+                    f"per-stage shift list, got {self.scaling!r}")
+        else:
+            if len(self.scaling) != self.num_stages:
+                raise ValueError(
+                    f"scaling schedule has {len(self.scaling)} entries, "
                     f"expected num_stages={self.num_stages}")
-            for s in shifts:
+            for s in self.scaling:
                 if s not in (0, 1, 2):
-                    raise ValueError(f"per-stage shift must be 0, 1 or 2, got {s}")
-            self.scaling = shifts
+                    raise ValueError(
+                        f"per-stage shift must be 0, 1 or 2, got {s}")
 
     # ------------------------------------------------------------------
     # Derived properties
@@ -102,7 +129,7 @@ class FFTConfig:
     @property
     def shifts(self) -> Tuple[int, ...]:
         """Per-stage right-shift schedule (round-half-up at these points)."""
-        if isinstance(self.scaling, str) and self.scaling == "auto":
+        if isinstance(self.scaling, str):   # "auto" (the only legal str)
             if self.num_points == 1:
                 return (0,)
             # Conservative: every radix-2 butterfly at most doubles the
@@ -203,13 +230,13 @@ class FFTConfig:
         for name, width in (("sample_width", self.sample_width),
                             ("output_width", self.output_width),
                             ("twiddle_width", self.twiddle_width)):
-            if width is not None and width < 2:
+            if width < 2:
                 raise ValueError(f"{name} must be >= 2, got {width}")
         for name, width, dec in (
                 ("sample", self.sample_width, self.sample_decimal),
                 ("output", self.output_width, self.output_decimal),
                 ("twiddle", self.twiddle_width, self.twiddle_decimal)):
-            if dec is not None and not (0 <= dec < width):
+            if not (0 <= dec < width):
                 raise ValueError(
                     f"{name}_decimal must satisfy 0 <= decimal < width, "
                     f"got width={width}, decimal={dec}")

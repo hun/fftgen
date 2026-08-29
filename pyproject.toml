@@ -13,5 +13,8 @@ license = { text = "CERN-OHL-S-2.0 OR LicenseRef-Commercial (closed-source licen
 [project.optional-dependencies]
 dev = ["numpy"]
 
-[tool.setuptools]
-packages = ["src"]
+
+[tool.pyright]
+# Modules use flat absolute imports ("from config import ...") with
+# sys.path.insert() pointing at src/; surface that to pyright statically.
+extraPaths = ["src"]

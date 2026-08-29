@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from golden import R22SDFGoldenModelDit
 from twiddles import canonical_twiddles
+from typing import Any, Dict
 
 SPIKE = os.path.dirname(os.path.abspath(__file__))
 RTL = os.path.join(SPIKE, "..", "..", "rtl")
@@ -264,7 +265,7 @@ int main(int argc, char** argv) {
 """
 
 
-def run_rtl(cfg, num_frames=2, seed=7):
+def run_rtl(cfg, num_frames=2, seed=7) -> Dict[str, Any]:
     import random
     N = cfg.num_points
     outdir = os.path.join(SPIKE, "build_r22_dit")

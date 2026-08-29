@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from typing import Any, Dict, Tuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
@@ -123,21 +124,25 @@ class TestStageMode(unittest.TestCase):
                           stage_mode="r22")
         self.assertTrue(inv_c.ssr_corner_supported())
         self.assertIn("inverse=True", str(inv_c))
-        for kw in (dict(num_points=32, ssr=4, stage_mode="r22"),      # R=4
-                   dict(num_points=32, ssr=8, stage_mode="r22"),      # R=8
-                   dict(num_points=32, ssr=2, stage_mode="r22",
-                        inverse=True),                                # inv corner
-                   dict(num_points=32, ssr=2, stage_mode="r22",
-                        output_order="native",
-                        input_order="bitreversed")):                  # inv corner
+        kws: Tuple[Dict[str, Any], ...] = (
+            dict(num_points=32, ssr=4, stage_mode="r22"),      # R=4
+            dict(num_points=32, ssr=8, stage_mode="r22"),      # R=8
+            dict(num_points=32, ssr=2, stage_mode="r22",
+                 inverse=True),                                # inv corner
+            dict(num_points=32, ssr=2, stage_mode="r22",
+                 output_order="native",
+                 input_order="bitreversed"))                  # inv corner
+        for kw in kws:
             with self.subTest(**kw):
                 with self.assertRaises(ValueError):
                     FFTConfig(**kw)
 
     def test_r22_rejects_other_orders(self):
-        for kw in (dict(input_order="bitreversed"),
-                   dict(output_order="native"),
-                   dict(input_order="bitreversed", output_order="native")):
+        kws: Tuple[Dict[str, Any], ...] = (
+            dict(input_order="bitreversed"),
+            dict(output_order="native"),
+            dict(input_order="bitreversed", output_order="native"))
+        for kw in kws:
             with self.subTest(**kw):
                 with self.assertRaises(ValueError):
                     FFTConfig(num_points=16, stage_mode="r22", **kw)

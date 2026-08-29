@@ -39,6 +39,11 @@ module fft_sdf_r22 #(
     // wired via TOPOLOGY in a later P7 step)
     parameter integer TOPOLOGY       = 0,
     parameter TWIDDLE_FILE           = "fft_twiddles_r22.mem",
+    // internal datapath width; the generator emits
+    // sample_width + max(0, num_stages - sum(shifts)) + 1 -- the +1
+    // covers the sum-path carry. The default only fits the auto
+    // schedule for N <= 32; standalone use must size it as above or
+    // the internal truncations below can wrap.
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5,
     parameter integer PIPE_DEPTH     = 10, // kept for compat, not used
     parameter [4095:0] PRELOAD_PACK  = 4096'b0, // unused in r22 (K_PRELOAD per pair)

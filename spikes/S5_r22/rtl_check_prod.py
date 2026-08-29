@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import FFTConfig
 from golden import R22SDFGoldenModel
 from rtl_check import write_r22_twiddle_mem
+from typing import Any, Dict
 
 SPIKE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(SPIKE, "..", ".."))
@@ -29,7 +30,7 @@ def _hex(v, width):
     return format(v & ((1 << width) - 1), "0%dx" % ((width + 3) // 4))
 
 
-def run(cfg, num_frames=2, seed=7, freeze=None):
+def run(cfg, num_frames=2, seed=7, freeze=None) -> Dict[str, Any]:
     import random
     N = cfg.num_points
     outdir = os.path.join(SPIKE, "build_prod")

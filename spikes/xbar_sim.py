@@ -255,7 +255,7 @@ if __name__ == '__main__':
             return o
         return spy
     for r_ in range(R):
-        g.lanes[r_].tick = mk_spy(r_, orig[r_])
+        setattr(g.lanes[r_], "tick", mk_spy(r_, orig[r_]))
     got = g.process_stream(samples, markers=markers)
     exp = [(x[0], x[1]) for x in got]
 
@@ -284,6 +284,7 @@ if __name__ == '__main__':
                                 flat[i] if off >= 0 else flat[i-off]))
         if best is None or mism < best[0]:
             best = (mism, off, n_cmp)
+    assert best is not None
     print(f'PY vs GOLDEN: offset {best[1]}: {best[0]}/{best[2]} mismatches')
     off = best[1]
     n_cmp = best[2]

@@ -12,11 +12,8 @@ from quant import complex_multiply_karatsuba, round_shift
 from stimuli import impulse, random_frame, tone_frame
 from twiddles import canonical_twiddles
 
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+import numpy as np
+HAS_NUMPY = True
 
 
 def to_complex(frame):
@@ -32,7 +29,7 @@ def bitrev_permute(seq):
     """Reorder seq[k] -> slot bitrev(k) (self-inverse permutation)."""
     N = len(seq)
     bits = N.bit_length() - 1
-    out = [None] * N
+    out = [(0, 0)] * N
     for k, v in enumerate(seq):
         out[int(format(k, f"0{bits}b")[::-1], 2)] = v
     return out

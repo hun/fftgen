@@ -150,7 +150,7 @@ def build_and_run(cfg, outdir, P):
             return res
         return t
     for r_ in range(R):
-        m.lanes[r_].tick = mk_spy(r_, orig[r_])
+        setattr(m.lanes[r_], "tick", mk_spy(r_, orig[r_]))
 
     em = m.process_stream(samples, markers=markers)
 

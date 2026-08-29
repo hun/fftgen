@@ -17,4 +17,4 @@ for t in range(1, 17):
         print(f"post s{g} comp={int(st.in_compute)} i={st.i} w={st.wptr} "
               f"pw={st.pwp} ra={(st.wptr - st.D) % (2*st.D)} "
               f"pipe={''.join('1' if b else '0' for b in st.pipe_comp[:4])} "
-              f"d={st.d_reg} out=({st.out_reg[0]},{st.out_reg[1]})")
+              f"d={st.d_bram} out=({st.out_reg[0]},{st.out_reg[1]})")

@@ -355,6 +355,10 @@ module fft_stage #(
             (* ram_style = "block" *)
             reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
         end else begin : g_mem
+            // ultra: only reached at N*WIDTH >= 262144 (N >= 16384 at
+            // 16-bit). Geometry unverified (doc/mem_cutoffs.md proves a
+            // fixed 4Kx72 shape); widths other than 18/36/72 need
+            // explicit packing or Vivado may fall back to BRAM.
             (* ram_style = "ultra" *)
             reg signed [WIDTH-1:0] ram_re [0:2*DEPTH-1];
             (* ram_style = "ultra" *)
