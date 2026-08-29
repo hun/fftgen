@@ -640,9 +640,15 @@ def params_txt(cfg: FFTConfig, extra: dict) -> str:
                          f" = {bits:7d} bits -> {mem_style_bits(bits)}"
                          f"  (x{cfg.ssr} lanes)")
         rbits = 2 * lc.num_points * cfg.output_width
-        lines.append(f"  lane reorder: {2 * lc.num_points:5d} x "
-                     f"{cfg.output_width:2d}b = {rbits:7d} bits -> "
-                     f"{mem_style_bits(rbits)}  (x{cfg.ssr} lanes)")
+        if reorder_out(cfg):
+            lines.append(f"  lane reorder: {2 * lc.num_points:5d} x "
+                         f"{cfg.output_width:2d}b = {rbits:7d} bits -> "
+                         f"{mem_style_bits(rbits)}  (x{cfg.ssr} lanes)")
+        else:
+            # P8 corner order: the DIF lanes already emit bit-reversed p,
+            # so no reorder buffer is instantiated at all.
+            lines.append(f"  lane reorder: none ({rbits // 8} x 8 bits/lane "
+                         f"saved, x{cfg.ssr} lanes) -- bitrev output order")
     if mode == "r22" and cfg.ssr == 1:
         m = 0
         while 2 * m + 1 < cfg.num_stages:
@@ -716,6 +722,7 @@ def readme_txt(cfg: FFTConfig, args) -> str:
         "  tb/               Verilator testbench (C++)",
         "  stimulus.txt      input vectors (hex re im user last)",
         "  expected.txt      golden-model expected output",
+        "  compare.py        VERIFY: python3 compare.py (expected vs actual)",
         "  vivado/synth.tcl  OOC synthesis script (IMP=1 adds P&R)",
         "  vivado/timing.xdc clock constraint",
     ]
@@ -727,6 +734,13 @@ def readme_txt(cfg: FFTConfig, args) -> str:
                  "    -GINVERSE=%d -GPIPE_DEPTH=10"
                  % (cfg.num_points, cfg.ssr, scaling_pack(engine_cfg(cfg)),
                     intern_width(lane_cfg(cfg)), int(cfg.inverse)))
+        if r22:
+            # P8: REORDER_OUT selects the emission order (1 = native ->
+            # native, 0 = native -> bitreversed). It MUST be passed: the
+            # RTL default is 1, so an exported corner-order tree would
+            # otherwise simulate the wrong order against its own
+            # expected.txt (caught by tests/test_export.py).
+            gargs += " \\\n    -GREORDER_OUT=%d" % (1 if reorder_out(cfg) else 0)
 
     sim = [
         "  verilator --cc --exe --build -j 4 --top-module %s \\" % top,
@@ -741,23 +755,29 @@ def readme_txt(cfg: FFTConfig, args) -> str:
     sim += [
         "    %s tb/%s" % (srcs, tbname),
         "    ./obj_dir/%s      # writes actual.txt" % binary,
+        "",
+        "Verification (REQUIRED -- the simulation above only DUMPS actual.txt;",
+        "it prints 'ok: N samples' for any run that completes, correct or not):",
+        "",
+        "    python3 compare.py      # expected.txt vs actual.txt, exit 0 = pass",
     ]
 
     if r22 and not ssr:
-        note = ("expected.txt vs actual.txt: BIT-EXACT against the r22\n"
+        note = ("compare.py checks BIT-EXACT values against the r22\n"
                 "re-pinned contract (spikes/S5_r22/notes.md): 1-2 LSB vs an\n"
-                "r2 build, identical SQNR.")
+                "r2 build, identical SQNR. tuser/tlast are positional.")
     elif r22:
-        note = ("expected.txt vs actual.txt: SSR compares with tolerance\n"
-                "R/2+1 LSB after word-offset alignment (r22 lanes re-pin the\n"
-                "rounding contract: 1-2 LSB vs r2, identical SQNR).")
+        note = ("compare.py checks SSR values with tolerance R/2+1 LSB after\n"
+                "word-offset alignment (r22 lanes re-pin the rounding\n"
+                "contract: 1-2 LSB vs r2, identical SQNR), and tuser/tlast\n"
+                "positionally and exactly.")
     elif ssr:
-        note = ("expected.txt vs actual.txt: bit-exact for R=1; SSR compares\n"
+        note = ("compare.py checks bit-exact for R=1; SSR compares\n"
                 "with tolerance R/2+1 LSB after word-offset alignment\n"
                 "(lane-0 identity twiddle differs from the golden\n"
-                "131071-multiply by <1 LSB).")
+                "131071-multiply by <1 LSB). Markers are positional.")
     else:
-        note = "expected.txt vs actual.txt: bit-exact."
+        note = "compare.py checks expected.txt vs actual.txt bit-exactly."
 
     out = [
         "fftgen exported core -- README (generated)",
@@ -795,15 +815,21 @@ def synth_tcl(cfg: FFTConfig, part: str, clk_mhz: float) -> str:
         "set_property verilog_define {FFTGEN_PRELOADS=1} [current_fileset]\n")
     generics = ""
     if ssr and r22:
+        # REORDER_OUT must be synthesized exactly as the simulation builds it:
+        # it selects the emission order (and whether the lane reorder buffers
+        # exist at all). Omitting it silently synthesizes a native-order core
+        # for a bitrev-order export -- a netlist that cannot match the
+        # shipped expected.txt. (P8)
         generics = (
             "synth_design -top fft_ssr_r22 -generic NUM_POINTS=%d \\\n"
             "    -generic SSR=%d -generic SCALING_PACK=32'h%08x \\\n"
             "    -generic INTERN_WIDTH=%d -generic INVERSE=%d \\\n"
-            "    -generic PIPE_DEPTH=10 \\\n"
+            "    -generic PIPE_DEPTH=10 -generic REORDER_OUT=%d \\\n"
             "    -generic WN_FILE=\"fft_wn.mem\" \\\n"
             "    -generic LANE_TW_FILE=\"fft_twiddles_r22_lane.mem\""
             % (cfg.num_points, cfg.ssr, scaling_pack(engine_cfg(cfg)),
-               intern_width(engine_cfg(cfg)), int(cfg.inverse)))
+               intern_width(engine_cfg(cfg)), int(cfg.inverse),
+               1 if reorder_out(cfg) else 0))
     elif ssr:
         generics = (
             "synth_design -top fft_ssr -generic NUM_POINTS=%d \\\n"
@@ -929,8 +955,113 @@ def _hexw(v: int, width: int) -> str:
 
 
 # ----------------------------------------------------------------------
-# export driver
-# ----------------------------------------------------------------------
+# Shipped comparator (written to compare.py in every exported tree).
+#
+# The testbenches deliberately do NOT self-check: they stream stimulus.txt
+# through the DUT and dump actual.txt, because the single source of truth is
+# the golden model. That is only safe if the tree also ships the comparison
+# rule -- otherwise "ok: N samples" (which any completed run prints) reads
+# like a pass. Implements exactly the suite's rule:
+#   * word-offset alignment (the RTL emits pipeline-fill words first)
+#   * values within the documented tolerance (0 for R = 1 = bit-exact;
+#     R/2 + 1 LSB for SSR, from the double quantization: lanes snap to
+#     output_width, then the crossbar re-quantizes after its rounding shift)
+#   * tuser/tlast compared POSITIONALLY and exactly (a count-only check
+#     cannot see marker skew -- that is how the SSR marker bug survived)
+COMPARE_PY = '''#!/usr/bin/env python3
+"""fftgen exported-core self-check: expected.txt (golden model) vs actual.txt.
+
+Usage (from this directory, after building and running the simulation from
+README.txt):
+
+    python3 compare.py
+
+Exit status 0 = pass. The testbench itself only writes actual.txt, so THIS
+is the check that decides whether the netlist is correct.
+"""
+import os
+import sys
+
+
+def read(path):
+    out = []
+    with open(path) as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                out.append(tuple(int(x) for x in ln.split()))
+    return out
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    par = {}
+    with open(os.path.join(here, "params.txt")) as f:
+        for ln in f:
+            if "=" in ln:
+                k, v = ln.split("=", 1)
+                par[k.strip()] = v.strip()
+    N = int(par["num_points"])
+    R = int(par.get("ssr", "1") or 1)
+    # SSR quantizes twice (lane output, then the crossbar rescale); R = 1 is
+    # bit-exact and must stay that way.
+    tol = 0 if R == 1 else R // 2 + 1
+
+    exp = read(os.path.join(here, "expected.txt"))
+    act = read(os.path.join(here, "actual.txt"))
+    if not exp or not act:
+        print("FAIL: expected.txt and actual.txt must both be non-empty")
+        return 1
+
+    def close(e, a):
+        return all(abs(x - y) <= tol for x, y in zip(e[:2], a[:2]))
+
+    # the RTL emits pipeline-fill words before its stream locks to the frame
+    # grid: find the word offset at which the whole remaining stream matches
+    base = None
+    for skip_w in range(0, len(act) // R):
+        b = skip_w * R
+        n_cmp = min(len(exp), len(act) - b)
+        if n_cmp < N:
+            break
+        if all(close(exp[i], act[b + i]) for i in range(n_cmp)):
+            base = b
+            break
+    if base is None:
+        print("FAIL: no word-offset alignment found (values do not match the "
+              "golden model at any frame offset)")
+        for i in range(min(len(exp), len(act))):
+            if not close(exp[i], act[i]):
+                print(f"  first difference at line {i}: expected {exp[i]}, "
+                      f"got {act[i]}")
+                break
+        return 1
+
+    n_cmp = min(len(exp), len(act) - base)
+    bad = [i for i in range(n_cmp) if not close(exp[i], act[base + i])]
+    mk = [i for i in range(n_cmp)
+          if exp[i][2:] != act[base + i][2:]]
+    worst = max((max(abs(exp[i][0] - act[base + i][0]),
+                     abs(exp[i][1] - act[base + i][1]))
+                 for i in range(n_cmp)), default=0)
+    print(f"num_points={N} ssr={R} tolerance={tol} aligned at word offset "
+          f"{base // R}, comparing {n_cmp} samples")
+    print(f"  values : max |delta| = {worst} (tolerance {tol}), "
+          f"{len(bad)} violations")
+    print(f"  markers: {len(mk)} tuser/tlast position mismatches")
+    if bad or mk:
+        for i in (bad or mk)[:5]:
+            print(f"  line {base + i}: expected {exp[i]}, got {act[base + i]}")
+        return 1
+    print("PASS: bit-exact within the documented contract "
+          "(values within tolerance, markers positional)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
 
 def export(cfg: FFTConfig, args) -> dict:
     outdir = os.path.abspath(args.outdir)
@@ -1059,6 +1190,14 @@ def export(cfg: FFTConfig, args) -> dict:
     with open(os.path.join(outdir, "vivado", "timing.xdc"), "w") as f:
         f.write(timing_xdc(args.clk_mhz))
     written += ["vivado/synth.tcl", "vivado/timing.xdc"]
+
+    # the verification rule has to be EXECUTABLE, not prose: the shipped
+    # testbench only writes actual.txt and prints 'ok: N samples' for any
+    # run that completed, so a customer following README.txt alone could
+    # take a 97%-wrong netlist (e.g. a mis-set REORDER_OUT) as a pass.
+    with open(os.path.join(outdir, "compare.py"), "w") as f:
+        f.write(COMPARE_PY)
+    written.append("compare.py")
 
     with open(os.path.join(outdir, "README.txt"), "w") as f:
         f.write(readme_txt(cfg, args))

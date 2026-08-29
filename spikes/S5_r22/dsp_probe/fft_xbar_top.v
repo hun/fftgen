@@ -2,6 +2,8 @@
 // The SSR timing limiter after P7 step 7 lives entirely in here
 // (u_cross/g_pre[*].pp*_reg), so a standalone synthesis reproduces it
 // in ~30 s per variant.
+// P8: exposes the marker ports (in_user/in_last ride the datapath's own
+// CB_LAT pipeline; out_user/out_last come from the same depth).
 `default_nettype none
 
 module fft_xbar_top #(
@@ -12,9 +14,13 @@ module fft_xbar_top #(
     input  wire rst,
     input  wire ce,
     input  wire in_valid,
+    input  wire in_user,
+    input  wire in_last,
     input  wire signed [R*16-1:0] din_re,
     input  wire signed [R*16-1:0] din_im,
     output wire                    out_valid,
+    output wire                    out_user,
+    output wire                    out_last,
     output wire signed [R*16-1:0]  dout_re,
     output wire signed [R*16-1:0]  dout_im
 );
@@ -26,8 +32,10 @@ module fft_xbar_top #(
         .WN_FILE("fft_wn.mem"), .INVERSE(0)
     ) u_cross (
         .clk(clk), .ce(ce), .rst(rst), .in_valid(in_valid),
+        .in_user(in_user), .in_last(in_last),
         .din_re(din_re), .din_im(din_im),
-        .out_valid(out_valid), .dout_re(dout_re), .dout_im(dout_im)
+        .out_valid(out_valid), .out_user(out_user), .out_last(out_last),
+        .dout_re(dout_re), .dout_im(dout_im)
     );
 
 endmodule

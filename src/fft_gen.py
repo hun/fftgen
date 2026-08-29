@@ -16,7 +16,7 @@ from typing import List, Optional, Sequence, Tuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 
-from config import FFTConfig
+from config import FFTConfig, SSR_CORNER_ORDERS
 from golden import OrderedFFTModel
 from stimuli import freeze_mask, random_frame
 
@@ -161,7 +161,13 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     import shutil
     os.makedirs(outdir, exist_ok=True)
     N, R = cfg.num_points, cfg.ssr
-    assert cfg.input_order == "native" and cfg.output_order == "native"
+    if cfg.input_order != "native" or (cfg.output_order != "native"
+                                       and not cfg.ssr_corner_supported()):
+        raise ValueError(
+            f"generate_ssr supports native -> native plus the P8 corner-order "
+            f"subset {sorted(SSR_CORNER_ORDERS)}; got ssr={R} "
+            f"{cfg.input_order} -> {cfg.output_order} inverse={cfg.inverse} "
+            f"stage_mode={cfg.stage_mode!r}")
     M = N // R
 
     from golden_ssr import SSRGoldenModel as _P
@@ -244,6 +250,9 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
         f"-GINVERSE={1 if cfg.inverse else '0'}",
     ]
     if r22:
+        # P8: one knob drives both halves (lane reorder off <-> crossbar
+        # names its WN row by bitrev(counter)); they must agree.
+        gargs.append(f"-GREORDER_OUT={0 if cfg.output_order == 'bitreversed' else 1}")
         # fft_ssr_r22 defaults TWIDDLE_FILE/WN_FILE to the written names
         cmd = ["verilator", "--cc", "--exe", "--build", "-j", "4",
                "--top-module", "fft_ssr_r22", "-Wno-fatal",
@@ -315,26 +324,26 @@ def generate_ssr(cfg: FFTConfig, outdir: str, num_frames: int = 4,
     tail_a = act[d0:]
     n_cmp = min(len(exp), len(tail_a))
     mism = [i for i in range(n_cmp) if not samp_close(exp[i], tail_a[i])]
-    # markers: after alignment, every N-sample group must contain exactly
-    # one SOF (first line) and one EOF pattern consistent with frames
-    mk_bad = 0
-    for b in range(n_cmp // N):
-        seg = [act[base + b * N + e] for e in range(N)]
-        us = sum(1 for x in seg if x[2] == 1)
-        ls = sum(1 for x in seg if x[3] == 1)
-        if us != 1 or ls != 1:
-            mk_bad += 1
+    # markers: compared POSITIONALLY against the model (P8). The old check
+    # only counted one SOF + one EOF per N-sample group, which is blind to
+    # skew -- and the SSR cores really were skewed: the wrappers re-timed
+    # tuser/tlast with a hard-wired 3-tap pipe while the crossbar datapath
+    # is CB_LAT (7/11) deep, so the markers led their own frame by 4 clocks
+    # (8 at R=8) for every r2 AND r22 SSR config. Counting could never see
+    # it; position can. See doc/plan_p8_ssr_orders.md.
+    mk_mism = [i for i in range(n_cmp) if exp[i][2:] != tail_a[i][2:]]
+    mk_bad = len(mk_mism)
     # require at least one full frame of overlapping verified samples
-    ok = (n_cmp >= N) and not mism and mk_bad == 0
+    ok = (n_cmp >= N) and not mism and not mk_bad
     if mk_bad:
-        mism.append(("markers", mk_bad))
+        mism.append(("markers", mk_bad, "first@slot", d0 + mk_mism[0]))
     first_bad = None
     if mism:
         i = mism[0]
         first_bad = (d0 + i, tail_a[i], exp[i])
     return {"rc": 0 if ok else 1, "outdir": outdir,
             "n_expected": len(exp), "n_actual": len(act),
-            "offset": d0, "first_bad": first_bad}
+            "offset": d0, "marker_mismatches": mk_bad, "first_bad": first_bad}
 
 
 def _markers(N: int, num_frames: int) -> List[Tuple[int, int]]:

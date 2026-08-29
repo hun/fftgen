@@ -52,17 +52,27 @@ module fft_cross #(
     parameter integer TWIDDLE_WIDTH = 18,
     parameter integer TWIDDLE_DECIMAL = 17,
     parameter         WN_FILE    = "fft_wn.mem",   // R*M words, row r = W_N^{r*p}
-    parameter         INVERSE    = 0               // lane-DFT direction
+    parameter         INVERSE    = 0,              // lane-DFT direction
+    parameter integer EMIT_BREV  = 0               // P8: lanes emit bitrev p
 )(
     input  wire                        clk,
     input  wire                        ce,
     input  wire                        rst,
     input  wire                        in_valid,
+    // P8 fix: frame markers enter with their data word and ride the SAME
+    // CB_LAT-stage pipeline, so they can never drift out of alignment with
+    // the word they label (the wrappers used to re-implement this with a
+    // hard-wired 3-tap shift, which silently lagged every crossbar stage
+    // added since -- see the header note and doc/plan_p8_ssr_orders.md).
+    input  wire                        in_user,
+    input  wire                        in_last,
     // packed lane words: lane i at [i*OUT_WIDTH +: OUT_WIDTH]
     input  wire signed [SSR*OUT_WIDTH-1:0] din_re,
     input  wire signed [SSR*OUT_WIDTH-1:0] din_im,
 
     output wire                        out_valid,
+    output wire                        out_user,
+    output wire                        out_last,
     output reg  signed [SSR*OUT_WIDTH-1:0] dout_re,
     output reg  signed [SSR*OUT_WIDTH-1:0] dout_im
 );
@@ -90,6 +100,14 @@ module fft_cross #(
     // short hops.
     localparam integer CB_LAT = (R >= 8) ? 11 : 7;
 
+    // ---- marker pipeline (P8) ----------------------------------------
+    // Shifted on the SAME gate as the datapath (`run`, defined below) and
+    // tapped at CB_LAT-1, i.e. exactly the number of registers a data word
+    // crosses from din to dout. Nothing here can fall out of step with the
+    // datapath again: adding a crossbar stage MUST also bump CB_LAT, which
+    // re-times the markers with it.
+    reg [CB_LAT-1:0] mk_user, mk_last;
+
     // pre-twiddle ROM: R rows x M columns; row r holds W_N^{r*p}
     // INCLUDING r = 0 (W = 1.0 in Q(td)) -- every lane must be scaled
     // identically or the butterfly sums cancel one lane entirely
@@ -99,22 +117,40 @@ module fft_cross #(
         $readmemh(WN_FILE, wn_rom);
     end
 
-    // per-lane pre-twiddle coefficient (row r at [r*M + p])
-    wire signed [TWIDDLE_WIDTH-1:0] w_re [0:R-1];
-    wire signed [TWIDDLE_WIDTH-1:0] w_im [0:R-1];
-    genvar gr;
-    generate
-        for (gr = 0; gr < R; gr = gr + 1) begin : wn_row
-            assign w_re[gr] = wn_rom[gr*M + p][TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
-            assign w_im[gr] = wn_rom[gr*M + p][TWIDDLE_WIDTH-1:0];
-        end
-    endgenerate
-
     // slot phase within a frame; pd.. delay it through the pipeline
     // stages so the tap at CB_LAT depth marks an output word whose
     // content word had phase p == 0
     reg [MW-1:0] p, pd, pd2, pd3, pd4, pd5, pd6, pd7, pd8, pd9, pd10,
                  pd11;
+
+    // per-lane pre-twiddle coefficient (row r at [r*M + p_rom])
+    //
+    // P8 (doc/plan_p8_ssr_orders.md): with the lane reorders DISABLED the DIF
+    // lanes already present A_r[p] in bit-reversed p order, which is exactly
+    // what a bitrev_N emission needs -- but only at R = 2, where bitrev_R is
+    // the identity. The word counter then names the emission SLOT, not the
+    // bin, so the WN row must be addressed by bitrev_M(counter). Pure wiring:
+    // no extra register, no memory, no latency. EMIT_BREV must match the
+    // lanes' REORDER_OUT (fft_ssr_r22 drives both from one parameter).
+    wire [MW-1:0] p_br;
+    genvar gbr;
+    generate
+        for (gbr = 0; gbr < MW; gbr = gbr + 1) begin : p_bitrev
+            assign p_br[gbr] = p[MW-1-gbr];
+        end
+    endgenerate
+    wire [MW-1:0] p_rom = (EMIT_BREV != 0) ? p_br : p;
+
+    wire signed [TWIDDLE_WIDTH-1:0] w_re [0:R-1];
+    wire signed [TWIDDLE_WIDTH-1:0] w_im [0:R-1];
+    genvar gr;
+    generate
+        for (gr = 0; gr < R; gr = gr + 1) begin : wn_row
+            assign w_re[gr] = wn_rom[gr*M + p_rom][TWIDDLE_WIDTH*2-1:TWIDDLE_WIDTH];
+            assign w_im[gr] = wn_rom[gr*M + p_rom][TWIDDLE_WIDTH-1:0];
+        end
+    endgenerate
+
     reg [MW+3:0] scnt;
     reg          synced;
     wire         run = ce && in_valid;
@@ -227,6 +263,9 @@ module fft_cross #(
     reg                 vlast;
 
     assign out_valid = vlast && (synced || out_phase0);
+    // tapped at the datapath's own depth, so these ride the word they mark
+    assign out_user  = mk_user[CB_LAT-1];
+    assign out_last  = mk_last[CB_LAT-1];
 
     function signed [AW-1:0] ext;
         input signed [PW-1:0] v;
@@ -343,6 +382,8 @@ module fft_cross #(
             pd11   <= {MW{1'b1}};
             scnt   <= {(MW+3){1'b0}};
             synced <= 1'b0;
+            mk_user  <= {CB_LAT{1'b0}};
+            mk_last  <= {CB_LAT{1'b0}};
             v1     <= 1'b0;
             v2     <= 1'b0;
             vlast  <= 1'b0;
@@ -376,6 +417,8 @@ module fft_cross #(
             // counting from their first valid word, p == the phase of
             // the word currently on din (word0 gets p = 0)
             p    <= p + {{(MW-1){1'b0}}, 1'b1};
+            mk_user <= {mk_user[CB_LAT-2:0], in_user};
+            mk_last <= {mk_last[CB_LAT-2:0], in_last};
             scnt <= scnt + {{(MW+3){1'b0}}, 1'b1};
             pd   <= p;
             pd2  <= pd;

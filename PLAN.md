@@ -700,12 +700,14 @@ stages. `r2` `13` stages / `r22` `6` pairs+`1` would all be instantiated (`max` 
   reverted for a read-window off-by-one. Revisit only if the pfifo read
   path becomes binding (currently second to the intra-DSP cascade hop).
 - Icarus/Questa multi-simulator runs deferred since P2.
-- Corner orders with SSR (bit-reversed input/output lanes) not yet exercised;
-  R=1 corners all green via fft_reorder. **Planned as P8** for the subset a
-  fast-convolution integration needs (R=2, N=2048, radix-2², nat→bitrev FFT +
-  bitrev→nat IFFT): `doc/plan_p8_ssr_orders.md`. The forward half is nearly
-  free (bitrev_R is the identity at R=2; lanes lose their reorder RAM); the
-  inverse half needs the r22 DIT lane (the P7 stretch item).
+- Corner orders with SSR (bit-reversed output): the **FFT native→bitrev order at
+  R=2 radix-2² is DONE** (P8 forward half, `--output-order bitreversed`;
+  sweeps as arch `r22b`); it is cheaper than the native core (no lane reorder
+  buffers) and verified bit-exact within the SSR tolerance with positional
+  markers. The matching **IFFT bitrev→native at R=2 still needs the radix-2²
+  DIT lane** (the P7 stretch item) -- the remaining P8 work, scoped in
+  `doc/plan_p8_ssr_orders.md`. R>2 corner orders are not expressible without an
+  R-wide bitrev_N buffer (bitrev_4/8 are not affine mod R) -- out of scope.
 - Artix-7 @250 MHz secondary gate not yet run (KU5P is the primary
   target; the architecture is family-portable by construction).
 

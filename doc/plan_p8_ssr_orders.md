@@ -4,6 +4,82 @@
 and IFFT (`bitreversed → native`) engines at **R = 2, N = 2048, stage_mode = r22**.
 Scope deliberately excludes R = 4/8 and the r2 arch (see §5).
 
+## STATUS (steps 0-3 of 5 done; the forward half is shipped)
+
+| step | state | evidence |
+|---|---|---|
+| 0 config/contract guards | DONE | `config.SSR_CORNER_ORDERS`; the r2 leak closed; `tests/test_config.py` |
+| 1 golden model | DONE | `_SSRLane(reorder_out=)`, `emit_brev`, `ssr_emission_perm`; `tests/test_golden_ssr_orders.py` |
+| 2 RTL, forward `native -> bitrev` | DONE | `fft_cross.EMIT_BREV` + `fft_ssr_r22.REORDER_OUT`; `tests/test_rtl_ssr_orders.py` |
+| 3 export + verification bar | DONE | `-GREORDER_OUT` in the sim command AND `synth.tcl`; shipped `compare.py`; sweep arch `r22b` |
+| 4 r22 **DIT lane** (for the IFFT `bitrev -> native`) | NOT STARTED | the only real work left; ~1-2 days |
+| 5 datasheet/README refresh for `r22b` | in progress | sweep running |
+
+Usable today: **FFT `native -> bitreversed`, R=2, N=2048, r22** -- exported,
+self-verifying, and cheaper than the native core (no lane reorder at all).
+NOT yet available: the matching **IFFT `bitreversed -> native`** (step 4); until
+then the only R=2 inverse is native -> native.
+
+## BUGS FOUND BUILDING THIS (all pre-existing, all fixed)
+
+Each was invisible to a green suite. Written down so the blind spots get
+checked, not just so the fixes are credited.
+
+### 1. SSR output markers ran 4 clocks early -- both arches, every R
+
+`fft_ssr.v` and `fft_ssr_r22.v` each re-timed `tuser`/`tlast` with a
+hard-wired 3-tap shift register whose comment asserted "same depth as the
+crossbar (CB_LAT = 3 stages)". The crossbar was 3 stages *once*: the P5a
+fabric input register and the R>=8 stages made CB_LAT 7 and 11, and the marker
+pipe never followed. Every SSR core therefore emitted its frame-boundary
+markers 4 clocks (8 at R=8) before the frame data they labelled.
+
+Found by accident while comparing per-bin values between two netlists (the
+mismatch was a rotation, not an error). Proven by signature rather than by
+argument: measured skew was -4 clocks at R=2, -4 at R=4 and **-8 at R=8** --
+exactly `CB_LAT - 3`, and R=8 is the case where CB_LAT differs. Both arches
+reproduced it.
+
+Why three phases of green tests missed it: `generate_ssr` checked markers by
+**counting** one SOF + one EOF per N-sample group, and a count is invariant
+under precisely this bug. Fix: markers enter `fft_cross` as `in_user`/
+`in_last` and ride the datapath's own CB_LAT-stage pipeline, so they cannot
+diverge again without also changing the data path; the flow now compares
+markers **positionally**. The contract never changed, so no golden model or
+vector was re-pinned -- the RTL simply did not match what it was claimed to be
+verified against. Docs/commits saying SSR is "bit-exact (values + tuser/
+tlast)" were true for values and were NOT true for marker positions until now.
+
+### 2. `export_core` shipped a synth script building a different core than the sim
+
+`vivado/synth.tcl` for the SSR r22 top never passed `-generic REORDER_OUT`, so
+a corner-order export would simulate the bitrev core while **synthesizing the
+default native one** -- a netlist that cannot produce the shipped
+`expected.txt`. Fixed. The guard is a test that compares the two artifacts
+against each other (`test_sim_and_synth_agree_on_emission_order`), because the
+general shape of the bug is one contract stored in two places; re-verifying
+either against the model would not have caught it.
+
+### 3. The exported testbench cannot distinguish right from wrong
+
+The tb streams stimulus, dumps `actual.txt`, and prints `ok: N samples` for ANY
+completed run -- by design, since the golden model is the source of truth. But
+the tree shipped the comparison rule as *prose* ("SSR compares with tolerance
+R/2+1 LSB after word-offset alignment") with no executable, so a customer
+following README.txt could not tell a correct core from a wrong one.
+Demonstrated rather than assumed: the corner-order tree built with the wrong
+generic mismatched **10883 of 11230** samples and the tb still printed `ok`.
+Fix: every exported tree ships `compare.py` (word-offset alignment, the
+documented value tolerance, positional markers) and README.txt marks it
+REQUIRED.
+
+Correction to my own earlier note in this session: "ran the export, got
+`ok: N samples`" is not verification. Measured properly afterwards: R=1 IS
+bit-exact (0 mismatches, 0 marker mismatches at N=2048); SSR is within
+tolerance (max 1 LSB over 12254 samples at N=2048) and NOT bit-exact -- which
+is what README.txt already said, and what `compare.py` now prints in the tree.
+
+
 ## 1. What blocks it today (three layers, all explicit)
 
 | layer | behaviour |

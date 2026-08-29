@@ -241,5 +241,89 @@ class TestExportSSR22(unittest.TestCase):
         self.assertIsNotNone(aligned, "exported SSR r22 stream did not align")
 
 
+class TestExportCornerOrder(unittest.TestCase):
+    """P8: the corner-order export must build AND self-verify from the
+    README command alone -- that command is the only place REORDER_OUT is
+    carried, and the testbench cannot tell a wrong order from a right one
+    (it prints 'ok: N samples' for any completed run). So this test runs the
+    shipped README command and then the shipped compare.py, plus a negative
+    control proving compare.py actually catches a mis-set generic."""
+
+    def _readme_build(self, outdir):
+        """The verilator command exactly as README.txt states it."""
+        import re
+        import shlex
+        blk = open(os.path.join(outdir, "README.txt")).read() \
+            .split("Simulation (Verilator)")[1]
+        cmd = " ".join(blk[blk.index("verilator"):blk.index(".cpp") + 4]
+                       .replace("\\\n", " ").split())
+        args = [t.strip('"') for t in re.findall(r'"[^"]*"|\S+', cmd)
+                if t != "\\"]
+        return args
+
+    def _check(self, N, out_order, expect_reorder):
+        outdir = os.path.join(ROOT, "build", f"export_tst_corner_{out_order}")
+        cfg, res = _export({"num_points": N, "ssr": 2,
+                            "output_order": out_order, "stage_mode": "r22",
+                            "num_frames": 2, "outdir": outdir})
+        args = self._readme_build(outdir)
+        self.assertIn(f"-GREORDER_OUT={expect_reorder}", args,
+                      "README sim command lost the emission-order generic")
+        _run([a for a in args if a != "--build"] + ["--build"], outdir)
+        _run([os.path.join("obj_dir", "Vfft_ssr_r22")], outdir)
+        c = subprocess.run([sys.executable, "compare.py"], cwd=outdir,
+                           capture_output=True, text=True)
+        return cfg, outdir, c
+
+    def test_corner_order_ships_and_verifies(self):
+        cfg, outdir, c = self._check(32, "bitreversed", 0)
+        self.assertEqual(c.returncode, 0,
+                         f"compare.py failed:\n{c.stdout}{c.stderr}")
+        self.assertIn("PASS", c.stdout)
+        # markers positionally exact is part of the shipped check now
+        self.assertIn("0 tuser/tlast position mismatches", c.stdout)
+        par = open(os.path.join(outdir, "params.txt")).read()
+        self.assertIn("output_order", par)
+        # P8 corner order removes the lane reorder buffers -> params says so
+        self.assertIn("lane reorder: none", par)
+
+    def test_sim_and_synth_agree_on_emission_order(self):
+        # The README build command and vivado/synth.tcl must carry the SAME
+        # REORDER_OUT. They used to disagree by omission (synth.tcl never
+        # passed it), which ships a native-order netlist against
+        # bitrev-order vectors -- invisible to the testbench.
+        for out_order, want in (("bitreversed", "0"), ("native", "1")):
+            with self.subTest(output_order=out_order):
+                _, outdir, _ = self._check(32, out_order, want)
+                sim = " ".join(self._readme_build(outdir))
+                tcl = open(os.path.join(outdir, "vivado", "synth.tcl")).read()
+                self.assertIn(f"-GREORDER_OUT={want}", sim)
+                self.assertIn(f"-generic REORDER_OUT={want}", tcl,
+                              "synth.tcl lost the emission-order generic")
+
+    def test_native_order_still_ships_reorder(self):
+        cfg, outdir, c = self._check(32, "native", 1)
+        self.assertEqual(c.returncode, 0, f"{c.stdout}{c.stderr}")
+        self.assertIn("lane reorder:", open(os.path.join(outdir, "params.txt")).read())
+        self.assertNotIn("lane reorder: none",
+                         open(os.path.join(outdir, "params.txt")).read())
+
+    def test_comparator_catches_wrong_reorder_generic(self):
+        # NEGATIVE CONTROL: build the corner-order tree with the WRONG
+        # REORDER_OUT. The tb still prints 'ok: N samples'; compare.py must
+        # fail. Without this, the shipped self-check is unproven.
+        cfg, outdir, _ = self._check(32, "bitreversed", 0)
+        args = self._readme_build(outdir)
+        bad = [a.replace("-GREORDER_OUT=0", "-GREORDER_OUT=1") for a in args]
+        self.assertNotEqual(bad, args, "generic not found to corrupt")
+        _run([a for a in bad if a != "--build"] + ["--build"], outdir)
+        _run([os.path.join("obj_dir", "Vfft_ssr_r22")], outdir)
+        c = subprocess.run([sys.executable, "compare.py"], cwd=outdir,
+                           capture_output=True, text=True)
+        self.assertNotEqual(c.returncode, 0,
+                            "wrong emission order passed the shipped check")
+        self.assertIn("FAIL", c.stdout + c.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

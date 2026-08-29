@@ -144,6 +144,10 @@ set npts    [lindex $argv 1]
 set ssr     [lindex $argv 2]
 set pack    [lindex $argv 3]
 set intern  [lindex $argv 4]
+# REORDER_OUT: 1 = SSR native -> native (the v1 contract), 0 = the P8 corner
+# order native -> bitreversed (lane reorders gone, crossbar walks its bin
+# index bit-reversed). Defaults to 1 when argv omits it.
+set ro      [expr {[llength $argv] > 5 ? [lindex $argv 5] : 1}]
 create_project -in_memory -part $part
 add_files -fileset sources_1 [list \\
     @RTL@/fft_ssr_r22.v \\
@@ -163,7 +167,7 @@ synth_design -top fft_ssr_r22 \\
     -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
     -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
     -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \\
-    -generic PIPE_DEPTH=10 -generic INVERSE=0
+    -generic PIPE_DEPTH=10 -generic INVERSE=0 -generic REORDER_OUT=$ro
 create_clock -period @NS@ -name clk [get_ports clk]
 report_utilization -file util.txt
 report_timing_summary -delay_type max -max_paths 5 -file timing.txt
@@ -299,7 +303,7 @@ def run_one(args):
     t0 = time.time()
     gen = {}
     try:
-        if arch == "r22":
+        if arch in ("r22", "r22b"):
             gen = artifacts_r22(n, outdir, r=r)
         else:
             gen = artifacts_r2(n, r, outdir)
@@ -309,7 +313,7 @@ def run_one(args):
         return tag, res, False
 
     # write TCL
-    if arch == "r22":
+    if arch in ("r22", "r22b"):
         if r == 1:
             tcl = TCL_R22.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
             tcl_path = os.path.join(outdir, "synth.tcl")
@@ -324,6 +328,8 @@ def run_one(args):
             cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
                    "-source", "synth.tcl", "-tclargs", PART, str(n), str(r),
                    str(gen["pack"]), str(gen["intern"])]
+            if arch == "r22b":
+                cmd.append("0")       # REORDER_OUT=0: P8 corner order
     else:
         tcl = TCL_R2.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
         tcl_path = os.path.join(outdir, "synth.tcl")
@@ -364,8 +370,11 @@ def main():
                     default=[64, 128, 256, 512, 1024, 2048, 4096, 8192])
     ap.add_argument("--r4", nargs="*", type=int, default=[64, 256, 1024, 4096])
     ap.add_argument("--r8", nargs="*", type=int, default=[64, 256, 1024])
-    ap.add_argument("--arch", choices=["r2", "r22", "both"], default="both",
-                    help="which architecture(s) to sweep (default: both)")
+    ap.add_argument("--arch", choices=["r2", "r22", "both", "r22b", "all"],
+                    default="both",
+                    help="which architecture(s) to sweep (default: both); "
+                         "r22b = the P8 corner-order core (native -> bitrev, "
+                         "R=2 only), all = r2 + r22 + r22b")
     ap.add_argument("-j", type=int, default=4, help="parallel vivado jobs")
     ap.add_argument("--jobs-dir", default=os.path.join(ROOT, "build", "datasheet"),
                     help="output directory for per-config results")
@@ -373,7 +382,8 @@ def main():
                     help="also mirror tables into spikes/S2_timing/build/datasheet")
     args = ap.parse_args()
 
-    archs = {"r2": ["r2"], "r22": ["r22"], "both": ["r2", "r22"]}[args.arch]
+    archs = {"r2": ["r2"], "r22": ["r22"], "both": ["r2", "r22"],
+             "r22b": ["r22b"], "all": ["r2", "r22", "r22b"]}[args.arch]
 
     # Build config list: r22 for R=1 and R=2 (P7), r2 for all R
     configs = []
@@ -387,6 +397,10 @@ def main():
             configs.append((n, 2, "r2"))
         if "r22" in archs:
             configs.append((n, 2, "r22"))
+        if "r22b" in archs:
+            # P8: the corner order exists ONLY at R=2 (bitrev_R must be the
+            # identity) -- no R=1/R=4/R=8 rows are meaningful for r22b.
+            configs.append((n, 2, "r22b"))
     for n in args.r4:
         if "r2" in archs:
             configs.append((n, 4, "r2"))

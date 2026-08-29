@@ -32,20 +32,31 @@ All implementation phases (P0–P7) are complete; see the phase table in
   golden contract (few-LSB rounding placement, identical SQNR); covers DIF,
   fwd/inv, widths and scaling schedules as for `r2` — R = 1 native →
   bitreversed, R = 2/4/8 on the SSR native → native contract.
-- **SSR (R = 2, 4, 8)**: bit-exact fwd+inv (and spot-verified at production size:
-  N = 2048 R = 2 native → native, both directions, `ok: 12254 samples` for
-  values + `tuser`/`tlast`). Timing after the P7 step-8 crossbar fix: **500 MHz met
-  post-synth through N = 2048 at R = 2 and N = 4096 at R = 4** (both arches);
-  the largest SSR sizes and R = 8 are met at **450 MHz** (worst +0.057 post-synth,
-  see the datasheet's "achievable clock" note). The pre-step-8 claim that
-  R = 2 N = 8192 closed 500 MHz post-route belonged to the old crossbar netlist
-  and no longer holds — step 8 removed the N-independent -0.020 intra-DSP cap
-  and exposed the lane-reorder BRAM clock-to-out hop at the largest sizes.
-- **SSR corner orders** (FFT `native → bitreversed`, IFFT `bitreversed → native`):
-  **not generatable** — SSR v1 is native → native only, in all three layers
-  (config guard, generator assert, golden model). Planned as **P8** for the
-  R = 2 / radix-2² subset a fast-convolution drop-in needs:
-  [doc/plan_p8_ssr_orders.md](doc/plan_p8_ssr_orders.md).
+- **SSR (R = 2, 4, 8)**: fwd+inv values verified against the golden model within
+the documented SSR tolerance (R/2+1 LSB after word-offset alignment: measured
+max 1 LSB at N = 2048) with **tuser/tlast verified positionally and exactly** --
+since the P8 marker-pipeline fix, the SSR wrappers no longer emit frame markers
+4 clocks early (8 at R = 8) as they did when the 3-tap marker pipe lagged the
+CB_LAT-deep datapath (see doc/plan_p8_ssr_orders.md; the fix is free in both
+area and timing). The testbenches only dump `actual.txt`; the real comparison
+lives in the Python harness (R=1: bit-exact; SSR: tolerance above) and in the
+**shipped `compare.py`** every exported tree now carries -- `python3 compare.py`
+after building, so a customer's tree self-verifies instead of trusting the tb's
+`ok: N samples` (which any completed run prints). Timing after the P7 step-8
+crossbar fix: **500 MHz met post-synth through N = 2048 at R = 2 and N = 4096 at
+R = 4** (both arches); the largest SSR sizes and R = 8 are met at **450 MHz**
+(worst +0.057 post-synth, see the datasheet's "achievable clock" note). The
+pre-step-8 claim that R = 2 N = 8192 closed 500 MHz post-route belonged to the
+old crossbar netlist and no longer holds — step 8 removed the N-independent
+-0.020 intra-DSP cap and exposed the lane-reorder BRAM clock-to-out hop at the
+largest sizes.
+- **SSR corner orders** (doc/plan_p8_ssr_orders.md): the **FFT `native →
+bitreversed`** order at **R = 2, radix-2², any N** is implemented and verified
+(step 8 of the plan; sweep arch `r22b` in the datasheet, `--output-order
+bitreversed` in the exporter, exported and self-verifying). It costs nothing
+in DSPs, drops the lane reorder buffers entirely (e.g. -4 BRAM36 at N = 2048)
+and lowers latency by M clocks. The matching **IFFT `bitreversed → native` at
+R = 2** still requires the radix-2² DIT lane and is the remaining work item.
 - **Export (P5b)**: exported trees build under Verilator from the generated
   `README.txt` command alone and are bit-exact against the shipped
   `expected.txt` vectors (both `--stage-mode` values).

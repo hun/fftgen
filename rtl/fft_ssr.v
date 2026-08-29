@@ -109,6 +109,7 @@ module fft_ssr #(
     endgenerate
 
     wire                     xb_valid;
+    wire                     xb_user, xb_last;
     wire signed [R*OUTPUT_WIDTH-1:0] xb_ore;
     wire signed [R*OUTPUT_WIDTH-1:0] xb_oim;
 
@@ -126,30 +127,26 @@ module fft_ssr #(
         .ce         (ce),
         .rst        (rst),
         .in_valid   (lanes[0].v),
+        // markers enter WITH their data word and are delayed by the
+        // datapath's own depth inside fft_cross (P8 fix -- they used to be
+        // re-timed here by a hard-wired 3-tap pipe claiming "CB_LAT = 3
+        // stages", which lagged every crossbar stage added since: tuser and
+        // tlast emerged 4 clocks early, 8 at R = 8).
+        .in_user    (lanes[0].ou),
+        .in_last    (lanes[R-1].ol),
         .din_re     (xb_re),
         .din_im     (xb_im),
         .out_valid  (xb_valid),
+        .out_user   (xb_user),
+        .out_last   (xb_last),
         .dout_re    (xb_ore),
         .dout_im    (xb_oim)
     );
 
-    // output pack + markers (lane0 tuser / lane(R-1) tlast through the
-    // crossbar's two pipeline stages)
-    // marker pipeline: same depth as the crossbar (CB_LAT = 3 stages)
-    reg [2:0] mk_pipe_user, mk_pipe_last;
-    always @(posedge clk) begin
-        if (rst) begin
-            mk_pipe_user <= 3'b000;
-            mk_pipe_last <= 3'b000;
-        end else if (ce && lanes[0].v) begin   // same run gate as crossbar
-            mk_pipe_user <= {mk_pipe_user[1:0], lanes[0].ou};
-            mk_pipe_last <= {mk_pipe_last[1:0], lanes[R-1].ol};
-        end
-    end
-
+    // output pack (markers come from the crossbar, aligned with their word)
     assign m_axis_tvalid    = xb_valid;
-    assign m_axis_tuser     = mk_pipe_user[2];
-    assign m_axis_tlast     = mk_pipe_last[2];
+    assign m_axis_tuser     = xb_user;
+    assign m_axis_tlast     = xb_last;
     genvar q;
     generate
         for (q = 0; q < R; q = q + 1) begin : outpack
