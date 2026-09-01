@@ -459,3 +459,24 @@ N=1024 shape: stage 1 (G=128, K_PRELOAD=0) -> stage 2 (G=16).
   route N<=32 to the r22 core. G=8..128 all validated.
 - The 3-stage chain + r2 leftover stages untested (the K_PRELOAD rule
   should generalize; the leftovers use the r22 parity preload).
+
+## 3-STAGE CHAIN (the N=8192 triple set): bit-exact, first try
+
+bringup3.py + tb_chain3.v: G=1024 -> 128 -> 16 (m=0,1,2), the exact
+triple set of the production N=8192 R=2 core (3 triples + 4 r2
+leftovers; the golden's default 4-triple split would need G=2 -- use
+the 3-triple + leftovers split instead).
+
+- K_PRELOADs from the validated rule, no tuning: stage 2 = 1013,
+  stage 3 = 106 (i.e. -(7170+8+1) mod 8192 and -(7170+898+16+2) mod 128)
+- total H = 26 = 3*8 + 2 (8 per stage + one handoff register between
+  stages)
+- fwd + inverse, 2 blocks (16384 clocks): 16384/16384 positions each.
+
+The core-level phase/chaining design is now fully de-risked. What
+remains for the production core: the wrapper (fft_top_r23.v) wiring
+3x fft_stage_r23 + the r2 leftover stages (rtl/fft_stage_r22.v with
+the r22 parity preload for D=8,4,2,1), the full-core sim vs
+R23SDFGoldenModel-equivalent (chained triples + _SDFStage leftovers),
+and the multi-stage timing sweep (the stage-2/3 G=128/16 instances
+have LUTRAM-scale memories -- check their timing separately).
