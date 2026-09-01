@@ -716,3 +716,28 @@ on the subtract->BRAM path suggests placement spread; a pblock (or
 netlist-level check that the CARRY8 and the BRAM are adjacent) may
 close it without RTL changes. Try the probe with the dA subtract
 constrained before resorting to RTL.
+
+## TIMING CLOSED: full fft_sdf_r23 @ 2 ns, WNS +0.028 -- session 3 final
+
+The dA-subtract fix (registered one stage earlier, zero schedule
+change): dA_f <= a0_r2 - x_r2 -- since a0_r3[C] = a0_r2[C-1], the
+registered dA_f[C] is bit-identical to the old comb dA_re_c[C]; every
+consumer (the ringA_d0/d1 writes, the jmdA capture, the dB mux) reads
+the register. No H/KP changes.
+
+The w6/w7 combines got the same treatment: the write data (ringB_p/q,
+rbbm, rbbp) registered one cycle ahead (ringB_p_w <= rsh_cb(as_r4 +
+sA_r, SIGMA1) etc -- the rounding folds into one adder), with the
+gates/address shifted +1 (w6_r/w7_r/g_w4_r). The ring reads are
+untouched so every lag grows by exactly 1; the output timing is
+unchanged (H stays 49, no constant changes).
+
+FINAL probe (synth + place + route, xcku5p-ffva676-1-e @ 2 ns):
+  TIMING MET, WNS +0.028, TNS 0, 0 failing endpoints
+  DSP48 20, CARRY8 642, RAMB18 57, RAMB36 16, FF 8640
+Bit-exact: single stage (H=9), 3-chain, full core INV=0/1 (H=49).
+
+The design rule set is now: every RAM deeper than 32 gets an output
+FD stage; every RAM write data path is a single register hop from a
+pipeline register; every comb feeding a primitive is at most one
+adder deep. All schedules derive from the k-chain delays.

@@ -360,6 +360,16 @@ module fft_stage_r23 #(
     // the fresh combs delayed one clock: the w+4 combines consume these
     reg signed [CB-1:0] sA_r_re,   sA_r_im;
     reg signed [CB-1:0] jmdA_r_re, jmdA_r_im;  // j-swapped dA (bm/bp)
+    // the w6/w7 write data registered one cycle ahead (the combines are
+    // register->register; the BRAM DIN gets a direct FF hop), with the
+    // write gates/address shifted +1 to consume them -- the ring reads
+    // are untouched so every lag grows by exactly 1
+    reg signed [CB-1:0] ringB_p_w_re, ringB_p_w_im;
+    reg signed [CB-1:0] ringB_q_w_re, ringB_q_w_im;
+    reg signed [CB-1:0] rbbm_w_re,   rbbm_w_im;
+    reg signed [CB-1:0] rbbp_w_re,   rbbp_w_im;
+    reg w6_r, w7_r;
+    reg [GW-1:0] g_w4_r;
 
     // the +4 rotate hop remap: the 3-stage read shifts the
     // phase->group map (the golden's (g+3) + the read latency)
@@ -380,8 +390,12 @@ module fft_stage_r23 #(
     // butterflies: sA = round(a0+x, s0), dA = a0-x
     wire signed [CB-1:0] sA_re_c = rsh_cb(a0_r3_re + x_r3_re, SIGMA0);
     wire signed [CB-1:0] sA_im_c = rsh_cb(a0_r3_im + x_r3_im, SIGMA0);
-    wire signed [CB-1:0] dA_re_c = a0_r3_re - x_r3_re;
-    wire signed [CB-1:0] dA_im_c = a0_r3_im - x_r3_im;
+    // the dA subtract is registered one stage earlier (off the r2
+    // registers): dA_f[C] = a0_r2[C-1] - x_r2[C-1] = a0_r3[C] - x_r3[C],
+    // bit-identical to the old comb dA_re_c[C], but every consumer now
+    // reads a register (the 18-bit subtract's 3x CARRY8 chain into the
+    // ringA_d0/d1 BRAM write data and the jmdA capture missed 2 ns)
+    reg signed [CB-1:0] dA_f_re, dA_f_im;
 
     // OB extensions of the L0 snapshot
     wire signed [OB-1:0] q0_re  = {{(OB-CB){bq_r3_re[CB-1]}},  bq_r3_re};
@@ -497,8 +511,8 @@ module fft_stage_r23 #(
     wire signed [OW-1:0] zA_re = {{(OW-CB){ad1_r3_re[CB-1]}}, ad1_r3_re};
     wire signed [OW-1:0] zA_im = {{(OW-CB){ad1_r3_im[CB-1]}}, ad1_r3_im};
     // G==1: unit B runs one clock earlier off the L1 comb (r1 stage)
-    wire signed [CB-1:0] dB_re = (G == 1) ? dA_re_c : dA_r3_re;
-    wire signed [CB-1:0] dB_im = (G == 1) ? dA_im_c : dA_r3_im;
+    wire signed [CB-1:0] dB_re = (G == 1) ? dA_f_re : dA_r3_re;
+    wire signed [CB-1:0] dB_im = (G == 1) ? dA_f_im : dA_r3_im;
     wire signed [OW-1:0] zB_re = {{(OW-CB){dB_re[CB-1]}}, dB_re};
     wire signed [OW-1:0] zB_im = {{(OW-CB){dB_im[CB-1]}}, dB_im};
 
@@ -691,6 +705,11 @@ module fft_stage_r23 #(
             bp_r4_re <= 0; bp_r4_im <= 0;
             sA_r_re <= 0; sA_r_im <= 0;
             jmdA_r_re <= 0; jmdA_r_im <= 0;
+            ringB_p_w_re <= 0; ringB_p_w_im <= 0;
+            ringB_q_w_re <= 0; ringB_q_w_im <= 0;
+            rbbm_w_re <= 0; rbbm_w_im <= 0;
+            rbbp_w_re <= 0; rbbp_w_im <= 0;
+            w6_r <= 1'b0; w7_r <= 1'b0; g_w4_r <= 0;
             c2r_re <= 0; c2r_im <= 0; c6r_re <= 0; c6r_im <= 0;
             c1r_re <= 0; c1r_im <= 0; c5r_re <= 0; c5r_im <= 0;
             c3r_re <= 0; c3r_im <= 0; c7r_re <= 0; c7r_im <= 0;
@@ -706,6 +725,7 @@ module fft_stage_r23 #(
             bA1 <= 0; bA2 <= 0; bB1 <= 0; bB2 <= 0; bAlo <= 0; bBlo <= 0;
             aA <= 0; aB <= 0; bA <= 0; bB <= 0;
             dA_r3_re <= 0; dA_r3_im <= 0;
+            dA_f_re <= 0; dA_f_im <= 0;
             p1_r_re <= 0; p1_r_im <= 0;
             tw_h1 <= 0; tw_h2 <= 0; tw_h3 <= 0; tw_h4 <= 0;
             y0_pipe[0] <= 0; y0_pipe[1] <= 0; y0_pipe[2] <= 0;
@@ -755,14 +775,25 @@ module fft_stage_r23 #(
             r1_r3_re <= r1_r2_re;  r1_r3_im <= r1_r2_im;
             r3_r3_re <= r3_r2_re;  r3_r3_im <= r3_r2_im;
             x_r3_re <= x_r2_re;   x_r3_im <= x_r2_im;
+            dA_f_re <= a0_r2_re - x_r2_re;
+            dA_f_im <= a0_r2_im - x_r2_im;
             // r4: the 4th stage (the w+4 second-level combines)
             as_r4_re <= as_r3_re;  as_r4_im <= as_r3_im;
             ad0_r4_re <= ad0_r3_re; ad0_r4_im <= ad0_r3_im;
             bp_r4_re <= bp_r3_re;  bp_r4_im <= bp_r3_im;
             // the fresh-comb delay regs (consumed by the w6/w7 writes)
             sA_r_re <= sA_re_c; sA_r_im <= sA_im_c;
-            jmdA_r_re <= INVERSE ? -dA_im_c : dA_im_c;
-            jmdA_r_im <= INVERSE ? dA_re_c : -dA_re_c;
+            jmdA_r_re <= INVERSE ? -dA_f_im : dA_f_im;
+            jmdA_r_im <= INVERSE ? dA_f_re : -dA_f_re;
+            ringB_p_w_re <= rsh_cb(as_r4_re + sA_r_re, SIGMA1);
+            ringB_p_w_im <= rsh_cb(as_r4_im + sA_r_im, SIGMA1);
+            ringB_q_w_re <= as_r4_re - sA_r_re;
+            ringB_q_w_im <= as_r4_im - sA_r_im;
+            rbbm_w_re <= ad0_r4_re + jmdA_r_re;
+            rbbm_w_im <= ad0_r4_im + jmdA_r_im;
+            rbbp_w_re <= ad0_r4_re - jmdA_r_re;
+            rbbp_w_im <= ad0_r4_im - jmdA_r_im;
+            w6_r <= w6; w7_r <= w7; g_w4_r <= g_w4;
             // the L1 comb output registers (the operand-mux sources)
             c2r_re <= c2_re; c2r_im <= c2_im;
             c6r_re <= c6_re; c6r_im <= c6_im;
@@ -774,7 +805,7 @@ module fft_stage_r23 #(
             // dA_r3@t = the dA of phase t-4 -- the rot-B comb@p+4 then
             // sees the dA_3 of group p and the write@p+6 lands at index p
             if ((k3 % (8*G)) >= 7*G) begin
-                dA_r3_re <= dA_re_c; dA_r3_im <= dA_im_c;
+                dA_r3_re <= dA_f_re; dA_r3_im <= dA_f_im;
             end
             // p_1 registered at w+4 (the y4/y0 combs consume it with
             // the registered ringB_p read at w+4)
@@ -835,31 +866,32 @@ module fft_stage_r23 #(
             if (d2_a4) begin
                 ringA_s_re[as_addr_w] <= sA_re_c;
                 ringA_s_im[as_addr_w] <= sA_im_c;
-                ringA_d0_re[g_w2] <= dA_re_c;
-                ringA_d0_im[g_w2] <= dA_im_c;
+                ringA_d0_re[g_w2] <= dA_f_re;
+                ringA_d0_im[g_w2] <= dA_f_im;
             end
             if (d2_a5) begin
                 ringA_s_re[as_addr_w] <= sA_re_c;
                 ringA_s_im[as_addr_w] <= sA_im_c;
-                ringA_d1_re[g_w2] <= dA_re_c;
-                ringA_d1_im[g_w2] <= dA_im_c;
+                ringA_d1_re[g_w2] <= dA_f_re;
+                ringA_d1_im[g_w2] <= dA_f_im;
             end
-            if (w6) begin
+            if (w6_r) begin
                 // p_0 = round(sA_0+sA, s1); q_0 = sA_0 - sA
-                ringB_p_re[g_w4] <= rsh_cb(as_r4_re + sA_r_re, SIGMA1);
-                ringB_p_im[g_w4] <= rsh_cb(as_r4_im + sA_r_im, SIGMA1);
-                ringB_q_re[g_w4] <= as_r4_re - sA_r_re;
-                ringB_q_im[g_w4] <= as_r4_im - sA_r_im;
                 // bm = d0 + js*j*d2, bp = d0 - js*j*d2
-                rbbm_re[g_w4] <= ad0_r4_re + jmdA_r_re;
-                rbbm_im[g_w4] <= ad0_r4_im + jmdA_r_im;
-                rbbp_re[g_w4] <= ad0_r4_re - jmdA_r_re;
-                rbbp_im[g_w4] <= ad0_r4_im - jmdA_r_im;
+                // (the data/gate/address registered one cycle ahead)
+                ringB_p_re[g_w4_r] <= ringB_p_w_re;
+                ringB_p_im[g_w4_r] <= ringB_p_w_im;
+                ringB_q_re[g_w4_r] <= ringB_q_w_re;
+                ringB_q_im[g_w4_r] <= ringB_q_w_im;
+                rbbm_re[g_w4_r] <= rbbm_w_re;
+                rbbm_im[g_w4_r] <= rbbm_w_im;
+                rbbp_re[g_w4_r] <= rbbp_w_re;
+                rbbp_im[g_w4_r] <= rbbp_w_im;
             end
-            if (w7) begin
+            if (w7_r) begin
                 // q_1 = sA_1 - sA
-                ringB_q1_re[g_w4] <= as_r4_re - sA_r_re;
-                ringB_q1_im[g_w4] <= as_r4_im - sA_r_im;
+                ringB_q1_re[g_w4_r] <= ringB_q_w_re;
+                ringB_q1_im[g_w4_r] <= ringB_q_w_im;
             end
 
             // ---- ring0 write (raw input, gate k) ----
