@@ -80,10 +80,11 @@ module fft_sdf_r23 #(
     initial if (NR2 % 2 != 0)
         $error("fft_sdf_r23: NSTAGES-3*3 must be even (got %0d r2 leftovers)", NR2);
 
-    // r23 triple RTL latency = golden 7G+2 + H 8 = 7G+10
+    // r23 triple RTL latency = golden 7G+2 + H 8 + 1 emission reg
+    // (the pfifo write precompute moved the emission one cycle later)
     function integer trip_rtl_lat;
         input integer m_;
-        trip_rtl_lat = 7 * (N >> (3 * m_ + 3)) + 10;
+        trip_rtl_lat = 7 * (N >> (3 * m_ + 3)) + 11;
     endfunction
     function integer trip_gold_lat;
         input integer m_;
@@ -98,14 +99,15 @@ module fft_sdf_r23 #(
         input integer jj;
         lpair_rtl_lat = 3 * lpair_D(jj) + 9;
     endfunction
-    // r23 K_PRELOAD: -(sum_{i<j} golden lat + 9j) mod 8G_j
+    // r23 K_PRELOAD: -(sum_{i<j} golden lat + 10j) mod 8G_j
+    // (H 8 + 2 output registers per upstream stage)
     function integer trip_kpre;
         input integer j_;
         integer ii, acc;
         begin
             acc = 0;
             for (ii = 0; ii < j_; ii = ii + 1)
-                acc = acc + trip_gold_lat(ii) + 9;
+                acc = acc + trip_gold_lat(ii) + 10;
             trip_kpre = ((8 * (N >> (3 * j_ + 3)))
                          - (acc % (8 * (N >> (3 * j_ + 3)))))
                         % (8 * (N >> (3 * j_ + 3)));

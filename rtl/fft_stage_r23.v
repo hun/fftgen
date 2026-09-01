@@ -166,9 +166,17 @@ module fft_stage_r23 #(
     (* ram_style = "block" *)
     reg signed [CB-1:0] rr3_re [0:G-1];
     reg signed [CB-1:0] rr3_im [0:G-1];
-    (* ram_style = "block" *)
-    reg signed [IW-1:0] pfifo_re [0:8*G-1];
-    reg signed [IW-1:0] pfifo_im [0:8*G-1];
+    // one G-deep LUTRAM per class (the single 8G-deep array needed the
+    // cls_base adder in front of a 128:1 chunk-select read mux and
+    // missed 2 ns; per-class arrays are addressed by the raw group and
+    // selected by the 3-bit member)
+    reg signed [IW-1:0] pf1_re [0:G-1]; reg signed [IW-1:0] pf1_im [0:G-1];  // y2
+    reg signed [IW-1:0] pf2_re [0:G-1]; reg signed [IW-1:0] pf2_im [0:G-1];  // y6
+    reg signed [IW-1:0] pf3_re [0:G-1]; reg signed [IW-1:0] pf3_im [0:G-1];  // y1
+    reg signed [IW-1:0] pf4_re [0:G-1]; reg signed [IW-1:0] pf4_im [0:G-1];  // y5
+    reg signed [IW-1:0] pf5_re [0:G-1]; reg signed [IW-1:0] pf5_im [0:G-1];  // y3
+    reg signed [IW-1:0] pf6_re [0:G-1]; reg signed [IW-1:0] pf6_im [0:G-1];  // y7
+    reg signed [IW-1:0] pf7_re [0:G-1]; reg signed [IW-1:0] pf7_im [0:G-1];  // y4
     integer _i;
     initial begin
         for (_i = 0; _i < 4*G; _i = _i + 1) begin
@@ -188,8 +196,14 @@ module fft_stage_r23 #(
             rr1_re[_i] = {CB{1'b0}};      rr1_im[_i] = {CB{1'b0}};
             rr3_re[_i] = {CB{1'b0}};      rr3_im[_i] = {CB{1'b0}};
         end
-        for (_i = 0; _i < 8*G; _i = _i + 1) begin
-            pfifo_re[_i] = {IW{1'b0}};  pfifo_im[_i] = {IW{1'b0}};
+        for (_i = 0; _i < G; _i = _i + 1) begin
+            pf1_re[_i] = {IW{1'b0}}; pf1_im[_i] = {IW{1'b0}};
+            pf2_re[_i] = {IW{1'b0}}; pf2_im[_i] = {IW{1'b0}};
+            pf3_re[_i] = {IW{1'b0}}; pf3_im[_i] = {IW{1'b0}};
+            pf4_re[_i] = {IW{1'b0}}; pf4_im[_i] = {IW{1'b0}};
+            pf5_re[_i] = {IW{1'b0}}; pf5_im[_i] = {IW{1'b0}};
+            pf6_re[_i] = {IW{1'b0}}; pf6_im[_i] = {IW{1'b0}};
+            pf7_re[_i] = {IW{1'b0}}; pf7_im[_i] = {IW{1'b0}};
         end
     end
 
@@ -548,6 +562,19 @@ module fft_stage_r23 #(
     reg signed [MWB-1:0] p_re, p_im;                 // L4 (PREG)
     reg signed [PW-1:0] shift_p_re, shift_p_im;      // L5
     reg [2*IW-1:0] y0_pipe [0:6];   // {im, re} pairs (y0 has no DSP)
+    // pfifo write precompute: the write address / WE / data are
+    // registered one cycle ahead of the write edge so the deep
+    // LUTRAM chunk write-enable decodes from registers (the
+    // combinational k->WE decode misses 2 ns at 8G depth). The
+    // write therefore lands at w+10 instead of w+9; every class's
+    // write->read lag grows by 1 (min G-9 >= 7) and the emission
+    // schedule is untouched. The pfifo deliberately stays LUTRAM:
+    // as BRAM the 2x RAMB36 cascade clk-to-out (~1.4 ns) cannot
+    // cross the y0-select mux into the next stage at 2 ns.
+    reg [2:0] cls_r;
+    reg [GW-1:0] g_r;
+    reg w_pf_r;
+    reg [IW-1:0] pf_d_re, pf_d_im;
 
     // per-class fused shift amounts
     localparam integer SH_D = TD + SIGMA0 + SIGMA1 + SIGMA2;  // y1/5/3/7
@@ -570,21 +597,21 @@ module fft_stage_r23 #(
     wire [GW-1:0] g_w2 = (G > 1) ? k3[GW-1:0] : {GW{1'b0}};
     // the second-level writes: addr = the combine's model group (k4)
     wire [GW-1:0] g_w4 = (G > 1) ? k4[GW-1:0] : {GW{1'b0}};
-    wire [KW-1:0] pw_addr = cls_base(cls_w) + {{(KW-GW){1'b0}}, g_w};
     wire w_pf = (cls_w != 3'd0) &&
                 !(((k - 9) % (8*G)) >= 7*G);
     // the y4 window (k-9 in [7G,8G)) is disjoint from every normal
     // window now, so one write port with a muxed address suffices
     wire w_pf4 = ((k - 9) % (8*G)) >= 7*G;
-    wire [KW-1:0] k_m9 = k - 4'd9;
-    wire [GW-1:0] g_y4w = (G > 1) ? k_m9[GW-1:0] : {GW{1'b0}};
-    wire [KW-1:0] pw_addr4 = cls_base(3'd7) + {{(KW-GW){1'b0}}, g_y4w};
     wire w_pf_any = w_pf || w_pf4;
-    wire [KW-1:0] pw_addr_any = w_pf4 ? pw_addr4 : pw_addr;
 
-    // emission mux (the writes at w+9; the read lags >= 1 per class)
-    // t = (k9 - 1) mod 8G; member = (t/G + 1) % 8; member 0 = y0
-    wire [KW-1:0] t_e = k9 - {{(KW-1){1'b0}}, 1'b1};
+    // emission mux: the writes land at w+10 (precomputed addr/WE/data)
+    // and the emission read runs at w+10 too (k10-based), one cycle
+    // later than the product's original w+9 schedule -- every class's
+    // write->read lag is preserved (the y1/y5/y3/y7/y4 classes sit at
+    // the minimum lag of exactly 1). The registered emission costs one
+    // extra output register (the stage latency grows by 1).
+    // t = (k10 - 1) mod 8G; member = (t/G + 1) % 8; member 0 = y0
+    wire [KW-1:0] t_e = k10 - {{(KW-1){1'b0}}, 1'b1};
     wire [GW-1:0] g_e = (G > 1) ? t_e[GW-1:0] : {GW{1'b0}};
     wire [2:0] t_div = (G > 1) ? t_e[KW-1:GW] : 3'd0;
     wire [2:0] mm = t_div + 3'd1;                    // (t/G + 1) mod 8
@@ -606,7 +633,18 @@ module fft_stage_r23 #(
             endcase
         end
     endfunction
-    wire [KW-1:0] pe_addr = member_base(mm) + {{(KW-GW){1'b0}}, g_e};
+
+    // async per-class reads (RAM64X1D-style: the write address g_r and
+    // the read address g_e stay independent -- an in-block sync read
+    // makes Vivado share one address port and mux g_r into the read
+    // path, which misses 2 ns)
+    wire [IW-1:0] pf1_rd = pf1_re[g_e], pf1_rd_im = pf1_im[g_e];
+    wire [IW-1:0] pf2_rd = pf2_re[g_e], pf2_rd_im = pf2_im[g_e];
+    wire [IW-1:0] pf3_rd = pf3_re[g_e], pf3_rd_im = pf3_im[g_e];
+    wire [IW-1:0] pf4_rd = pf4_re[g_e], pf4_rd_im = pf4_im[g_e];
+    wire [IW-1:0] pf5_rd = pf5_re[g_e], pf5_rd_im = pf5_im[g_e];
+    wire [IW-1:0] pf6_rd = pf6_re[g_e], pf6_rd_im = pf6_im[g_e];
+    wire [IW-1:0] pf7_rd = pf7_re[g_e], pf7_rd_im = pf7_im[g_e];
 
     // shift-amount select (the shift comb runs at w+8; k8 = the product's
     // model phase for ALL classes -- the y4 AREG is no later now)
@@ -677,9 +715,11 @@ module fft_stage_r23 #(
             dA_r3_re <= 0; dA_r3_im <= 0;
             p1_r_re <= 0; p1_r_im <= 0;
             tw_h1 <= 0; tw_h2 <= 0; tw_h3 <= 0; tw_h4 <= 0;
-            for (_i = 0; _i < 7; _i = _i + 1) begin
-                y0_pipe[_i] <= 0;
-            end
+            y0_pipe[0] <= 0; y0_pipe[1] <= 0; y0_pipe[2] <= 0;
+            y0_pipe[3] <= 0; y0_pipe[4] <= 0; y0_pipe[5] <= 0;
+            y0_pipe[6] <= 0;
+            cls_r <= 0; g_r <= 0; w_pf_r <= 1'b0;
+            pf_d_re <= 0; pf_d_im <= 0;
             out_re <= 0; out_im <= 0;
         end else if (ce) begin
             // ---- L0: capture reads + input + twiddle DOUT ----
@@ -782,17 +822,36 @@ module fft_stage_r23 #(
             shift_p_re <= shift_re_m;
             shift_p_im <= shift_im_m;
 
-            // ---- L6: pfifo write + emission ----
-            if (w_pf_any) begin
-                pfifo_re[pw_addr_any] <= shift_p_re[IW-1:0];
-                pfifo_im[pw_addr_any] <= shift_p_im[IW-1:0];
+            // ---- L6: pfifo write (at w+10, precomputed) + emission ----
+            cls_r    <= w_pf4 ? 3'd7 : cls_w;
+            g_r      <= g_w;
+            w_pf_r   <= w_pf_any;
+            pf_d_re  <= shift_p_re[IW-1:0];
+            pf_d_im  <= shift_p_im[IW-1:0];
+            if (w_pf_r) begin
+                case (cls_r)
+                    3'd1: begin pf1_re[g_r] <= pf_d_re; pf1_im[g_r] <= pf_d_im; end
+                    3'd2: begin pf2_re[g_r] <= pf_d_re; pf2_im[g_r] <= pf_d_im; end
+                    3'd3: begin pf3_re[g_r] <= pf_d_re; pf3_im[g_r] <= pf_d_im; end
+                    3'd4: begin pf4_re[g_r] <= pf_d_re; pf4_im[g_r] <= pf_d_im; end
+                    3'd5: begin pf5_re[g_r] <= pf_d_re; pf5_im[g_r] <= pf_d_im; end
+                    3'd6: begin pf6_re[g_r] <= pf_d_re; pf6_im[g_r] <= pf_d_im; end
+                    default: begin pf7_re[g_r] <= pf_d_re; pf7_im[g_r] <= pf_d_im; end
+                endcase
             end
-            // the y0 path taps the alignment pipe (both halves, same
-            // stage); member 1 = the y4 output slot (7G base)
-            out_re <= w_y0_out ? y0_pipe[5][IW-1:0]
-                                 : pfifo_re[pe_addr];
-            out_im <= w_y0_out ? y0_pipe[5][2*IW-1:IW]
-                                 : pfifo_im[pe_addr];
+            case (mm)
+                3'd1: begin out_re <= pf7_rd; out_im <= pf7_rd_im; end
+                3'd2: begin out_re <= pf1_rd; out_im <= pf1_rd_im; end
+                3'd3: begin out_re <= pf2_rd; out_im <= pf2_rd_im; end
+                3'd4: begin out_re <= pf3_rd; out_im <= pf3_rd_im; end
+                3'd5: begin out_re <= pf4_rd; out_im <= pf4_rd_im; end
+                3'd6: begin out_re <= pf5_rd; out_im <= pf5_rd_im; end
+                3'd7: begin out_re <= pf6_rd; out_im <= pf6_rd_im; end
+                default: begin
+                    out_re <= y0_pipe[6][IW-1:0];
+                    out_im <= y0_pipe[6][2*IW-1:IW];
+                end
+            endcase
 
             // ---- butterfly ring writes (data = L1 comb, gate k1) ----
             if (d2_a4) begin

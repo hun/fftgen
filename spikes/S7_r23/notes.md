@@ -594,3 +594,63 @@ with & 0xFFFF on BOTH sides (raw negative ints never match).
 
 Remaining known limitation: G<=4 first triples (N<=32) still route
 to r22 or need a small-G r23 variant.
+
+## Full-core timing campaign @ 2 ns (in progress) -- session 3
+
+probe_core.py (rtl_probe/) synthesizes AND places+routes the full
+fft_sdf_r23 OOC on xcku5p-ffva676-1-e. Journey so far:
+
+1. First probe: WNS -0.406 / TNS 10878 -- all k->pfifo LUTRAM
+   write-enable decode (the 8G-deep flat pfifo = 128 LUTRAM chunks,
+   the chunk select = the cls_base adder's high bits, 5 levels).
+2. BRAM attempt: ram_style=block was already present but Vivado
+   declared BRAM "infeasible" (Synth 8-6849). Empirical bisect
+   (cutA..cut14 in /tmp/pfifo_bisect): the trigger is the COMBINATION
+   of the ring zero-init loops + the y0-select mux inside the clocked
+   block. BRAM mapping worked (LUT 13938->6709) but the 2x RAMB36
+   CASCADE clk-to-out (~1.37 ns) cannot cross the y0-select mux into
+   the next stage: synth -0.378, post-route -0.613. ABANDONED -- the
+   emission read mux after a BRAM is unaffordable at 2 ns.
+3. Final structure (bit-exact, H=46):
+   - pfifo stays LUTRAM but SPLIT into 7 per-class G-deep arrays
+     (pf1..pf7 = y2,y6,y1,y5,y3,y7,y4) -> the write chunk select is
+     the raw k9 group bits (no base adder) and the read is a 16:1
+     chunk mux per class + the 8:1 member select.
+   - the WRITE is precomputed one cycle early (cls_r/g_r/w_pf_r/pf_d
+     registers; the write lands at w+10 instead of w+9) so the LUTRAM
+     WE decodes from registers.
+   - the emission READ moved +1 too (k10-based t_e/g_e/mm, y0_pipe
+     tap 6): the y1/y5/y3/y7/y4 classes sit at write->read lag
+     EXACTLY 1, so the write shift alone would break them; shifting
+     both preserves every lag. Stage latency +1 -> trip_rtl_lat
+     7G+11, trip_kpre +10/stage, wrapper LATENCY 8243, H=46
+     (bringup3 rule: acc += LATS[j] + H + 2).
+   - the async reads are separate wires (pfN_rd = pfN_re[g_e]) so the
+     LUTRAM read address is independent of the write address.
+   All bring-ups re-verified bit-exact (single stage, 3-chain, full
+   core INV=0/1 at H=46).
+
+4. REMAINING violations (post-route WNS -0.533 / TNS 5228):
+   a) u_t0: g_r_reg -> out_re_reg, 7 levels, 1.77 ns ROUTES: Vivado
+      maps the per-class LUTRAM as RAM64M-style with a SHARED
+      address port (addr = w_pf_r ? g_r : g_e mux) -- the write
+      address leaks into the read path. RAM64X1D (true dual-address
+      LUTRAM) is the wanted primitive; Vivado's width packing
+      prefers RAM64M (3 bits/primitive) + the address mux. UNSOLVED.
+      NOTE: a shared port is fundamentally impossible anyway -- the
+      async read during a write cycle must see the OLD content one
+      cell OFF from the write address (lag-1), so the addresses MUST
+      differ; the fix is either forcing RAM64X1D inference or the
+      +2 registered-emission cascade (every path registered, stage
+      latency +2: trip_rtl_lat 7G+12, trip_kpre +11, trims rescan).
+   b) u_t2 (G=16): bp_r4 -> DSP A/B operand, 4 levels; x_r3 ->
+      ringA_d0 write data, 6 levels -- pre-existing paths that were
+      hidden below the pfifo failures; the class-combine (3-operand
+      add) into the DSP operand needs one more pipeline stage, and
+      the ring write data path needs retiming. Same structure
+      presumably marginal in u_t0/u_t1 too (hidden by placement).
+
+NEXT: (i) try to force RAM64X1D inference (single-bit aux array?
+different coding?) or take the +2 cascade with the constant
+recalibration (harnesses make it mechanical); (ii) retime the u_t2
+class-combine -> DSP operand path; (iii) re-probe.
