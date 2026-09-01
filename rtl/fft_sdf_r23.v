@@ -33,14 +33,13 @@ module fft_sdf_r23 #(
     parameter TWIDDLE_FILE_T0        = "fft_tw_r23_t0.mem",
     parameter TWIDDLE_FILE_T1        = "fft_tw_r23_t1.mem",
     parameter TWIDDLE_FILE_T2        = "fft_tw_r23_t2.mem",
-    parameter TWIDDLE_FILE_L0        = "fft_tw_r22_l0.mem",
-    parameter TWIDDLE_FILE_L1        = "fft_tw_r22_l1.mem",
+    parameter TWIDDLE_FILE_L         = "fft_tw_r22_l.mem",
     // per-leftover-pair K_PRELOAD trim, empirically calibrated against
-    // the golden (scan_l0.py + bringup_core.py: both pairs need +3 for
-    // N=8192, i.e. one clock per upstream r23 triple -- the r23->r22
-    // handoff convention differs from the r23->r23 one)
-    parameter integer KP_L0_TRIM     = 3,
-    parameter integer KP_L1_TRIM     = 3,
+    // the golden: the r23->r22 handoff convention = one clock per
+    // upstream r23 triple (verified =3 for NTRIP=3 at N=8192), so the
+    // auto default (= NTRIP) should hold for every N
+    parameter integer KP_L0_TRIM     = -1,   // -1 = auto (= NTRIP)
+    parameter integer KP_L1_TRIM     = -1,
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5
 )(
     input  wire                      clk,
@@ -74,11 +73,25 @@ module fft_sdf_r23 #(
 
     localparam integer N       = NUM_POINTS;
     localparam integer NSTAGES = $clog2(N);   // 13 for N=8192
-    localparam integer NTRIP   = 3;           // r23 triples (stages 0..8)
+    // NTRIP: the largest triple count t in 1..3 with 3t <= NSTAGES,
+    // (NSTAGES - 3t) even (the r22 leftovers come in pairs), and the
+    // smallest triple G = N >> (3t) >= 8 (the small-G limit: a G <= 4
+    // triple's ringB_p/q1 write->read lag goes negative).  G values are
+    // powers of two, so >= 8 is the exact verified boundary.
+    localparam integer NTRIP   = (NSTAGES >= 9 && (NSTAGES - 9) % 2 == 0
+                                  && (N >> 9) >= 8) ? 3 :
+                                 (NSTAGES >= 6 && (NSTAGES - 6) % 2 == 0
+                                  && (N >> 6) >= 8) ? 2 :
+                                 (NSTAGES >= 3 && (NSTAGES - 3) % 2 == 0
+                                  && (N >> 3) >= 8) ? 1 : 0;
     localparam integer NR2    = NSTAGES - 3 * NTRIP;  // leftover r2 stages
     localparam integer NPAIRL = NR2 / 2;      // r22 leftover pairs
+    initial if (NTRIP == 0)
+        $error("fft_sdf_r23: no valid triple count for N=%0d (NSTAGES=%0d): parity or small-G limit (G>=8) fails -- use the r22 core", N, NSTAGES);
     initial if (NR2 % 2 != 0)
-        $error("fft_sdf_r23: NSTAGES-3*3 must be even (got %0d r2 leftovers)", NR2);
+        $error("fft_sdf_r23: internal error: odd leftover count %0d", NR2);
+    localparam integer TRIM0 = (KP_L0_TRIM < 0) ? NTRIP : KP_L0_TRIM;
+    localparam integer TRIM1 = (KP_L1_TRIM < 0) ? NTRIP : KP_L1_TRIM;
 
     // r23 triple RTL latency = golden 7G+2 + H 8 + 1 emission reg
     // (the pfifo write precompute moved the emission one cycle later)
@@ -93,12 +106,45 @@ module fft_sdf_r23 #(
     // r22 pair RTL latency = 3D+9, D = N >> (3*NTRIP + 2*jj + 2)
     function integer lpair_D;
         input integer jj;
-        lpair_D = N >> (3 * NTRIP + 2 * jj + 2);
+        lpair_D = (jj < NPAIRL) ? (N >> (3 * NTRIP + 2 * jj + 2)) : 0;
     endfunction
     function integer lpair_rtl_lat;
         input integer jj;
         lpair_rtl_lat = 3 * lpair_D(jj) + 9;
     endfunction
+    function integer trip_lat_total;
+        input integer nt;
+        integer ii, acc;
+        begin
+            acc = 0;
+            for (ii = 0; ii < nt; ii = ii + 1)
+                acc = acc + trip_rtl_lat(ii);
+            trip_lat_total = acc;
+        end
+    endfunction
+    function integer lpair_lat_total;
+        input integer np;
+        integer ii, acc;
+        begin
+            acc = 0;
+            for (ii = 0; ii < np; ii = ii + 1)
+                acc = acc + lpair_rtl_lat(ii);
+            lpair_lat_total = acc;
+        end
+    endfunction
+    // the per-pair cumulative ROM base inside the single concatenated
+    // leftover ROM: pair jj's 3*D slice sits at [base, base+3D)
+    function integer pair_rom_base;
+        input integer jj;
+        integer ii, acc;
+        begin
+            acc = 0;
+            for (ii = 0; ii < jj; ii = ii + 1)
+                acc = acc + 3 * lpair_D(ii);
+            pair_rom_base = acc;
+        end
+    endfunction
+    localparam integer LROM_WORDS = pair_rom_base(NPAIRL);
     // r23 K_PRELOAD: -(sum_{i<j} golden lat + 10j) mod 8G_j
     // (H 8 + 2 output registers per upstream stage)
     function integer trip_kpre;
@@ -113,7 +159,10 @@ module fft_sdf_r23 #(
                         % (8 * (N >> (3 * j_ + 3)));
         end
     endfunction
-    // r22 leftover pair K_PRELOAD: -(upstream RTL lat + trim) mod 4D
+    // r22 leftover pair K_PRELOAD: -(upstream RTL lat + trim) mod 4D.
+    // The trim is the r23->r22 handoff convention = one clock per
+    // upstream r23 triple (verified =3 for NTRIP=3; invariant to the
+    // triple-latency bookkeeping shifts).
     function integer lpair_kpre;
         input integer jj;
         integer up, kk;
@@ -123,18 +172,18 @@ module fft_sdf_r23 #(
                 up = up + trip_rtl_lat(kk);
             for (kk = 0; kk < jj; kk = kk + 1)
                 up = up + lpair_rtl_lat(kk);
-            lpair_kpre = ((4 * lpair_D(jj))
-                          - ((up + (jj ? KP_L1_TRIM : KP_L0_TRIM))
-                             % (4 * lpair_D(jj))))
-                         % (4 * lpair_D(jj));
+            if (4 * lpair_D(jj) == 0)
+                lpair_kpre = 0;   // unused pair slot (jj >= NPAIRL)
+            else
+                lpair_kpre = ((4 * lpair_D(jj))
+                              - ((up + (jj ? TRIM1 : TRIM0))
+                                 % (4 * lpair_D(jj))))
+                             % (4 * lpair_D(jj));
         end
     endfunction
 
-    localparam integer CORE_LAT = (NTRIP > 0) ?
-        (trip_rtl_lat(0) + trip_rtl_lat(1) + trip_rtl_lat(2))
-        : 0;
-    localparam integer LATENCY = CORE_LAT + lpair_rtl_lat(0)
-                                 + ((NPAIRL > 1) ? lpair_rtl_lat(1) : 0) + 1;
+    localparam integer CORE_LAT = trip_lat_total(NTRIP);
+    localparam integer LATENCY = CORE_LAT + lpair_lat_total(NPAIRL) + 1;
     localparam integer CNT_W   = $clog2(LATENCY + 1);
 
     wire run = ce && s_axis_tvalid;
@@ -176,100 +225,113 @@ module fft_sdf_r23 #(
     wire signed [INTERN_WIDTH-1:0] t1_re, t1_im, t2_re, t2_im;
     wire signed [INTERN_WIDTH-1:0] l0_re, l0_im;
 
-    localparam [15:0] KPRE1 = trip_kpre(1);
-    localparam [15:0] KPRE2 = trip_kpre(2);
-    localparam [15:0] KPREL0 = lpair_kpre(0);
-    localparam [15:0] KPREL1 = lpair_kpre(1);
-    localparam integer S0 = (SCALING_PACK) & 3;
-    localparam integer S1 = (SCALING_PACK >> 2) & 3;
-    localparam integer S2 = (SCALING_PACK >> 4) & 3;
-
+    // ---- triple 0 (always present) ----
     fft_stage_r23 #(
         .DEPTH          (N >> 3),
         .WIDTH          (INTERN_WIDTH),
-        .SIGMA0         (S0), .SIGMA1(S1), .SIGMA2(S2),
+        .SIGMA0         ((SCALING_PACK) & 3),
+        .SIGMA1         ((SCALING_PACK >> 2) & 3),
+        .SIGMA2         ((SCALING_PACK >> 4) & 3),
         .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
         .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
         .ROM_BASE       (0), .NPTS(8 * (N >> 3)),
-        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(16'h0),
+        .INVERSE        (INVERSE),
+        .Q8             (q8_of(TWIDDLE_DECIMAL)),
+        .K_PRELOAD      (16'h0),
         .TWIDDLE_FILE   (TWIDDLE_FILE_T0)
     ) u_t0 ( .clk(clk), .ce(run), .rst(rst),
         .in_re(in_x_re), .in_im(in_x_im),
         .out_re(t1_re), .out_im(t1_im) );
 
-    fft_stage_r23 #(
-        .DEPTH          (N >> 6),
-        .WIDTH          (INTERN_WIDTH),
-        .SIGMA0         ((SCALING_PACK >> 6) & 3),
-        .SIGMA1         ((SCALING_PACK >> 8) & 3),
-        .SIGMA2         ((SCALING_PACK >> 10) & 3),
-        .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
-        .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-        .ROM_BASE       (0), .NPTS(8 * (N >> 6)),
-        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(KPRE1[15:0]),
-        .TWIDDLE_FILE   (TWIDDLE_FILE_T1)
-    ) u_t1 ( .clk(clk), .ce(run), .rst(rst),
-        .in_re(t1_re), .in_im(t1_im), .out_re(t2_re), .out_im(t2_im) );
-
-    fft_stage_r23 #(
-        .DEPTH          (N >> 9),
-        .WIDTH          (INTERN_WIDTH),
-        .SIGMA0         ((SCALING_PACK >> 12) & 3),
-        .SIGMA1         ((SCALING_PACK >> 14) & 3),
-        .SIGMA2         ((SCALING_PACK >> 16) & 3),
-        .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
-        .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-        .ROM_BASE       (0), .NPTS(8 * (N >> 9)),
-        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(KPRE2[15:0]),
-        .TWIDDLE_FILE   (TWIDDLE_FILE_T2)
-    ) u_t2 ( .clk(clk), .ce(run), .rst(rst),
-        .in_re(t2_re), .in_im(t2_im), .out_re(l0_re), .out_im(l0_im) );
-
-    // ---------------- r2 leftover pairs ----------------
-    wire signed [INTERN_WIDTH-1:0] l1_re, l1_im;
-    wire signed [INTERN_WIDTH-1:0] core_w_re, core_w_im;
+    genvar tj;
     generate
-        if (NPAIRL > 0) begin : has_l0
-            localparam integer D0   = lpair_D(0);
-            localparam integer SG0  = (SCALING_PACK >> (2 * (3*NTRIP))) & 3;
-            localparam integer SG1  = (SCALING_PACK >> (2 * (3*NTRIP+1))) & 3;
+        if (NTRIP >= 2) begin : has_t1
+            localparam [15:0] KPRE = trip_kpre(1);
+            fft_stage_r23 #(
+                .DEPTH          (N >> 6),
+                .WIDTH          (INTERN_WIDTH),
+                .SIGMA0         ((SCALING_PACK >> 6) & 3),
+                .SIGMA1         ((SCALING_PACK >> 8) & 3),
+                .SIGMA2         ((SCALING_PACK >> 10) & 3),
+                .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
+                .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
+                .ROM_BASE       (0), .NPTS(8 * (N >> 6)),
+                .INVERSE        (INVERSE),
+                .Q8             (q8_of(TWIDDLE_DECIMAL)),
+                .K_PRELOAD      (KPRE),
+                .TWIDDLE_FILE   (TWIDDLE_FILE_T1)
+            ) u_t1 ( .clk(clk), .ce(run), .rst(rst),
+                .in_re(t1_re), .in_im(t1_im),
+                .out_re(t2_re), .out_im(t2_im) );
+        end else begin : no_t1
+            assign t2_re = t1_re; assign t2_im = t1_im;
+        end
+        if (NTRIP >= 3) begin : has_t2
+            localparam [15:0] KPRE = trip_kpre(2);
+            fft_stage_r23 #(
+                .DEPTH          (N >> 9),
+                .WIDTH          (INTERN_WIDTH),
+                .SIGMA0         ((SCALING_PACK >> 12) & 3),
+                .SIGMA1         ((SCALING_PACK >> 14) & 3),
+                .SIGMA2         ((SCALING_PACK >> 16) & 3),
+                .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
+                .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
+                .ROM_BASE       (0), .NPTS(8 * (N >> 9)),
+                .INVERSE        (INVERSE),
+                .Q8             (q8_of(TWIDDLE_DECIMAL)),
+                .K_PRELOAD      (KPRE),
+                .TWIDDLE_FILE   (TWIDDLE_FILE_T2)
+            ) u_t2 ( .clk(clk), .ce(run), .rst(rst),
+                .in_re(t2_re), .in_im(t2_im),
+                .out_re(l0_re), .out_im(l0_im) );
+        end else begin : no_t2
+            assign l0_re = t2_re; assign l0_im = t2_im;
+        end
+    endgenerate
+
+    // ---------------- r2 leftover pairs (NPAIRL-generated) ------------
+    // One concatenated leftover ROM: pair jj's 3*D_jj twiddle slice sits
+    // at ROM_BASE = sum_{i<jj} 3*D_i; every pair's ROM array spans the
+    // full file (NPTS = LROM_WORDS) so one $readmemh serves all.
+    wire signed [INTERN_WIDTH-1:0] chain_re [0:NPAIRL];
+    wire signed [INTERN_WIDTH-1:0] chain_im [0:NPAIRL];
+    assign chain_re[0] = l0_re;
+    assign chain_im[0] = l0_im;
+    genvar pj;
+    generate
+        for (pj = 0; pj < NPAIRL; pj = pj + 1) begin : lpairs
+            localparam integer DD   = lpair_D(pj);
+            localparam integer BASE = pair_rom_base(pj);
+            localparam integer SG0  = (SCALING_PACK >> (2 * (3*NTRIP+2*pj))) & 3;
+            localparam integer SG1  = (SCALING_PACK >> (2 * (3*NTRIP+2*pj+1))) & 3;
+            localparam [15:0] KPRE  = lpair_kpre(pj);
             fft_stage_r22 #(
-                .DEPTH          (D0),
+                .DEPTH          (DD),
                 .WIDTH          (INTERN_WIDTH),
                 .SIGMA0         (SG0), .SIGMA1(SG1),
                 .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
                 .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-                .ROM_BASE       (0), .NPTS(N),
+                .ROM_BASE       (BASE), .NPTS(LROM_WORDS),
                 .INVERSE        (INVERSE),
-                .K_PRELOAD      (KPREL0),
-                .TWIDDLE_FILE   (TWIDDLE_FILE_L0)
-            ) u_l0 ( .clk(clk), .ce(run), .rst(rst),
-                .in_re(l0_re), .in_im(l0_im),
-                .out_re(l1_re), .out_im(l1_im) );
-        end else begin : no_l0
-            assign l1_re = l0_re; assign l1_im = l0_im;
-        end
-        if (NPAIRL > 1) begin : has_l1
-            localparam integer D1   = lpair_D(1);
-            localparam integer SG2  = (SCALING_PACK >> (2 * (3*NTRIP+2))) & 3;
-            localparam integer SG3  = (SCALING_PACK >> (2 * (3*NTRIP+3))) & 3;
-            fft_stage_r22 #(
-                .DEPTH          (D1),
-                .WIDTH          (INTERN_WIDTH),
-                .SIGMA0         (SG2), .SIGMA1(SG3),
-                .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
-                .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
-                .ROM_BASE       (0), .NPTS(N),
-                .INVERSE        (INVERSE),
-                .K_PRELOAD      (KPREL1),
-                .TWIDDLE_FILE   (TWIDDLE_FILE_L1)
-            ) u_l1 ( .clk(clk), .ce(run), .rst(rst),
-                .in_re(l1_re), .in_im(l1_im),
-                .out_re(core_w_re), .out_im(core_w_im) );
-        end else begin : no_l1
-            assign core_w_re = l1_re; assign core_w_im = l1_im;
+                .K_PRELOAD      (KPRE),
+                .TWIDDLE_FILE   (TWIDDLE_FILE_L)
+            ) u_pair ( .clk(clk), .ce(run), .rst(rst),
+                .in_re(chain_re[pj]), .in_im(chain_im[pj]),
+                .out_re(chain_re[pj+1]), .out_im(chain_im[pj+1]) );
         end
     endgenerate
+    wire signed [INTERN_WIDTH-1:0] core_w_re = chain_re[NPAIRL];
+    wire signed [INTERN_WIDTH-1:0] core_w_im = chain_im[NPAIRL];
+    // debug aliases (plain wires; iverilog does not resolve hierarchical
+    // array-element refs reliably for NPAIRL != 4)
+    wire signed [INTERN_WIDTH-1:0] dbg_p0 = chain_re[1];
+    wire signed [INTERN_WIDTH-1:0] dbg_p0i = chain_im[1];
+    wire signed [INTERN_WIDTH-1:0] dbg_p1 = (NPAIRL > 1) ? chain_re[2] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p1i = (NPAIRL > 1) ? chain_im[2] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p2 = (NPAIRL > 2) ? chain_re[3] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p2i = (NPAIRL > 2) ? chain_im[3] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p3 = (NPAIRL > 3) ? chain_re[4] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p3i = (NPAIRL > 3) ? chain_im[4] : '0;
 
     wire signed [INTERN_WIDTH-1:0] core_re = core_w_re;
     wire signed [INTERN_WIDTH-1:0] core_im = core_w_im;

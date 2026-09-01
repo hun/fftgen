@@ -1,8 +1,13 @@
-// Full-core TB: fft_sdf_r23, N=8192 shape.
+// Full-core TB: fft_sdf_r23, parameterized by N.
 `default_nettype none
 `timescale 1ns/1ps
-module tb_core #(parameter INV = 0);
-    localparam integer TCLOCKS = 25000;
+module tb_core #(parameter INV = 0, NUM_POINTS = 8192, NBLK = 2,
+                  PACK = 32'h01555555);
+    localparam integer N = NUM_POINTS;
+    localparam integer T = N * NBLK;
+    // the pipeline fill = ~7/8*N (the triple chain) + the pair lats;
+    // plus slack for the golden-tail flush
+    localparam integer TCLOCKS = T + (N * 7) / 8 + 700;
     reg clk = 0, rst = 1, ce = 1'b1;
     reg tv = 1'b1;
     reg [15:0] in_re = 0, in_im = 0;
@@ -13,15 +18,14 @@ module tb_core #(parameter INV = 0);
     reg [31:0] stim [0:TCLOCKS-1];
 
     fft_sdf_r23 #(
-        .NUM_POINTS(8192), .SAMPLE_WIDTH(16),
+        .NUM_POINTS(N), .SAMPLE_WIDTH(16),
         .TWIDDLE_WIDTH(18), .TWIDDLE_DECIMAL(17),
-        .SCALING_PACK(32'h01555555), .INVERSE(INV),
+        .SCALING_PACK(PACK), .INVERSE(INV),
         .INTERN_WIDTH(16),
         .TWIDDLE_FILE_T0("fft_tw_r23_t0.mem"),
         .TWIDDLE_FILE_T1("fft_tw_r23_t1.mem"),
         .TWIDDLE_FILE_T2("fft_tw_r23_t2.mem"),
-        .TWIDDLE_FILE_L0("fft_tw_r22_l0.mem"),
-        .TWIDDLE_FILE_L1("fft_tw_r22_l1.mem")
+        .TWIDDLE_FILE_L("fft_tw_r22_l.mem")
     ) u_core (
         .clk(clk), .ce(ce), .rst(rst),
         .s_axis_tvalid(tv),
@@ -32,12 +36,12 @@ module tb_core #(parameter INV = 0);
         .m_axis_tdata_re(out_re), .m_axis_tdata_im(out_im)
     );
 
-    // reference: the same G=1024 stage standalone
+    // reference: the first triple standalone (G = N>>3)
     wire signed [15:0] sa_re, sa_im;
     fft_stage_r23 #(
-        .DEPTH(1024), .WIDTH(16), .SIGMA0(1), .SIGMA1(1), .SIGMA2(1),
+        .DEPTH(N >> 3), .WIDTH(16), .SIGMA0(1), .SIGMA1(1), .SIGMA2(1),
         .TWIDDLE_WIDTH(18), .TWIDDLE_DECIMAL(17),
-        .ROM_BASE(0), .NPTS(8192), .INVERSE(INV),
+        .ROM_BASE(0), .NPTS(N), .INVERSE(INV),
         .Q8(92682), .K_PRELOAD(16'h0),
         .TWIDDLE_FILE("fft_tw_r23_t0.mem")
     ) u_sa ( .clk(clk), .ce(ce), .rst(rst),
@@ -57,15 +61,17 @@ module tb_core #(parameter INV = 0);
         @(negedge clk); rst = 0;
         for (c = 0; c < TCLOCKS; c = c + 1) begin
             {in_im, in_re} = stim[c];
-            su = (c % 8192 == 0) && (c < 16384);
-            sl = (c % 8192 == 8191) && (c < 16384);
+            su = (c % N == 0) && (c < T);
+            sl = (c % N == N-1) && (c < T);
             @(posedge clk); #1;
             $fwrite(fd, "%04h %04h\n", out_re, out_im);
-            $fwrite(f2, "%04h %04h %04h %04h %04h %04h %04h %04h\n",
+            $fwrite(f2, "%04h %04h %04h %04h %04h %04h %04h %04h %04h %04h %04h %04h\n",
                 u_core.t1_re, u_core.t1_im,
-                u_core.t2_re, u_core.t2_im,
-                u_core.l0_re, u_core.l0_im,
-                u_core.l1_re, u_core.l1_im);
+                u_core.dbg_p0, u_core.dbg_p0i,
+                u_core.dbg_p1, u_core.dbg_p1i,
+                u_core.dbg_p2, u_core.dbg_p2i,
+                u_core.dbg_p3, u_core.dbg_p3i,
+                u_core.l0_re, u_core.l0_im);
             if (mvalid) begin
                 nv = nv + 1;
                 if (muser) begin

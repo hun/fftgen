@@ -766,3 +766,43 @@ shift per stage, INTERN_WIDTH=16). Swept N = 256..32768, R=1:
 - working-N set today: N=8192 only. Extension paths: parameterize the
   pair count; a small-G r23 variant (or route the small triple to
   r22); a leftover-parity scheme for odd NR2.
+
+## NTRIP/NPAIRL parameterization: 5 of 8 N now bit-exact
+
+rtl/fft_sdf_r23.v refactored: NTRIP auto-derived (the largest t in
+1..3 with 3t <= NSTAGES, (NSTAGES-3t) even, and the smallest triple
+G = N>>(3t) >= 8 -- the exact small-G boundary since G values are
+powers of two), NPAIRL generated as a loop (0..4+) with ONE
+concatenated leftover ROM (the pair jj's 3*D slice at
+pair_rom_base(jj), NPTS = LROM_WORDS), the trims default to NTRIP
+(KP_L*_TRIM = -1 = auto), the latency totals looped (the NPAIRL=0
+phantom-clock bug fixed), lpair_kpre %0-guarded.
+
+Verified bit-exact (bringup_core.py, now N-parameterized):
+  N=512   (NTRIP=1, NPAIRL=3) INV=0 H=35
+  N=1024  (NTRIP=2, NPAIRL=2) INV=0 H=38
+  N=4096  (NTRIP=2, NPAIRL=3) INV=0 H=46
+  N=8192  (NTRIP=3, NPAIRL=2) INV=0/1 H=49  (regression)
+  N=32768 (NTRIP=3, NPAIRL=3) INV=0 H=57
+The trim=NTRIP hypothesis CONFIRMED (NTRIP=1 and 2 verified).
+
+KNOWN REMAINING (noted, root-cause next session):
+- N=2048 INV=0: 96.88% -- 128 bad. Bisected: the r22 stage at D=64
+  has exactly 2 bad positions (the internal k=121,185 = the y3 slot
+  and the a2 slot of the SAME group 57 = D-7, consecutive periods),
+  propagating x4 per pair (2->8->32->128). D=64 was never verified
+  before (the N=8192 pairs are D=4,1; the r22 core swept D=16,4,1).
+- N=512 INV=1: 96.88% -- 32 bad. Bisected: the r22 stage at D=16
+  INV=1 has exactly 2 bad (the internal k=27,43 = the y3/a2 slots of
+  the same group 11), propagating x4 x3 pairs. The D=16 INV=0 is
+  clean; the D=4/1 INV=1 are clean (the N=8192 regression).
+- Pattern: the r22 stage has a 2-position schedule bug for
+  (D=16,INV=1) and (D=64,INV=0) -- the size/parity combos never
+  exercised. The failing slots: the y3 product of group g=D-5/-7 and
+  the a2 write of the same group in the next period.
+- N=16384 would use the D=64 first pair (NTRIP=2) -> expected broken
+  until the D=64 bug is fixed. N=256: no valid triple count (the
+  small-G + parity) -- documented, needs the small-G variant.
+- debug infra: the wrapper now has dbg_p0..p3 alias wires (iverilog
+  does not resolve the hierarchical wire-array element refs
+  reliably); tb_core is N-parameterized (NUM_POINTS/NBLK/PACK).
