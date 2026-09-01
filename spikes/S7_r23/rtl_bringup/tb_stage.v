@@ -4,7 +4,7 @@
 `default_nettype none
 `timescale 1ns/1ps
 module tb_stage #(parameter INV = 0, DEPTH = 128);
-    localparam integer TCLOCKS = 45;   // stim + golden latency tail
+    localparam integer TCLOCKS = 23558;   // stim + golden latency tail
     reg clk = 0, rst = 1, ce = 0;
     reg signed [15:0] in_re = 0, in_im = 0;
     wire signed [15:0] out_re, out_im;

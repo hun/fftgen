@@ -480,3 +480,40 @@ the r22 parity preload for D=8,4,2,1), the full-core sim vs
 R23SDFGoldenModel-equivalent (chained triples + _SDFStage leftovers),
 and the multi-stage timing sweep (the stage-2/3 G=128/16 instances
 have LUTRAM-scale memories -- check their timing separately).
+
+## fft_sdf_r23.v wrapper + the full-core integration findings
+
+rtl/fft_sdf_r23.v: 3x fft_stage_r23 (G=N>>3, N>>6, N>>9; K_PRELOADs
+from the validated rule, emitted as constant functions) + 2x
+fft_stage_r22 leftover pairs (D=N>>11, N>>13) + the AXI framing
+(copied from fft_sdf_r22). Lint clean.
+
+Full-core sim (bringup_core.py, N=8192, 2 blocks): the 3-triple
+section verified IN the wrapper (a twin-stage experiment: a
+standalone G=1024 stage vs the same stage wired as the core's first
+triple -- 0 output differences over 25k clocks; ringR contents
+identical to the golden). Two integration bugs found and fixed:
+1. q8_of(TWIDDLE_DECIMAL) had a 2x error (sqrt2 vs sqrt2/2 -- Q8 was
+   185364): the core's rot outputs were ~pm1 garbage. Fixed; also
+   validated q8_of(17) = 92682.
+2. The r22 leftover ROMs must be NPTS-sized (N words, the pair's 3
+   slices at [0,3D), ROM_BASE=0) -- a 3D-word file leaves the rest X
+   and poisons every product.
+
+REMAINING (the last core gap): the leftover tail's rounding contract.
+The r22-pair leftovers differ from the golden's _SDFStage (P5 plain-r2)
+leftovers by pm1 LSB on ~20% of outputs (round-half placement differs
+between the merged r22 pair and the plain r2 stages -- both valid
+fixed-point contracts). Two options:
+  (a) keep the r22 pairs, and make the golden's leftovers r22-pair
+      models (the core then matches the r22 rounding contract; the
+      batch reference needs the same tail) -- fewer instances;
+  (b) switch the tail to 4x P5 fft_stage (r2, D=8,4,2,1) which matches
+      _SDFStage bit-exactly -- but their post-warm preload state
+      (wptr/pwp/raddr/pipe) must come from the generator (the P5
+      fft_preloads.vh pattern), and the non-trivial twiddle pipe
+      registers make PIPE_PRE insufficient for D>1.
+Recommend (a): the r22 pair golden models already exist inside
+R22SDFGoldenModel's structure; extend R23SDFGoldenModel to take a
+triple count and model the tail as r22 pairs, then re-run
+bringup_core expecting bit-exactness.

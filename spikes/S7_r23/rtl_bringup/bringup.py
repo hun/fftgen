@@ -25,7 +25,7 @@ def main():
     os.makedirs(BUILD, exist_ok=True)
     tw = canonical_twiddles(N, TW, TD, INVERSE)
     st = _R23DIFStage(0, N, 1, 1, 1, TD, tw, INVERSE)
-    rng = random.Random(20260214)
+    rng = random.Random(int(os.environ.get('SEED', '20260214')))
     hi = 1 << (W - 1)
     samples = [(rng.randint(-hi, hi - 1), rng.randint(-hi, hi - 1))
                for _ in range(T)]
