@@ -352,3 +352,57 @@ class(w+1) instead of class(w): tw_w should be tw_h3), (3) the rot
 window conditions ((k+2)/(k+1) forms) need the bring-up diff, (4) the
 Verilator single-stage check vs _R23DIFStage with the per-cycle compare
 -- the S5 playbook finds this class of bug mechanically.
+
+## TIMING SPIKE RESULT: the r23 stage CLOSES at 2.0 ns (KU5P, OOC)
+
+probe.py, one fft_stage_r23 lane (G=128, IW=16, TW=18):
+
+  DSP=4  LUT=2796 (1708 logic + 1088 mem)  FF=1960  CARRY8=198
+  RAMB18=13  **WNS = MET @ 2.0 ns, 0 failing endpoints**
+
+  -> R=2 N=8192 (7 lanes) projects to ~28 DSP / ~20k LUT / ~14k FF /
+     ~90 RAMB18 per 2-stage core, at 500 MHz. The r22 stage needed
+     52 DSPs; the r23's DSP-free deepest triple is what buys the drop.
+
+The three structural fixes that got from -2.555 to MET (all per the
+"give the tools register stages to absorb" directive):
+
+1. **k-chain break** (the prune root): the k7<=k6/k8<=k7 assignments
+   were dropped in a scripted edit -- k7/k8 froze at the reset value,
+   cls_w/t_e/w_pf went constant and Vivado pruned the whole compute
+   chain. Lesson: after scripted multi-line edits, DIFF THE SEQUENTIAL
+   BLOCK, not just the declarations (lint passes; sim stays alive
+   through the y0 branch).
+
+2. **Async-read wires force LUTRAM**: `wire w = mem[a]` + a capture
+   register cannot map to BRAM even with ram_style="block". All ring
+   L0 captures now read the memory directly inside the clocked block
+   (the sync-read coding) -> 13 RAMB18, fabric r2/r3(/r4) stages.
+
+3. **One adder per clock into any primitive**: every 2-adder combine
+   feeding a RAM write port or a DSP AREG was pipelined:
+   - the second-level ring writes (p0/q0/bm/bp/q1) moved to w+4
+     (k4-gated), consuming registered fresh combs (sA_r, jmdA_r) and
+     4th read stages (as_r4/ad0_r4/bp_r4); the ringA_s write addr got
+     the matching (k-3) group shift
+   - the L1 class combs (c1..c7, 3-input adds) got output registers
+     (cXr), moving the normal-class AREG to w+4 -- the SAME clock as
+     y4's, which collapsed the special-case phasing: both BREGs take
+     tw_h4, the pfifo write is w+9 for every class, and the normal/y4
+     write windows became disjoint so the single write port survived
+   - the y0 alignment pipe now carries {im,re} pairs (the im half was
+     missing) and taps [5]
+   - the twiddle hold chain needs tw_h4 for BOTH BREGs (tw_h2 was 2
+     clocks short)
+
+OPEN for the bring-up (value bugs the timing rework could not check):
+- the addr conventions were re-derived from the golden schedule during
+  the rework; the rot-unit windows (w_rotA_r1/R2, g_a3 = +4, w_r1w/w_r3w,
+  g_r3 = -6) were NOT re-derived and are suspect: hand-checking suggests
+  the ringA_d1 read remap should be +6 not +4 for the 3-stage read --
+  the Verilator diff vs _R23DIFStage must cover the ringR outputs
+  (y1/y3/y5/y7) specifically
+- the p1_re_c 2-adder path into p1_r is the deepest fabric-only path
+  left (~9 lvl, passing) -- watch it in a full-core context
+- G<5 corner cases: the w+4 reads need the writes to be G+ clocks older;
+  tiny-G configs need the LUTRAM/register fallback paths re-derived
