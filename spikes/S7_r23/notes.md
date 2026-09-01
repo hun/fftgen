@@ -406,3 +406,56 @@ OPEN for the bring-up (value bugs the timing rework could not check):
   left (~9 lvl, passing) -- watch it in a full-core context
 - G<5 corner cases: the w+4 reads need the writes to be G+ clocks older;
   tiny-G configs need the LUTRAM/register fallback paths re-derived
+
+## BRING-UP: the r23 stage + the 2-stage chain are BIT-EXACT vs the golden
+
+Harness: spikes/S7_r23/rtl_bringup/ (bringup.py = one stage vs
+_R23DIFStage; bringup2.py = the m=0->m=1 chain; tb_watch.v = the
+hierarchical-signal watch used to isolate every bug). Method: dump both
+streams, scan the latency offset H scoring only nonzero golden
+positions, per-(block,member) census, then watch the RTL internals at
+the failing phase.
+
+### Single stage: 100% bit-exact
+fwd+inverse, DEPTH in {8,16,32,64,128}, up to 8 blocks, H=8.
+Five RTL bugs found and fixed:
+1. **DSP cross-term**: prod_im_re was m_r_re*tr_r (the ac term again);
+   p_im = ad + bc needs m_r_im*tr_r -- the verified r22 had it right.
+2. **tw_h4 never loaded**: the hold-chain update tw_h4<=tw_h3 was
+   missing -- y4's BREG captured 0 -> every y4 product was 0.
+3. **rot unit A read map**: g_a3 = (g_addr+5)%G, NOT +4/+6. Key insight
+   (empirical): the golden's rotA2 is snapshotted BEFORE the pipe
+   shift, so ringR[x] = rot(d1(group x)) -- the golden's "+3 map" and
+   the 3-deep pipe cancel; the RTL's write@2G+x consumes the comb
+   @2G+x-2 whose r3 read was addressed at 2G+x-5.
+4. **rot unit B index**: g_r3 = -6 was already correct (a -7 attempt
+   based on a mis-derivation was reverted -- the same pre-shift
+   snapshot cancellation gives ringR[G+x] = rot(dA_3(group x)).
+5. **dA_r3 capture gate**: k4 -> k3. With k4 the first dA_3 (group 0)
+   was never captured (dA_r3@7G+4 = 0) -> ringR[G+0] = 0 -> the y1/y5/
+   y3/y7 of group 0 wrong by the missing r3 term (found as ±opposite
+   deltas on the y1/y5 pair).
+
+Watch out: k is a mod-8G counter -- block-N windows must be gated on
+the TB clock count, not on k. And the golden's T(0) = 2^td - 1 (the
+18-bit clamp) makes every g=0 product round to ~0: impulse tests are
+useless for the product paths; use full-scale random data.
+
+### Two-stage chain: 100% bit-exact
+N=1024 shape: stage 1 (G=128, K_PRELOAD=0) -> stage 2 (G=16).
+- **K_PRELOAD chaining rule**: stage n+1's preload =
+  -(sum of upstream golden latencies + upstream H sum + 1) mod 8G_{n+1}
+  = -(898 + 8 + 1) mod 128 = 117 (the +1 = the inter-stage register
+  handoff: stage n+1 samples stage n's registered output one edge
+  later).
+- Total output latency H accumulates: 17 = 2*8 + 1.
+- fwd+inverse, 6 blocks: 6144/6144 positions.
+
+### Remaining gaps
+- G <= 4 (first triples of N=8/16/32): the w+4 second-level writes and
+  the 4-stage reads need >= 5 clocks of window separation; the golden
+  is fine but this RTL micro-architecture is not. Options: a small-G
+  pipeline variant (fewer read stages -- timing is easy there), or
+  route N<=32 to the r22 core. G=8..128 all validated.
+- The 3-stage chain + r2 leftover stages untested (the K_PRELOAD rule
+  should generalize; the leftovers use the r22 parity preload).

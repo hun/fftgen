@@ -349,7 +349,11 @@ module fft_stage_r23 #(
 
     // the +4 rotate hop remap: the 3-stage read shifts the
     // phase->group map (the golden's (g+3) + the read latency)
-    wire [GW-1:0] g_a3 = (g_addr + 4) % G;
+    // +5: the golden's ringR[x] = rot(d1(group x)) (its rotA2 snapshot
+    // is taken pre-shift, so the +3 read map and the 3-deep pipe cancel);
+    // the RTL's write@2G+x consumes the comb@2G+x-2, whose r3 read was
+    // addressed at 2G+x-5 -- the addr constant must be 5
+    wire [GW-1:0] g_a3 = (g_addr + 5) % G;
     // sync reads: the L0 captures read the memories DIRECTLY in the
     // clocked block -- the async-read wires forced LUTRAM and
     // blocked the BRAM mapping (the user directive: deep rings
@@ -625,6 +629,9 @@ module fft_stage_r23 #(
     wire [GW-1:0] g_r1 = g_addr;
     wire w_r3w = (G == 1) ? (((k - 3) % (8*G)) >= 7*G)
                           : (((k - 6) % (8*G)) >= 7*G);
+    // the golden's ringR[G+x] = rot(dA_3(group x)) (same pre-shift
+    // snapshot cancellation); the RTL's write@t_w stores rot(dA(t_w-6))
+    // at (k-6) mod G = the dA's own group
     wire [GW-1:0] g_r3 = (G == 1) ? {GW{1'b0}}
                                   : ((k[GW-1:0] - 3'd6) % G);
 
@@ -731,8 +738,10 @@ module fft_stage_r23 #(
             c5r_re <= c5_re; c5r_im <= c5_im;
             c3r_re <= c3_re; c3r_im <= c3_im;
             c7r_re <= c7_re; c7r_im <= c7_im;
-            // the registered dA (rot unit B input, G>1)
-            if ((k4 % (8*G)) >= 7*G) begin
+            // the registered dA (rot unit B input, G>1): gated at k3 so
+            // dA_r3@t = the dA of phase t-4 -- the rot-B comb@p+4 then
+            // sees the dA_3 of group p and the write@p+6 lands at index p
+            if ((k3 % (8*G)) >= 7*G) begin
                 dA_r3_re <= dA_re_c; dA_r3_im <= dA_im_c;
             end
             // p_1 registered at w+4 (the y4/y0 combs consume it with
@@ -753,11 +762,12 @@ module fft_stage_r23 #(
             end
 
             // ---- L2: im products + freeze ----
-            prod_im_re <= m_r_re * tr_r;
-            prod_im_ti <= m_r_im * ti_r;
+            prod_im_re <= m_r_im * tr_r;   // bc (the p_im cross term)
+            prod_im_ti <= m_r_im * ti_r;   // bd
             m_h_re <= m_r_re; m_h_im <= m_r_im;
             tr_h <= tr_r; ti_h <= ti_r;
             tw_h1 <= tw_dout; tw_h2 <= tw_h1; tw_h3 <= tw_h2;
+            tw_h4 <= tw_h3;
 
             // ---- L3: re products + C-port regs ----
             prod_re_re <= m_h_re * tr_h;
