@@ -126,12 +126,18 @@ module fft_stage_r22 #(
     (* ram_style = "distributed" *)
     reg signed [WIDTH-1:0] sram_re  [0:DEPTH-1];
     reg signed [WIDTH-1:0] sram_im  [0:DEPTH-1];
+    // dram/dline hold the butterfly differences d = a - x, which are
+    // BW (= WIDTH+1) bit values: the d-path carries NO sigma scaling
+    // (only the s-path is shifted), so storing WIDTH bits wraps values
+    // beyond +-32767 and corrupts the y1/y3 products (the golden model
+    // keeps the full-width difference). sram stays at WIDTH: s_x =
+    // round(a+x, SIGMA0) fits WIDTH for SIGMA0 >= 1.
     (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] dram_re  [0:DEPTH-1];
-    reg signed [WIDTH-1:0] dram_im  [0:DEPTH-1];
+    reg signed [BW-1:0] dram_re  [0:DEPTH-1];
+    reg signed [BW-1:0] dram_im  [0:DEPTH-1];
     (* ram_style = "distributed" *)
-    reg signed [WIDTH-1:0] dline_re [0:DEPTH-1];
-    reg signed [WIDTH-1:0] dline_im [0:DEPTH-1];
+    reg signed [BW-1:0] dline_re [0:DEPTH-1];
+    reg signed [BW-1:0] dline_im [0:DEPTH-1];
     (* ram_style = "distributed" *)
     reg signed [WIDTH-1:0] pfifo_re [0:2*DEPTH-1];
     reg signed [WIDTH-1:0] pfifo_im [0:2*DEPTH-1];
@@ -249,10 +255,10 @@ module fft_stage_r22 #(
     wire signed [BW-1:0] a0_im = {{(BW-WIDTH){ram_im[rp][WIDTH-1]}}, ram_im[rp]};
     wire signed [BW-1:0] s0_re = {{(BW-WIDTH){sram_re[sp][WIDTH-1]}}, sram_re[sp]};
     wire signed [BW-1:0] s0_im = {{(BW-WIDTH){sram_im[sp][WIDTH-1]}}, sram_im[sp]};
-    wire signed [BW-1:0] d0_re = {{(BW-WIDTH){dram_re[sp][WIDTH-1]}}, dram_re[sp]};
-    wire signed [BW-1:0] d0_im = {{(BW-WIDTH){dram_im[sp][WIDTH-1]}}, dram_im[sp]};
-    wire signed [BW-1:0] d1_re = {{(BW-WIDTH){dline_re[sp][WIDTH-1]}}, dline_re[sp]};
-    wire signed [BW-1:0] d1_im = {{(BW-WIDTH){dline_im[sp][WIDTH-1]}}, dline_im[sp]};
+    wire signed [BW-1:0] d0_re = dram_re[sp];
+    wire signed [BW-1:0] d0_im = dram_im[sp];
+    wire signed [BW-1:0] d1_re = dline_re[sp];
+    wire signed [BW-1:0] d1_im = dline_im[sp];
 
     // ------------------------------------------------------------------
     // L0 registers: the reads + the input captured at the posedge
@@ -461,12 +467,12 @@ module fft_stage_r22 #(
             if (w_gate_sd) begin
                 sram_re[sp] <= s_x_re[WIDTH-1:0];
                 sram_im[sp] <= s_x_im[WIDTH-1:0];
-                dram_re[sp] <= d_x_re[WIDTH-1:0];
-                dram_im[sp] <= d_x_im[WIDTH-1:0];
+                dram_re[sp] <= d_x_re;
+                dram_im[sp] <= d_x_im;
             end
             if (w_gate_dl) begin
-                dline_re[sp] <= d_x_re[WIDTH-1:0];
-                dline_im[sp] <= d_x_im[WIDTH-1:0];
+                dline_re[sp] <= d_x_re;
+                dline_im[sp] <= d_x_im;
             end
             if (w_gate_pf) begin
                 pfifo_re[pwp] <= shift_p_re[WIDTH-1:0];

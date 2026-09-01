@@ -806,3 +806,32 @@ KNOWN REMAINING (noted, root-cause next session):
 - debug infra: the wrapper now has dbg_p0..p3 alias wires (iverilog
   does not resolve the hierarchical wire-array element refs
   reliably); tb_core is N-parameterized (NUM_POINTS/NBLK/PACK).
+
+## ROOT CAUSE FOUND + FIXED: the r22 stage's dram/dline were 16-bit
+
+The remaining 3.12% failures (N=2048, N=512 INV=1) traced to
+fft_stage_r22.v storing the butterfly differences d = a - x into
+WIDTH(=16)-bit dram/dline memories. The d-path carries NO sigma
+scaling (only the s-path is shifted), so d0/d1 are BW(=17)-bit
+values; storing 16 bits wrapped |d| > 32767 and corrupted the y1/y3
+products for the affected groups (the golden model keeps the
+full-width difference; the old S5 r22 core never hit this because it
+ran INTERN_WIDTH >= 17).
+
+Debug path: standalone fft_stage_r22 (D=64, INV=0, KPRE=0) vs the
+golden _R22DIFStage -> all y1/y3 products wrong; operand search
+showed the RTL's dram/dline contents = t16(golden d0/d1) exactly
+(-59805 + 65536 = 5731); core-tap census found 1 overflowing d1
+component per failing block (block c=4096, group 4 -> y1/y3 of group
+4 -> x4 per pair = the 128 bad).
+
+FIX: dram/dline (and their reads/writes) widened to BW bits; sram
+stays WIDTH (s_x = round(a+x, sigma0) fits for sigma0 >= 1). The r23
+stage's r1/r2/r3 delay lines were already BW-wide.
+
+RESULT: every supported N now bit-exact in BOTH directions:
+  512/1024/2048/4096/8192/16384/32768 x {INV=0, INV=1} = 14/14 at
+  100.00% (H = 35/38/43/46/49/54/57). The S5 r22-core regression
+  (N=4..128, fwd+inv, verilator) also 12/12 bit-exact.
+Remaining: N=256 only (needs the small-G variant; NTRIP has no valid
+value -- documented above).

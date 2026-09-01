@@ -96,6 +96,19 @@ module tb_core #(parameter INV = 0, NUM_POINTS = 8192, NBLK = 2,
                     u_core.u_t0.r3_r3_re, u_core.u_t0.c1_re, u_core.u_t0.c1_im,
                     u_core.u_t0.m_r_re, u_core.u_t0.m_r_im,
                     u_core.u_t0.tr_r, u_core.u_t0.ti_r);
+            // pair-0 internals (D=64 N=2048 debug). k1 (not k): the
+            // capture phase of the d_r/dl_r/s_r L0 regs held this period
+            $display("PAIR c=%0d k1=%0d dr=%0d,%0d dl=%0d,%0d sr=%0d,%0d mr=%0d,%0d tr=%0d,%0d gr=%0d pfw=%0d,%0d gsd=%b gdl=%b out=%0d,%0d",
+                c, u_core.lpairs[0].u_pair.k1,
+                u_core.lpairs[0].u_pair.d_r_re, u_core.lpairs[0].u_pair.d_r_im,
+                u_core.lpairs[0].u_pair.dl_r_re, u_core.lpairs[0].u_pair.dl_r_im,
+                u_core.lpairs[0].u_pair.s_r_re, u_core.lpairs[0].u_pair.s_r_im,
+                $signed(u_core.lpairs[0].u_pair.m_r_re), $signed(u_core.lpairs[0].u_pair.m_r_im),
+                $signed(u_core.lpairs[0].u_pair.tr_r2), $signed(u_core.lpairs[0].u_pair.ti_r2),
+                u_core.lpairs[0].u_pair.g_r,
+                u_core.lpairs[0].u_pair.pwp, u_core.lpairs[0].u_pair.w_gate_pf,
+                u_core.lpairs[0].u_pair.w_gate_sd, u_core.lpairs[0].u_pair.w_gate_dl,
+                $signed(u_core.lpairs[0].u_pair.out_re), $signed(u_core.lpairs[0].u_pair.out_im));
             @(negedge clk);
         end
         $fclose(fd); $fclose(f2);
