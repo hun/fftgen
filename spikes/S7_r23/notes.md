@@ -688,3 +688,31 @@ jmdA capture (7 levels). Fix = register dA/jmdA one more cycle
 before the shift/combine (the affected ring-write schedule shifts
 +1; the k-gates move from k3 to k4 for those rings) -- mechanical,
 same pattern as the pfifo fix.
+
+## Remaining -0.310: the dA subtract -> ring-write path (next step)
+
+The last failing structure (post-route, ~6 endpoints, all one shape):
+x_r3 -> dA_re_c = a0_r3 - x_r3 (an 18-bit subtract = 3x CARRY8 chain,
+1.86 ns data) -> per-class shift mux -> ringA_d0/d1/rbbp BRAM write
+data (5-6 levels); and x_r3 -> the jmdA_r capture (7 levels).
+
+Fix (mechanical, same pattern as the pfifo qN stage):
+1. register the subtract output: dA_w <= dA_re_c (and p1_w <= p1_re_c
+   if it shows up too);
+2. the ringA_d0/d1 writes consume dA_w with their gate/address
+   shifted +1 (d2_a4/d2_a5 -> registered versions, g_w2 -> g_w2_r);
+3. jmdA_r captures from dA_w (+1) -- its consumers (the rbbp
+   combine at w+4) then shift +1 as well (the 4th read stages are
+   already registered; check whether the bm/r1/r3 read registers
+   need the extra cycle too);
+4. re-verify the full chain (the ring-write schedule shifts touch the
+   golden tolerance only via uniform H -- the per-stage extra grows
+   by 1 again: trip_rtl_lat 7G+13, trip_kpre +12, trims 3/3, H +3).
+Do NOT rush: the rbbp/rbbm combine path shifts mean the bm write and
+its read schedule must move together.
+
+Alternative quick win if the routes dominate: the 1.09 ns of routing
+on the subtract->BRAM path suggests placement spread; a pblock (or
+netlist-level check that the CARRY8 and the BRAM are adjacent) may
+close it without RTL changes. Try the probe with the dA subtract
+constrained before resorting to RTL.
