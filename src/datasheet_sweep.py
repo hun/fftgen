@@ -203,6 +203,35 @@ report_utilization -file util.txt
 report_timing_summary -delay_type max -max_paths 5 -file timing.txt
 """
 
+
+TCL_R23 = """\
+set part    [lindex $argv 0]
+set npts    [lindex $argv 1]
+set pack    [lindex $argv 2]
+set intern  [lindex $argv 3]
+create_project -in_memory -part $part
+add_files -fileset sources_1 [list \\
+    @RTL@/fft_sdf_r23.v \\
+    @RTL@/fft_stage_r23.v \\
+    @RTL@/fft_stage_r22.v ]
+set_property top fft_sdf_r23 [current_fileset]
+synth_design -top fft_sdf_r23 \\
+    -generic NUM_POINTS=$npts \\
+    -generic TWIDDLE_FILE_T0=[file normalize [pwd]/fft_tw_r23_t0.mem] \\
+    -generic TWIDDLE_FILE_T1=[file normalize [pwd]/fft_tw_r23_t1.mem] \\
+    -generic TWIDDLE_FILE_T2=[file normalize [pwd]/fft_tw_r23_t2.mem] \\
+    -generic TWIDDLE_FILE_L0=[file normalize [pwd]/fft_tw_r22_l0.mem] \\
+    -generic TWIDDLE_FILE_L1=[file normalize [pwd]/fft_tw_r22_l1.mem] \\
+    -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \\
+    -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
+    -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
+    -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \\
+    -generic INVERSE=0
+create_clock -period @NS@ -name clk [get_ports clk]
+report_utilization -file util.txt
+report_timing_summary -delay_type max -max_paths 5 -file timing.txt
+"""
+
 UTIL_ROWS = ["CLB LUTs", "CLB Registers", "LUT as Memory",
              "Block RAM Tile", "URAM", "DSPs"]
 
@@ -298,6 +327,50 @@ def artifacts_r22(n, outdir, r=1):
         return {"pack": pack, "intern": intern, "preload_bits": 0, "lane": lane}
 
 
+def artifacts_r23(n, outdir):
+    """Radix-2^3 SDF (S7): 3 r23 triple ROMs (8*G words each, layout
+    word[base_k+g] = T[k*g*8^m]) + one N-sized r22 leftover ROM per
+    pair (the 3*D twiddle slice at [0,3D), ROM_BASE=0). Returns the
+    scaling pack (1 shift per stage) and the internal width."""
+    from twiddles import canonical_twiddles
+    TW, TD = 18, 17
+    nstages = n.bit_length() - 1
+    tw = canonical_twiddles(n, TW, TD, inverse=False)
+    mask = (1 << TW) - 1
+    # 3 r23 triples: G_m = N >> (3m+3), twiddle stride 8^m
+    for m in range(3):
+        g = n >> (3 * m + 3)
+        layout = [(0, 2), (g, 6), (3 * g, 1), (4 * g, 5),
+                  (5 * g, 3), (6 * g, 7), (7 * g, 4)]
+        words = [0] * (8 * g)
+        for b, k in layout:
+            for gg in range(g):
+                re, im = tw[(k * gg * (1 << (3 * m))) % n]
+                words[b + gg] = ((re & mask) << TW) | (im & mask)
+        with open(os.path.join(outdir, f"fft_tw_r23_t{m}.mem"), "w") as f:
+            for w in words:
+                f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
+    # r22 leftover pairs: D_jj = N >> (11+2jj), stride 1 << (9+2jj);
+    # ROM is N-sized (NPTS=N), the 3*D slice at [0,3D), rest zero
+    npairl = max(0, (nstages - 9) // 2)
+    for jj in range(max(1, npairl)):
+        d = n >> (11 + 2 * jj)
+        stride = 1 << (9 + 2 * jj)
+        words = [0] * n
+        i = 0
+        for which in (1, 2, 3):
+            for g in range(d):
+                re, im = tw[(which * g * stride) % n]
+                words[i] = ((re & mask) << TW) | (im & mask)
+                i += 1
+        with open(os.path.join(outdir, f"fft_tw_r22_l{jj}.mem"), "w") as f:
+            for w in words:
+                f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
+    # every stage shifts 1 (net-zero growth per triple/pair)
+    pack = sum(1 << (2 * s) for s in range(nstages))
+    return {"pack": pack, "intern": 16, "preload_bits": 0}
+
+
 # ---------------------------------------------------------------------------
 # parsers
 # ---------------------------------------------------------------------------
@@ -352,7 +425,9 @@ def run_one(args):
     t0 = time.time()
     gen = {}
     try:
-        if arch == "r22i":
+        if arch == "r23":
+            gen = artifacts_r23(n, outdir)
+        elif arch == "r22i":
             gen = artifacts_r22i(n, outdir)
         elif arch in ("r22", "r22b"):
             gen = artifacts_r22(n, outdir, r=r)
@@ -388,6 +463,13 @@ def run_one(args):
                    str(gen["pack"]), str(gen["intern"])]
             if arch == "r22b":
                 cmd.append("0")       # REORDER_OUT=0: P8 corner order
+    elif arch == "r23":
+        tcl = TCL_R23.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
+        tcl_path = os.path.join(outdir, "synth.tcl")
+        open(tcl_path, "w").write(tcl)
+        cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
+               "-source", "synth.tcl", "-tclargs", PART, str(n),
+               str(gen["pack"]), str(gen["intern"])]
     else:
         tcl = TCL_R2.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
         tcl_path = os.path.join(outdir, "synth.tcl")
@@ -428,13 +510,15 @@ def main():
                     default=[64, 128, 256, 512, 1024, 2048, 4096, 8192])
     ap.add_argument("--r4", nargs="*", type=int, default=[64, 256, 1024, 4096])
     ap.add_argument("--r8", nargs="*", type=int, default=[64, 256, 1024])
-    ap.add_argument("--arch", choices=["r2", "r22", "both", "r22b", "r22i", "all"],
+    ap.add_argument("--arch", choices=["r2", "r22", "both", "r22b", "r22i",
+                                       "r23", "all"],
                     default="both",
                     help="which architecture(s) to sweep (default: both); "
                          "r22b = the P8 corner-order core (native -> bitrev, "
                          "R=2 only), r22i = the corner-order IFFT "
-                         "(bitrev -> native, R=2 only), all = r2 + r22 + "
-                         "r22b + r22i")
+                         "(bitrev -> native, R=2 only), r23 = the S7 "
+                         "radix-2^3 SDF core (R=1, N>=512, NSTAGES-9 even), "
+                         "all = r2 + r22 + r22b + r22i + r23")
     ap.add_argument("-j", type=int, default=4, help="parallel vivado jobs")
     ap.add_argument("--jobs-dir", default=os.path.join(ROOT, "build", "datasheet"),
                     help="output directory for per-config results")
@@ -443,8 +527,8 @@ def main():
     args = ap.parse_args()
 
     archs = {"r2": ["r2"], "r22": ["r22"], "both": ["r2", "r22"],
-             "r22b": ["r22b"], "r22i": ["r22i"],
-             "all": ["r2", "r22", "r22b", "r22i"]}[args.arch]
+             "r22b": ["r22b"], "r22i": ["r22i"], "r23": ["r23"],
+             "all": ["r2", "r22", "r22b", "r22i", "r23"]}[args.arch]
 
     # Build config list: r22 for R=1 and R=2 (P7), r2 for all R
     configs = []
@@ -453,6 +537,8 @@ def main():
             configs.append((n, 1, "r2"))
         if "r22" in archs:
             configs.append((n, 1, "r22"))
+        if "r23" in archs:
+            configs.append((n, 1, "r23"))
     for n in args.r2:
         if "r2" in archs:
             configs.append((n, 2, "r2"))

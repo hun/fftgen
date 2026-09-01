@@ -741,3 +741,28 @@ The design rule set is now: every RAM deeper than 32 gets an output
 FD stage; every RAM write data path is a single register hop from a
 pipeline register; every comb feeding a primitive is at most one
 adder deep. All schedules derive from the k-chain delays.
+
+## Datasheet sweep for r23 (build/datasheet_r23)
+
+src/datasheet_sweep.py gained the r23 arch (TCL_R23 + artifacts_r23:
+the 3 triple ROMs 8*G words + N-sized leftover-pair ROMs, pack = 1
+shift per stage, INTERN_WIDTH=16). Swept N = 256..32768, R=1:
+
+- synth ok: N = 512, 2048, 8192, 32768 (post-synth WNS -0.09..-0.22,
+  DSP 12-20, LUT 5.4-8.2K; N=8192 matches the verified post-route
+  +0.028).
+- synth FAIL: N = 256/1024/4096/16384 -- the parity check
+  (NSTAGES-9 must be even; the r22 leftovers come in pairs).
+- functional status of the synth-ok N (NOTED, root-cause later):
+  - N=8192: fully verified (bit-exact fwd+inv, post-route +0.028).
+  - N=2048: expected BROKEN -- third triple G=4 hits the small-G
+    window-separation limitation (ringB_p/q1 lag = G-5 < 0).
+  - N=512: BROKEN -- third triple G=1; PLUS lpair_rtl_lat(0) is
+    unguarded in LATENCY (NPAIRL=0 adds 9 phantom clocks) and
+    lpair_kpre does %0 (unused garbage).
+  - N=32768: BROKEN -- NPAIRL=3 > the 2 hardcoded pair slots, stages
+    14-15 silently dropped (truncated transform); needs a third pair
+    slot + TWIDDLE_FILE_L2.
+- working-N set today: N=8192 only. Extension paths: parameterize the
+  pair count; a small-G r23 variant (or route the small triple to
+  r22); a leftover-parity scheme for odd NR2.
