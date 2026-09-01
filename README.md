@@ -14,7 +14,12 @@ result is verified bit-exact against that model.
 ## Status
 
 All implementation phases (P0–P7) are complete; see the phase table in
-[PLAN.md](PLAN.md) §5.
+[PLAN.md](PLAN.md) §5. Planned next: the deep-N extension to N = 65536
+(PLAN.md §5.1 — golden and RTL both already verified bit-exact / within
+tolerance at that size; the remaining work is the memory policy for URAM,
+committed test suites, timing closure and datasheet rows) and a radix-2³
+stretch-goal assessment (deferred, PLAN.md §5 — ~−40% DSP over r22, not
+worth it on KU5P-class targets).
 
 - **R = 1 (SDF)**: bit-exact N = 2…128 (all four input/output order corners,
   fwd/inv, widths 8…25, `ce`-freeze suites); 500 MHz met post-synth on KU5P
@@ -164,6 +169,7 @@ block floating point, runtime twiddle reload.
 | [PLAN.md](PLAN.md) | goals & scope, architecture, verification strategy, phase status, all design decisions, golden-model derivation (Appendix A) |
 | [doc/architecture.md](doc/architecture.md) | how the core works: SDF stage operation, the 10-layer pipeline, complex multiply, ordering, SSR crossbar, fixed-point/memory/reset contracts |
 | [doc/datasheet.md](doc/datasheet.md) | N × R resource/timing sweep (KU5P @ 500 MHz), how to read the table, timing notes, memory policy summary |
+| [doc/verification.md](doc/verification.md) | independent numpy-anchored verification of every golden model (r2 + r22, DIF/DIT, SSR, corners) and the RTL chain |
 | [doc/mem_cutoffs.md](doc/mem_cutoffs.md) | memory-style cutoff decisions with the underlying OOC synthesis experiments (S1–S4) |
 | `spikes/` | experiment workspaces and findings (timing, DSP cascade) |
 | generated `README.txt` | per-export build/simulate/synthesize instructions |

@@ -696,6 +696,82 @@ suite per push.
 | **P6 — trivial-twiddle stages (DSP reduction)** ✅ **done** | `TRIVIAL` stage flag in `fft_sdf.v`: the DIF last two stages / DIT first two stages multiply only by W^0 (real) and W^{N/4} (±j) — single-component twiddles — and compute the product exactly in fabric (`trivial_prod`: `x·(2^td−1) = (x<<td) − x` + zero/sign select) instead of 4 DSP48s. Golden model UNCHANGED (products are exact integer arithmetic; value-identical). | bit-exact across the whole matrix (99 tests green, no skips); KU5P OOC: R=1 N=2048 44→**36** DSPs (WNS +0.113), R=2 N=2048 84→**68** (WNS −0.020, unchanged), N=64 R=1 24→16, N=4 → 0 DSPs; SSR lane engines inherit it per-engine. |
 | **P7 — radix-2² folding (next DSP lever, ~2×)** ✅ **closed — DIF R=1/R>1: 500 MHz MET post-synth at every N and post-route on the N=2048 corner; ~half the DSPs, ~20% fewer LUTs/LUTRAM** | merge each DIF stage pair (2m, 2m+1) into one R2² stage with a single general complex multiplier (3 products per 4-group instead of 4); twiddle ROM slices re-layout (stride 4^m); SSR lane engines inherit. **S5 outcome (spikes/S5_r22/): the rotation identity T[i+N/4] = ∓j·T[i] holds bit-exactly** (magnitude-first quantization), so the ±j diff combine is free and exact; **but the merged product paths change the rounding points** — the plain golden and the R2² contract differ by a few LSB (rounding placement, width-dependent) with **identical SQNR** (verified N=8..1024, fwd+inv). Appendix A's "bit-identical" claim is therefore corrected to "re-pin the golden". | **Done:** `fft_fixed_batch_r22` / `_r22_dit` (batch contracts) + `R22SDFGoldenModel` (cycle-accurate streaming: per-pair `_R22DIFStage` with the staggered 3-product schedule — y2@3D+g, y1@4D+g, y3@5D+g, read-old/write-new dram/dline re-reads, pfifo lag-D, latency 3D+1) in `golden.py`; `rtl/fft_stage_r22.v` (mirrors the model: lag-2D ram / lag-D sram+dram+dline / SDP pfifo, one shared complex multiply muxed by phase, ±j combine + trivial_prod-ready fabric); spike `rtl_check.py` verifies the RTL **bit-exact vs the contract, 32 configs** (N 4..256, fwd+inv, widths/scaling). `tests/test_golden_r22.py` 15 tests; suite 114 green. **Next:** none for the DIF core — (6) twiddle ROM into the generator + export flow ✅, (7) bit-exact Verilator suite + 500 MHz timing sweep ✅ (step 7a: the stage's 4-product path was merging into one intra-DSP ALU pass — A/B-reg → PREADD → MULT → ALU → PREG, 1.85 ns, WNS −0.020 / 480 FEP at N=2048 for EVERY r22 config; fixed by the r2 stage's two levers, both required: (i) the im/re products staggered by one clock so the im MREG reaches the re DSP's CREG, and (ii) natural-width `reg signed` operands with no hand-rolled sign-extension glue on the DSP ports; the retime is latency-neutral — +1 hop on the product path, −1 (`shift_p2`) — so the golden `_R22DIFStage` and the 3D+9 stage latency are UNCHANGED; probe + 2×2 evidence matrix in `spikes/S5_r22/dsp_probe/`, `(* dont_touch *)` tried and worse. Result: R=1 r22 post-synth **+0.187 … +0.048, 0 FEP across N=64…8192** vs r2 +0.107…+0.113 at **half the DSPs** (N=2048 36→20, N=8192 44→24) and fewer LUTs (16692→13238 at N=8192); the exported N=2048 tree simulates bit-exact (`ok: 6144 samples`) and the R=1 sweep now runs the *production* `fft_sdf_r22` top instead of the spike top. Remaining, out of P7: the SSR R≥2 limiter is the **shared crossbar** (`u_cross/g_pre pp*_reg`, same −0.020/−0.165 for both arches, so the r22 lane savings come for free) and `r22` N=2048 post-route −0.117/62 FEP on the L0→CARRY8→LUTRAM-write family, i.e. the v1 all-LUTRAM rings — **closes at +0.003 / 0 FEP with `place Explore` + `phys_opt`/`route AggressiveExplore` double pass** (`spikes/S5_r22/dsp_probe/impl_aggr.tcl`), thin margin, so the real lever is the memory-policy/registered-read rework, not the DSP path (the placer already pushes part of the deep rings into BRAM by itself)). (The DIT stage RTL `rtl/fft_stage_r22_dit.v` mirrors the model: vline/t1line/t2line read-old rings, one shared multiplier at the a1/a2/a3 arrivals, F₄ combine with exact ±j, H/2H/3H output queues with explicit 3H wraps; the full DIT core (leftover stage 0 first + pairs + quantizer) is verified bit-exact by `spikes/S5_r22/dit_rtl_check.py` across 56 configs.) (The streaming leftover (odd n) with the parity warm `chain_latency mod 2` and its post-warm preloads, plus the output quantizer, are now in the model and the spike top — the full core is bit-exact for all N.) Actual (swept): R=1 N=2048 36→**20**, R=1 N=8192 44→**24**, R=2 N=2048 68→**44**, R=8 N=8192 300→**204** (Spiral 2048-point reference: 40). |
 
+**Stretch goal — radix-2³ folding (the next multiply-count step after P7):**
+merge each DIF stage triple (3m…3m+2) into one R2³ stage with a single
+shared complex multiplier (staggered products — same trick P7 used per
+pair). Empirically pinned accounting off the canonical twiddle tables:
+general stages = n−2 (r2: 4·(n−2) reproduces the datasheet exactly),
+pairs = ⌊n/2⌋ (r22: 4·⌊n/2⌋, exactly), so the projection is
+**DSP ≈ 4·⌊n/3⌋**:
+
+| N | n | r2 | r22 | r2³ est | Δ vs r22 |
+|---:|---:|---:|---:|---:|---:|
+| 64 | 6 | 16 | 12 | 8 | −4 |
+| 256 | 8 | 24 | 16 | 8 | −8 |
+| 1024 | 10 | 32 | 20 | 12 | −8 |
+| 2048 | 11 | 36 | 20 | 12 | −8 (−40%) |
+| 8192 | 13 | 44 | 24 | 16 | −8 |
+
+SSR per lane: R=2 N=2048 44→**28**, R=4 N=8192 92→**60**, R=8 N=8192
+204→**140**. Three caveats vs P7: (i) the deepest triple no longer ends
+stage-trivial — its class-1 products include ±45° at W^{N/8}/W^{3N/8},
+so the “free deep pair” comfort margin of r2/r22 disappears and the
+multiplier stays busy to the last stage; (ii) the stagger duty rises to
+~4–5 products per 8-clock group (still ≤ 1/clk, throughput unaffected);
+(iii) the combine network deepens to 3 CARRY8 levels on the exact fabric
+path that already binds r22 R=1 (L0→CARRY8→LUTRAM write, +0.048…+0.187 at
+500 MHz) — so R=1 @ 500 MHz is not promised without the §5.1
+memory-policy/registered-read rework (which is needed for r22 anyway).
+SSR rows are crossbar-bound, so SSR r2³ carries today's WNS unchanged.
+
+**S7 spike (spikes/S7_r23/, done): the 45° question is settled before any
+golden-model work.** Stage-role map: one shared proper cmul (4 DSPs) per
+triple serves all product classes (~7 per 8 clocks); per-stage
+specialization exists only at the deepest triple (slices: N+0 = 8th roots
+incl. ±45°, N+1 = {W⁰, W^{N/4}} trivial, N+2 = {W⁰} pass-through). The
+canonical magnitude-first table ALREADY stores the eighth roots as ordinary
+words (T[N/8] = (92682,−92682) at td=17, exactly ±45.00°) — a ROM-word 45°
+product IS the pinned contract, no new table, no new quantization point.
+Probe (one stage, KU5P OOC @2 ns): base (45° via ROM words) **MET**, while
+every placement of the fabric ×q constant multiply (5–7 taps, operand-side
+or product-side, with/without a pipe register) fails at −1.16…−2.00 (the
+post-DSP 55-bit tree hop alone is 3.0 ns; the operand side balances at
+3.9 ns under retiming) — so making the deepest triple DSP-free
+(4·(⌊n/3⌋−1), 12→8 at N=2048 ≈ 0.2 % of the KU5P) would additionally need a
+hand-truncated windowed multiplier + a 2-extra-hop schedule. **REJECTED**;
+the 4·⌊n/3⌋ accounting and caveat (i) stand as written. Golden-model
+consequences: contract = canonical table throughout; the merged triple
+still re-pins rounding points exactly like r22 did (fused products round
+once, expect a few-LSB delta vs plain r2 with identical SQNR); the 3-level
+diff trees land on the DSP-operand path (budget exists per base), not the
+LUTRAM-write path.
+
+**Golden model DONE (src/golden.py, tests/test_golden_r23.py; suite 169
+green).** The kernel algebra forced the 45° into the OPERAND (twiddle-side
+costs 11 products per 8 clocks > 8): exactly TWO rotates per 8-group
+(r = rot45 of the odd first-level diffs) feed all four d-class outputs
+through free sign/swap combines — and the deepest triple's twiddles then
+collapse to W⁰, making it DSP-free (lane = 3·4 = 12 DSPs, R=2 N=8192
+total **28**, beating the 4·⌊n/3⌋ = 36 estimate; enabled by the pipelined
+ternary rotate, rot45_probe: 0 DSP, +0.687 slack @2ns). Schedule: period
+8G, stage latency **7G+2** + uniform RTL shift H (all write->read lags
+≥ 1 — H is free). Batch contract verified vs plain r2 (1-3 LSB, same
+bound law as the r22 re-pin, identical SQNR); streaming model bit-exact
+vs batch over N=8..1024 fwd+inv, widths 8..25, scaling variants,
+multi-frame + markers. Memory per triple settled at **22G** complex words
+(retention rings for r1/r3/q1 — G>1 groups overlap in flight, registers
+would clobber — plus the static 8G pfifo): lane RAM at M=4096 ≈ 412 kb
+(r22 ≈ 306 kb). Next: fft_stage_r23.v mirroring the notes.md layer table
+register-for-register, then the production wrapper + timing sweep.
+
+Verdict: −25…−40% DSP over r22 — but tiny in absolute terms on the KU5P
+(8 DSPs at N=2048 ≈ 0.4% of the chip's ~1.8 k DSPs; the design is
+memory/crossbar/fabric-timing-bound, not DSP-bound). Worth a prototype
+only for DSP-lean targets or high-SSR builds (R≥4: −32…−64 DSP with zero
+timing change); otherwise the effort (P7-scale: golden re-pin + stage RTL
++ n mod 3 residue states + bit-exact suites + timing) buys poorer
+returns per DSP than the §5.1 memory policy does per MHz. **Deferred.**
+
 **Stretch goal — run-time `N` via stage bypass (`generic DYNAMIC_N`, off by default):**
 One `Nmax=8192` bitstream that can do any `Ncur=2^k≤Nmax` at run time by bypassing
 stages. `r2` `13` stages / `r22` `6` pairs+`1` would all be instantiated (`max` `DSP/BRAM` as swept for `Nmax`), each stage gets a `2:1` `INTERN` mux `stage_in→stage_out` vs `stage_in→bypass` (`~22 LUT/stage` `×2` for `I/Q` → `~300 LUT` `r2` / `~150 LUT` `r22` `+50L` decode, `0` extra `BRAM/DSP`). Delay `2·Dmax` `RAM` stays (`BRAM` sized to `Nmax`, `Ncur=64` wastes `32.5→1` `BRAM`), `TWIDDLE` `ROM[Nmax]` sub-sliced (`ROM_BASE(Dcur)` runtime offset), `SCALING_PACK[Ncur]`/`LATENCY(Ncur)=Ncur+Σ(3Dcur+9/10)` and `p=(cycles-LAT)%Mcur` become run-time muxes (`~10 LUT/stage` for `wptr+1-Dcur`/`k%4Dcur`), `tlast`/`tuser` from `LAT(Ncur)`. `v1` cheaper is `export_core --num-points $N` per `N` + outside `AXI` mux (`0` in-core `LUT`, `BRAM` exact, `WNS` as swept `+0.11/-0.02`); `DYNAMIC_N` is `1×` `DSP` (`24` `r22` `8192`) vs `N=64+1024+8192` `56 DSP` separate cores, at cost of `+0.25ns` bypass mux on `product-FIFO`/`DSP_A→PREG` (`WNS -0.020→-0.32` `R=2/4`, `-0.165→-0.45` `R=8` — needs the extra `k10`/`qq→u_d` pipeline already added) and `Mcur=Ncur/R` lane `Ncur` must divide `Nmax` (`R|Ncur` still). `SSR` `R>1` same per-lane `+22 LUT/lane` (`R=8` `+176L`). `ce` stall already, `N`-switch needs `ce` low + `rst` pulse to drain (datapath has no reset). `generic DYNAMIC_N=0` keeps `v1` `localparam` `DEPTH`/`LATENCY` and `0` penalty; `1` instantiates the bypass/mux and run-time `Dcur` logic; verification is `∀ Ncur` `bit-exact` vs `golden(Ncur)` (same `R=2/4/8` `R/2+1` double-quant `+` `r22` `1–2 LSB` re-pin).
@@ -730,6 +806,75 @@ expression-sizing gotchas) -- worth reading before the next RTL bring-up.
 Deliberate sequencing choices: golden-before-RTL (P1) is the load-bearing
 decision — everything downstream is then mechanical comparison. SSR comes
 late because it composes already-verified pieces.
+
+### 5.1 Deep-N extension: N up to 65536 (planned)
+
+**Current state (probed 2026-08-29)** — every golden model already runs at
+N = 65536 with no code changes: r2/r22 batch 0.4–0.6 s per frame, r2 DIT
+0.6 s, streaming r22 (2 frames) 2.0 s, canonical twiddles 0.03 s.
+**The RTL cores were exercised end-to-end the same day** (Verilator, full
+generate/generate_ssr harness vs the golden): r2 R=1 and r22 R=1 N=65536
+**bit-exact** (~60–70 s per run incl. build), SSR r22 R=8 / R=4 / R=2 (25 s /
+44 s / 146 s), SSR r2 R=2 (164 s) and the r22b corner order R=2 (127 s) all
+`rc=0`, `first_bad=None` — i.e. within the documented SSR tolerance. So
+the numeric + RTL sides of this extension are largely working already;
+the open work is tracked policy/sweep/docs (DN-C/DN-E) and promoting the
+ad-hoc probes into the committed suites.
+SQNR, wideband full-scale 16-bit Q0 input, auto scaling:
+
+| model | SQNR @ 65536 | SQNR @ 2048 (reference) |
+|---|---:|---:|
+| r2 batch (DIF) | 41.4 dB | 56.3 dB |
+| r22 batch (DIF) | 42.8 dB | 57.3 dB |
+| r2 batch (DIT) | 45.1 dB | — |
+
+**The SQNR slope is structural, not twiddle-limited**: twiddle width
+18→24 leaves it unchanged (41.36 → 41.36 dB). The datapath LSB is
+absolute while wideband per-bin |X/N| shrinks as 1/√N (−3.2 dB per
+octave observed); a full-scale single tone still lands ≈ +90 dB.
+Decision point DN-B below picks the documented stance.
+
+**Phases** (each ends in a reviewable state, same style as above):
+
+* **DN-A — numeric contract (≈0 cost):** extend `tools/verify_golden.py` to
+  N = 65536: batch r2/r22 fwd+inv, DIT, round trip, twiddle table, streaming
+  bit-exact vs batch, SSR lanes at M = N/R, corner orders (numeric), and
+  the saturation checks. Done: the same 165-check format all green.
+* **DN-B — precision policy decision:** pick the documented number for
+  16-bit Q0 wideband (41.4/42.8 dB) vs recommending wider `sample_width`
+  for big-N exports (+6 dB per bit); twiddle width stays at the default
+  (measured neutral). Frozen into the datasheet + README.
+* **DN-C — memory policy re-derivation (the load-bearing item):** at
+  65536 every delay line / product FIFO past ~1 k entries becomes BRAM/URAM
+  (stage-0 r22 ring ≈ 2 Mbit → URAM288: rings+pfifos ≈ 5–6 Mbit ≈ 20 URAM;
+  quarter-wave twiddle ROM ≈ 0.6 Mbit → ~17 BRAM36; SSR reorder buffers
+  4·M·32 bits each; R=2 crossbar WN table becomes a large async LUTRAM
+  read — candidate for BRAM + registered read). Extend
+  `doc/mem_cutoffs.md` with the URAM-in-ring decisions — the registered-
+  read variant that is already the named r22 R=1 lever — and spike OOC ring
+  codings at N = 65536 (`spikes/S6_bigN/`).
+* **DN-D — RTL verification:** the ad-hoc RTL runs above already prove
+  bit-exactness/SSR-tolerance at 65536 for every shipped core family; the
+  planned work is promoting that into the committed suites (sampled
+  N = 16384 / 32768 / 65536: r2, r22, SSR R=2/4/8, freeze, exports with
+  the shipped `compare.py` self-check). Sims are O(N×frames), keep frames
+  small.
+* **DN-E — timing and datasheet:** OOC sweep rows at 65536 (r2/r22 ×
+  R=1/2/4/8, KU5P @ 500 MHz), post-route on the primary configs; publish
+  the achievable clock (expect 450-MHz class for R=1 until DN-C lands — the
+  R=1 limiter transitions from LUTRAM to BRAM/URAM clock-to-out, the same
+  path class that already caps SSR rows; SSR stays crossbar-bound
+  regardless). Corner orders at 65536 numeric-only (their wrappers already
+  miss 500 MHz at N = 4096).
+
+**Risks / mitigations:** R=1 limiter transition (LUTRAM→BRAM/URAM
+clock-to-out) — mitigated by doing DN-C before any 500 MHz promise;
+SSR crossbar WN table at M = 32768 (R=2) — architecture-touching
+(registered-read) scheduled inside DN-C; URAM budget (KU5P: 640 URAM288)
+amply covers the ~20–40 URAM estimate but must be confirmed by the DN-C
+spikes. **Explicitly out of scope:** exhaustive width/scaling sweeps at
+65536 (sample only), corner-order timing closure at 65536, `DYNAMIC_N` at
+65536, radix-2³ (stretch goal above).
 
 ## 6. Resource/throughput expectations (design targets, verified later)
 

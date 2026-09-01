@@ -12,3 +12,8 @@ vivado.log
 \#*.tmp
 synth_n*/
 xb_*/
+
+.omp/
+thoughts/
+#*#
+.#*

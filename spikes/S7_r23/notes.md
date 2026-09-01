@@ -1,0 +1,354 @@
+# Spike S7 — radix-2³: the 45-degree (W8) rotation — timing/pipelining probe
+
+Charter (PLAN stretch goal): estimate how the ±45° class (W^{N/8}/W^{3N/8},
+√2/2 coefficients — the one thing that keeps the deepest r2³ triple's
+multiplier alive) times and pipelines, BEFORE writing the golden model.
+
+Stage-role mapping (settled up front): within a merged triple there is ONE
+shared proper cmul (4 DSPs) time-multiplexing ALL product classes (~7 per
+8-clock group, staggered P7-style). Per-stage specialization only appears at
+the DEEPEST triple, where the slices collapse:
+
+| sub-stage | twiddle slice | handling |
+|---|---|---|
+| N+0 (outer) | {W⁰, **W^{N/8}**, W^{N/4}, **W^{3N/8}**} | W⁰/W^{N/4} fabric-trivial; **±45° = the spike's subject** |
+| N+1 (mid)   | {W⁰, W^{N/4}} | trivial (operand ±j fold) |
+| N+2 (inner) | {W⁰} | pass-through, no multiply |
+
+## Findings
+
+### 1. Numeric side (rot45.py): the 45° words already exist; the fabric
+rotate would only ever deviate from them
+
+- q = round_half_up(√2/2·2^td): **5–7 non-zero taps** (td 8..18, pattern
+  td-invariant, q(td+2)=4·q(td)) → ~3 CARRY8 levels of fabric constant
+  multiply, the direct generalization of P6's `trivial_prod`.
+- The canonical magnitude-first table already contains the eighth roots as
+  ordinary words: T[N/8] = (92682, −92682), T[3N/8] = (−92682, −92682) at
+  td=17 — exactly ±45.00°/135.00°. **A ROM-word 45° product IS the pinned
+  canonical contract; there is nothing to re-quantize.**
+- Fabric-rotate candidates vs the float ideal (N=256, tw=18, td=17):
+  product-side exact rotate (B) 0.28 LSB, operand-side (C) 0.40 LSB,
+  ROM-precombined T45 table (A) 0.27 LSB; pairwise ≤ 1 LSB. All inside the
+  existing noise floor — the decider was always timing, not numerics.
+
+### 2. Timing probe (probe.py, one stage D=128/16b/18b, KU5P OOC @2 ns)
+
+| variant | placement of the ×q fabric rotate | DSP | LUT | WNS | fail EP | worst path |
+|---|---|---:|---:|---|---:|---|
+| `base` | none — 45° rides the shared cmul as ROM words | 4 | 867 | **MET** | 0 | tw_dout → DSP B |
+| `w8_pre` | operand-side, comb. into AREG | 4 | 1140 | −1.928 | 120 | k3_reg → DSP A, 12 lvl (5 C8) |
+| `w8_pre_pipe` | + own register before AREG | 4 | 1140 | −1.875 | 78 | k3_reg → DSP A (Vivado retimes the pipe register away) |
+| `w8_post` | product-side after PREG, into shift stage | 4 | 1201 | −2.002 | 32 | DSP_OUTPUT → LUTRAM D, 17 lvl (10 C8) |
+| `w8_post_pipe` | tap tree + own register, shift next hop | 4 | 1201 | −1.164 | 38 | **DSP_OUTPUT → tree reg alone = 3.011 ns** |
+
+`use_dsp="no"` verified (4 DSPs everywhere — the ×q trees really stayed
+fabric). Even a perfect two-way split cannot reach 2 ns: the post-DSP tree
+hop ALONE is 3.0 ns (8-CARRY8 propagate chains on 55-bit operands), and the
+operand side balances at 3.9 ns across the retimed registers. The only
+remaining fabric escape is a hand-truncated windowed multiplier (~22-bit
+result of the 55-bit product) plus a 2-extra-hop schedule — for −4 DSPs.
+
+### 3. Verdict
+
+**The 45° rotation rides the shared cmul as ordinary canonical-table words —
+zero new hardware, timing = base = MET (the proven r22 pipeline).** The
+fabric rotate (operand- or product-side, with or without a pipe register) is
+REJECTED: ~3–4 ns per hop against a 2 ns budget, to make the deepest triple
+DSP-free (4·⌊n/3⌋ → 4·(⌊n/3⌋−1), i.e. 12→8 at N=2048) — ≈0.2 % of the KU5P's
+1824 DSPs. PLAN caveat (i) is confirmed as the correct accounting: the
+multiplier stays busy to the last stage, 4·⌊n/3⌋ stands.
+
+Corollary for the golden model:
+- Contract = canonical twiddle table throughout; no separate T45 table, no
+  extra quantization point for the 45° class (unlike a fabric rotate, which
+  would have deviated ≤1 LSB — moot now).
+- The merged triple still RE-PINS the rounding points exactly like r22 did
+  (S5 finding 2): fused triple products round once at td+σ_fused instead of
+  per sub-stage. Expect a few-LSB delta vs the plain r2 golden with
+  identical SQNR — same re-pin procedure as P7.
+- Stagger duty ~7 products per 8-clock group (≤1/clk, throughput safe);
+  exact class-to-phase choreography is golden-model work.
+- PLAN caveat (iii) (combine depth on the L0→CARRY8→LUTRAM-write path): the
+  write-path DATA stays structurally r22's (first-level butterflies in the
+  rings, 3-C8 class — S5 impl_aggr measured that class at +0.003 post-route
+  with aggressive directives); the r2³ 3-level diff trees land on the
+  DSP-OPERAND path, which base shows has budget. To be confirmed by the
+  stage RTL once the schedule exists.
+
+## Files
+
+- `rot45.py` — tap structure + candidate LSB deltas (numeric contract)
+- `mk_variants.py` — generates `variants/` from the S5 `nat` stage
+- `probe.py`, `probe_top.v` — OOC KU5P @2 ns probe (reuses S5's
+  `rtl_check.write_r22_twiddle_mem`)
+- `build_*/` — Vivado runs per variant
+
+(Lint note: iverilog cannot parse the function-call bit-selects that the
+proven nat file already uses; lint with the two `round_shift_bw(...)[…]`
+lines rewritten — all five variants parse clean then.)
+
+## Pipelining plan for the r2³ stage (ternary-adder assumption, post-S7 revision)
+
+Assumption (user directive): a 64-bit ternary adder `d <= a + b + c` meets
+timing at 500 MHz as ONE logic level. This re-opens the fabric rotate that
+S7 rejected (that verdict measured UNPIPELINED trees) — and working the
+kernel algebra through exposes a structural fact S7's "base" missed:
+
+**Kernel algebra (verified numerically, 500 random 8-groups).** With
+y_k = the 7 non-trivial outputs of the 8-group, table twiddles
+T[k·j·8^m] (k = 1..7, j = group index) and d0..d3 = the group's four
+first-level diffs:
+
+    X1 = (d0 - j·d2) + (r1 - j·r3)      X5 = (d0 - j·d2) - (r1 - j·r3)
+    X3 = (d0 + j·d2) + (r3 - j·r1)      X7 = (d0 + j·d2) - (r3 - j·r1)
+    r1 = W8·d1,  r3 = W8·d3   (THE only two rotates; W8 = W^{M/8})
+    X2/X6 = q0 ± j·q1-fold · T[2j·8^m],  X4 = (p0-p1) · T[4j·8^m]
+
+- The W8^{1,3} kernel constants CANNOT ride the twiddle: splitting the
+  d-class operands around them costs 2 products per output → 11 products
+  per 8 clocks > 8. **The operand-side rotate is structurally required,
+  in EVERY triple** (S7's "45° rides as ROM words, zero new hardware"
+  was incomplete — it ignored the kernel constants).
+- Linearity halves the rotate cost: rot135(x) = -j·rot45(x), so 2 rotates
+  per 8-group feed all four d-class outputs through free sign/swap
+  combines (duty 1/4 of the product path, 2/8G on the stream).
+- Consequence: at the DEEPEST triple (j = 0 → all twiddles T[0] = W⁰) the
+  products ARE the operand combos → the shared cmul is idle → **DSP-free
+  deepest triple**: lane = 3·4 = 12 DSPs, not 16. This reverses S7's
+  "4·⌊n/3⌋ stands" — with the pipelined rotate, R=2 N=8192 totals
+  2·12 + 4 = **28 DSPs** (the PLAN's own N=2048 R=2 row number, coincidentally).
+
+**Rotate unit (3 hops, round folded into the last add).** q = 92682 =
+2^{16,14,13,11,9,3,1} (7 taps). Folding the (re±im) pre-add into the tree
+gives 14 shifted terms + the round bit — still 3 ternary levels:
+
+    L1: P1 = re·2^16 + re·2^14 + re·2^13   Q1 = im·2^16 + im·2^14 + im·2^13
+        P2 = re·2^11 + re·2^9  + re·2^3    Q2 = im·2^11 + im·2^9  + im·2^3
+        (re·2^1, im·2^1 pass as wires)
+    L2: A = P1 + P2 + re·2^1               B = Q1 + Q2 + im·2^1
+    L3: re' = A + B + (1<<16)   [ternary, round-half-up folded]
+        im' = B - A + (1<<16)   [ternary with negated A]
+    >> 17 is pure wiring; result rounds to CB (18b) — the operand rotate's
+    one extra rounding (rot45.py: 0.40 LSB, inside the contract).
+
+8 ternary adds (~37-bit) per unit, 2 units per triple (the two rotate-class
+d's can be < 4 clocks apart at small G), ~1.3k LUT + ~1.2k FF per triple.
+The user's literal grouping (pre-add + 7 taps over 3 stages) is the 4-hop
+fallback; the folded tree is preferred (latency matters for the pfifo window).
+
+**Layer table (one merged triple, period 8G clocks, G = M/8^{m+1}).**
+
+| hop | contents |
+|---|---|
+| L0 | registered reads: ring0 (4G, raw), ringA_s/d (2G), ringB_s/q/r/u (G), input x, twiddle DOUT (BRAM, 2-reg read) |
+| L1 | first-level butterflies: sA = round(a+x, σ_{3m}) [1 C8], dA = a−x [1 C8]; write ring0/ringA at arrival; dA regs = rotate inputs |
+| L2 | B-level pairing (distance 2G): pB = sA_n + sA_o, qB = sA_n − sA_o, rB = dA_n + dA_o, uB = dA_n − dA_o [1 C8 each]; write ringB at arrival |
+| L3–L5 | rotate tree R1/R2/R3 (2 units, phase-gated to the rotate-class d's) → r1/r3 regs |
+| L6 | C-level operand combines: d-class bases (d0 ∓ j·d2) [1 C8 from L0 reads], r-combos (r1 ∓ j·r3 / r3 ∓ j·r1) [1 C8 from L5 regs], sum [1 C8]; q-class folds qB ± j·uB; p-diff; → 7-way k-mux |
+| L7 | AREG/BREG capture (operand + twiddle) — DSP input regs, as r22 `nat` |
+| L8 | im-path products (MREG) + re-operand freeze (the proven stagger) |
+| L9 | re-path products (MREG) + C-port regs (CREG) |
+| L10 | ALU combine → PREG |
+| L11 | fused shift staging (td + σ per class); y0/X0-chain alignment |
+| L12 | pfifo write + output mux |
+
+**Duty/throughput audit (per 8G period):** 7 cmul products (1 idle phase —
+the k-mux is 7-way, tighter than r22's 3-way but ≤1/clk holds); 2 rotates
+(units idle 7/8); 1 write/clock per ring. Binding path per product:
+L1 → rotate (3) → L6 combine → L7 AREG → L8/L9/L10 DSP → L11 → L12
+≈ 12 hops input→pfifo (vs r22's ~9) → **stage latency ≈ 6G + 12**
+(vs r22 pair 3D+9); exact phases = golden-model derivation.
+
+**Timing audit:** DSP internals = the proven r22 `nat` stagger, untouched.
+Rotate hops = single ternary adds ≤ 38-bit — MET by assumption. Operand
+path L6 is +1..2 C8 vs r22 (3-level combines) — S7 base showed budget
+(its worst path was tw_dout→B). Write path unchanged (3-C8 class,
+S5 impl_aggr +0.003). Watch items: (a) the pfifo window shifts +3 hops —
+use the r22 lesson (per-block product-window flag tracking ready steps,
+NOT a fixed phase window); (b) the X0/y0 chain needs a ~12-deep alignment
+chain; (c) ring/pointer schedule (warm preloads, K_PRELOAD parity) =
+golden-model work, same machinery as r22.
+
+**Resources (R=2, N=8192, lanes M=4096, 4 triples, G = 512/64/8/1):**
+DSP 2×12 + 4 = 28 (r22: 52). Rings ≈ 14G/triple (4G + 2·2G + 4·G + 2G
+pfifo) → Σ 14·585 ≈ 8.2k words ≈ 262 kb/lane (r22: ~306 kb/lane); BRAM
+candidates: ring0 4G = 2048 words (and 2G = 1024 borderline) per lane,
+crossbar reorder + WN table as per DN-C; rotate fabric ≈ 1.3k LUT/triple
+→ ~5.2k LUT/lane, ~11k total — the price of the 24 saved DSPs and the
+enabler of the whole architecture.
+
+**Next:** golden model (pin the y_k ↔ T[k·j·8^m] contract, per-class fused
+shifts, the 12-hop schedule and pfifo windows), then fft_stage_r23.v
+mirroring this table register-for-register.
+
+## Inference spike: the ternary rotate tree (rot45_probe/, done)
+
+The plan hinged on `a+b+c` chains inferring as fabric at 500 MHz. Verified:
+one rot45_unit (3 hops exactly as planned: L1 4 ternary partials + delayed
+2^1 taps, L2 2 ternary, L3 2 ternary with the round-half-up folded in,
+`>>>TD`+truncation as D-side wiring) ×2 instances in a probe top, OOC KU5P
+@2 ns:
+
+- **DSP48: 0** — nothing leaks into DSP primitives.
+- **Timing MET, worst slack +0.687 ns** (the L2 hop, i.e. the deepest);
+  0 failing endpoints — every hop of both units and the output consume
+  path passes with margin.
+- Worst path = **5 logic levels (3 CARRY8 + 2 LUT)** = exactly ONE ternary
+  add (LUT compressor level + one carry chain); no register merging, no
+  multi-add paths.
+- Area: 516 LUT / 488 FF / 66 CARRY8 for BOTH units + consume glue
+  → ~250 LUT/unit — 4× under the plan's ~650 LUT/unit estimate
+  → rotate fabric ≈ ~450 LUT/triple, ~1.8k LUT/lane at 4 triples
+  (vs 4 saved DSPs in the deepest triple + the structural enabler).
+
+Verdict: the ternary assumption holds in silicon terms — the pipelining
+plan (notes above) stands. Remaining unknowns are schedule-only (pfifo
+window +3 hops, ring phases), i.e. golden-model work, not inference risk.
+
+## Golden model (DONE): batch contract + cycle-accurate streaming stage
+
+`fft_fixed_batch_r23` + `_R23DIFStage` + `R23SDFGoldenModel` now live in
+`src/golden.py`; tests in `tests/test_golden_r23.py` (suite 169 green).
+
+**Batch contract** (verified vs plain r2: 1-3 LSB delta at 16b/18b, same
+bound law as the r22 re-pin -- `max(2, 2^(W-15), 2^(18-tw))` -- identical
+SQNR, fwd+inv, N=8..1024, all leftover counts):
+
+    s_i = round(a_i+a_{i+4}, s0);  d_i = a_i-a_{i+4}        (i = 0..3)
+    p0 = round(s0+s2, s1);  p1 = round(s1+s3, s1)
+    q0 = s0-s2;             q1 = s1-s3                       (exact)
+    r1 = rot45(d1);         r3 = rot45(d3)    -- the ONLY two rotates
+    y0 = round(p0+p1, s2)
+    y1 = cmul(bm+(r1-j r3), T[  j*8^m], td+s0+s1+s2)   bm = d0-j d2
+    y2 = cmul(q0-j q1,      T[2j*8^m], td+s1+s2)
+    y3 = cmul(bp+(r3-j r1), T[3j*8^m], td+s0+s1+s2)    bp = d0+j d2
+    y4 = cmul(p0-p1,        T[4j*8^m], td+s2)
+    y5 = cmul(bm-(r1-j r3), T[5j*8^m], td+s0+s1+s2)
+    y6 = cmul(q0+j q1,      T[6j*8^m], td+s1+s2)
+    y7 = cmul(bp-(r3-j r1), T[7j*8^m], td+s0+s1+s2)
+    x[off+j+bitrev3(k)*G] <- y_k          (bitrev3 = 0,4,2,6,1,5,3,7)
+    rot45(x) = (rs((xr-xi*js)*q8, td), rs((xi+xr*js)*q8, td)), q8 = 92682
+
+**Streaming stage, FINAL schedule** (period 8G; stage latency **7G+2**;
+the RTL adds a uniform operand-phase shift H -- every write->read lag is
+>= 1, so any H works without touching the model):
+
+    [0,4G):  a0..a3 -> ring0(4G); staggered y2/y6/y1 of the PREVIOUS
+             block (slots [0,G) / [G,2G) / [3G,4G); [2G,3G) idle)
+    [4G,5G): a4: sA_0 -> ringA_s[g] (2G), dA_0 -> ringA_d0[g] (G)
+    [5G,6G): a5: sA_1 -> ringA_s[G+g], dA_1 -> ringA_d1[g] (G)
+    [6G,7G): a6: p_0/q_0 -> ringB_p/ringB_q (G);
+             bm/bp = dA_0 +- j dA_2 -> ringBB[g]/[G+g] (2G)
+    [7G,8G): a7: p_1/q_1; y0 -> y0_reg; y4 -> pfifo[7G+g];
+             q_1 -> ringB_q1[g] (G); rot(dA_3) -> unit-B pipe
+    unit A:  re-reads ringA_d1 at [10G-3+g]; ringR[g] written at 10G+g
+    unit B:  ringR[G+g] written at 7G+3+g
+    slots:   y1/y5/y3/y7 at [3G..7G)+8G: cmul(ringBB, ringR)
+    emission: latency 7G+2; member windows [(i+7)G+1, (i+8)G+1);
+             member 0 = y0_reg, else pfifo[BASE[member]+g]
+             (BASE: y4->7G, y2->0, y6->G, y1->3G, y5->4G, y3->5G, y7->6G)
+
+**Lessons that shaped it (the "no rebalancing" insurance):**
+- Per-group values consumed AFTER their register's natural lifetime
+  (r1/r3, q1) must live in RINGS, not registers -- G > 1 groups overlap
+  in flight; a hold register is clobbered after 1 clock. The r-ring
+  write is phase-shifted by the 3-clock rotate pipe, so its phase->group
+  map is offset by 3 (read addr (g+3)%G at the input, (g-3)%G at the
+  write) -- the RTL must reproduce these +3-shifted addresses exactly.
+- bm/bp are pre-combined at [6G,7G) to bound ringA_d0's lifetime (the
+  d-class slots at [3G..7G)+8G would otherwise read ringA_d0 two blocks
+  after its overwrite). dA_2 is never stored.
+- All ring reads use pre-edge snapshots; the y5/y7 slots read rings in
+  the same phase window where the next block writes them (read-old).
+- Memory per triple (complex words): ring0 4G + ringA_s 2G +
+  ringA_d0 G + ringA_d1 G + ringB_p G + ringB_q G + ringB_q1 G +
+  ringBB 2G + ringR 2G + pfifo 8G = **22G** (up from the 14G estimate;
+  the retention rings and static 8G pfifo are the delta). Lane RAM at
+  M=4096: ~22*585 = 12.9k words ~ 412 kb (r22: ~306 kb/lane). pfifo can
+  shrink to 7G by relabeling bases (8th slot is idle).
+- Test-harness trap that cost a loop: the batch contract processes ONE
+  frame per call -- multi-frame verification must slice per frame.
+
+**RTL hop budget (declared, to mirror exactly):** ring-read capture (L0)
+-> operand combine -> AREG mux -> im MREG -> re MREG/CREG -> ALU PREG ->
+shift staging -> pfifo write, uniform for all 7 classes (the d-class
+rotate sits BEFORE the combine, inside the +3-shifted ringR timing).
+The y0 path needs a 1-deep alignment register (emission at compute+1).
+
+## RTL: rtl/fft_stage_r23.v (WRITTEN, lint-clean; bring-up OPEN)
+
+The stage mirrors the golden `_R23DIFStage` register-for-register with the
+r22 pipeline conventions (L0 capture -> L1 combines/AREG -> L2 im MREG ->
+L3 re MREG/CREG -> L4 ALU PREG -> L5 shift -> L6 pfifo write, H = 6).
+
+Structural decisions baked in:
+- Static per-class addressing everywhere: pfifo addr = cls_base + g
+  (bases y2->0, y6->G, y1->3G, y5->4G, y3->5G, y7->6G, y4->7G), twiddle
+  ROM addr = ROM_BASE + k*G + g (the mem writer lays out T[k*g*8^m]
+  there), all the value rings are 1W1R at addr g.
+- Ring widths: ring0 = IW (raw inputs), ALL value rings = CB
+  (WIDTH+2) -- |rot(dA)| <= sqrt2*2^W fits CB; the product operands are
+  OB = WIDTH+4 (3-term d-class combos reach ~4.3*2^W).
+- Rotate units: 3-stage pipelined ternary trees (R1 = taps 0-2/3-5
+  partials + the 7th tap, R2 = A/B sums gated, L3 = final add with the
+  round folded in, >>>TD slice). ringR writes: unit A at model 10G+g
+  (gate (k-2G) mod 8G < G), unit B at 7G+3+g (G==1, L1-comb input) or
+  7G+4+g (G>1, registered input) -- the +3 pipeline hop shifts the
+  phase->group map by 3 exactly as in the golden (read addr (g+3)%G,
+  unit-B write addr (g-3)%G).
+- k1-gated ring writes with data = L1 comb (p_0/q_0/bm/bp/q_1 -- the
+  r22 sram pattern); the emission/shift/pfifo gates use k6/k5/k6.
+- Q8's tap positions extracted by a constant function; popcount != 7
+  configs are rejected ($error) -- the generator constrains TD.
+- y0 alignment chain = 6 x CB regs, tap [4] at the emission mux.
+
+Known-open for bring-up (next session, the r22 flow):
+1. `write_r23_twiddle_mem` (ROM layout: 7 slices x G words per triple).
+2. Single-stage Verilator TB vs `_R23DIFStage` (per-position compare,
+   skip = latency-1; expect the off-by-one hunt on the emission/rotate
+   windows exactly like the S5 L0-retiming).
+3. K_PRELOAD chaining semantics for multi-stage chains (upstream
+   latency = sum(7G+2+H) -- the model's pos-up convention).
+4. Vivado probe (dsp_probe-style): DSP absorption (AREG/BREG/MREG/CREG/
+   PREG), the rot trees in fabric, WNS @2ns.
+
+## Synthesis probe runs (rtl_probe/) -- timing status and fixes applied
+
+Probe: one fft_stage_r23 (G=128, 16b/18b) OOC KU5P @2ns (the S5 dsp_probe
+pattern; probe.py + probe_top.v + gen_mem.py -- the ROM layout is the
+interleaved 8G-word form word[base_k+g] = T[k*g*8^m], base_k = the class
+bases).
+
+| run | state | DSP | LUT | FF | WNS | finding |
+|---|---|---:|---:|---:|---|---|
+| 1 | first cut | 4 | 3220 | 1028 | -2.555 | ALL failing paths = the **y4 class**: ring0 DOUT -> sA_3 -> p1 -> c4 (3 chained CARRY8) -> AREG -> MREG -> CREG in ONE clock (13 lvl). The y4 combine needed pipelining. |
+| 2 | y4 pipelined (sA3_r/p1_r, late AREG, k8-gated y4 pfifo write) | 4 | 41815 | 29877 | -1.893 | the pfifo grew a SECOND write port (the normal k7 + the y4 k8) -> 2W+1R does not infer as RAMB/LUTRAM -> the pfifo collapsed to FLIP-FLOPS (1024x16x2 = the 30k FFs) + the write-decode logic (the 41k LUTs). FIX: merge into ONE write port (the gates are disjoint). |
+| 3 | pfifo single port | 4 | 2874 | 1096 | -2.013 | the remaining failure family: ringR1 (BRAM) DOUT -> c1 = bm+r1+jr3 (2 chained 20-bit adds) -> mux -> DSP A. The tools absorbed BOTH declared read stages into the BRAM's ADDRA+DOA, leaving the DOUT to drive the combine combinationally. |
+| 4 | 3-stage reads (r1/r2/r3 -- one MORE stage than the primitives can absorb, per the user directive) + the sync-read coding | 0 | 104 | 224 | MET | **the design PRUNED to a trace** (constant propagation removed the DSPs and the rings as "unreachable") -- a connectivity break from the line-based edits (the known suspects: the butterflies still consuming r2 in one spot, the p1_r/c4 wiring, the out_im tap skew -- all since fixed but the prune persists). Simulation shows the outputs ALIVE (421 changes/1200 clocks) -- the classic sim-alive/synth-pruned mismatch. |
+
+**Root-cause findings so far (the user's directives, confirmed):**
+- The ring reads were coded as ASYNC-read wires (`wire w = mem[addr]` +
+  the capture register) -- an async read CANNOT map to BRAM, so every
+  ring forced LUTRAM regardless of ram_style ("automatically implemented
+  using LUTRAM. BRAM implementation would be inefficient" -- at 512/1024
+  deep = the mux trees the user warned about). FIXED: the L0 captures now
+  read the memories DIRECTLY in the clocked block (the sync-read coding).
+- The pfifo 2-write-port collapse: NEVER give a memory two separate
+  write statements -- merge into one port when the gates are disjoint.
+- MEM_STYLE as an untyped string parameter used in `(* ram_style =
+  MEM_STYLE *)`: Vivado IGNORED it (the rings went LUTRAM); the literal
+  attribute works for the pfifo (the "Infeasible attribute" warning
+  proves it attaches) but the ring declarations... the 128x18 rings are
+  mapped to LUTRAM by Vivado's auto-heuristic ("BRAM implementation
+  would be inefficient" -- Vivado's own threshold disagrees with the
+  >32-entry rule; needs the attribute honoured or a wrapper decision).
+
+**OPEN (next session):** the constant-propagation prune of the compute
+chain. The diagnostic sequence: (1) verify the emitted netlist's
+connectivity around c_c/p_re, (2) check the twiddle hold chain depth
+(tr_w = tw_h2 is 1 clock short for the 3-stage read -- the BREG captures
+class(w+1) instead of class(w): tw_w should be tw_h3), (3) the rot
+window conditions ((k+2)/(k+1) forms) need the bring-up diff, (4) the
+Verilator single-stage check vs _R23DIFStage with the per-cycle compare
+-- the S5 playbook finds this class of bug mechanically.
