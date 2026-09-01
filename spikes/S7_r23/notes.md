@@ -654,3 +654,37 @@ NEXT: (i) try to force RAM64X1D inference (single-bit aux array?
 different coding?) or take the +2 cascade with the constant
 recalibration (harnesses make it mechanical); (ii) retime the u_t2
 class-combine -> DSP operand path; (iii) re-probe.
+
+## The output-FD-stage fix (per the >32-deep RAM rule) -- session 3 cont.
+
+Directive applied: any RAM deeper than 32 gets an output FD stage in
+the pipeline. Implemented as per-class READ REGISTERS (em1..em7) plus
+a registered member select (mm_r) between the LUTRAM read and the
+emission mux:
+
+    emN <= pfN_re[g_e];  mm_r <= mm;
+    case (mm_r) ... out_re <= emN_re ... default: y0_pipe[7]
+
+- the RAM read path now ends register-to-register: the RAM64M
+  shared-address mux + the async read + the 16:1 chunk mux all fit
+  inside one short hop (logic 0.68 ns total), and the member mux runs
+  FF->FF. The g_r leak is harmless -- the read address g_e = g_r - 2
+  is recomputed locally per chunk.
+- the emission lands one cycle later -> stage latency +1:
+  trip_rtl_lat 7G+12, trip_kpre +11/stage, LATENCY 8246, H=49
+  (bringup3 rule: acc += LATS[j] + H + 3). The leftover-pair trims
+  STAYED 3/3 -- they are invariant to upstream triple-latency shifts
+  (the pair KP tracks the clock; only the r23->r22 convention
+  difference is trimmed). y0_pipe extended to tap 7.
+- ALL bring-ups re-verified bit-exact: single stage (H=9), 3-chain,
+  full core INV=0/1 at H=49.
+- probe (synth+route): WNS -0.533 -> -0.310, TNS 5228 -> 450 ps, the
+  u_t0 pfifo paths GONE.
+
+REMAINING (-0.310, ~6 endpoints, all one structure): the rot-B /
+ring-write path in u_t1/u_t2 -- x_r3 -> dA subtract -> per-class
+shift mux -> ringA_d1/rbbp BRAM write data (5-6 levels) and x_r3 ->
+jmdA capture (7 levels). Fix = register dA/jmdA one more cycle
+before the shift/combine (the affected ring-write schedule shifts
++1; the k-gates move from k3 to k4 for those rings) -- mechanical,
+same pattern as the pfifo fix.

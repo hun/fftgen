@@ -84,7 +84,7 @@ module fft_sdf_r23 #(
     // (the pfifo write precompute moved the emission one cycle later)
     function integer trip_rtl_lat;
         input integer m_;
-        trip_rtl_lat = 7 * (N >> (3 * m_ + 3)) + 11;
+        trip_rtl_lat = 7 * (N >> (3 * m_ + 3)) + 12;
     endfunction
     function integer trip_gold_lat;
         input integer m_;
@@ -107,7 +107,7 @@ module fft_sdf_r23 #(
         begin
             acc = 0;
             for (ii = 0; ii < j_; ii = ii + 1)
-                acc = acc + trip_gold_lat(ii) + 10;
+                acc = acc + trip_gold_lat(ii) + 11;
             trip_kpre = ((8 * (N >> (3 * j_ + 3)))
                          - (acc % (8 * (N >> (3 * j_ + 3)))))
                         % (8 * (N >> (3 * j_ + 3)));

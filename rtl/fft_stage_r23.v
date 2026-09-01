@@ -561,7 +561,7 @@ module fft_stage_r23 #(
     reg signed [MWB-1:0] prod_re_re, prod_re_ti;     // L3 (MREG)
     reg signed [MWB-1:0] p_re, p_im;                 // L4 (PREG)
     reg signed [PW-1:0] shift_p_re, shift_p_im;      // L5
-    reg [2*IW-1:0] y0_pipe [0:6];   // {im, re} pairs (y0 has no DSP)
+    reg [2*IW-1:0] y0_pipe [0:7];   // {im, re} pairs (y0 has no DSP)
     // pfifo write precompute: the write address / WE / data are
     // registered one cycle ahead of the write edge so the deep
     // LUTRAM chunk write-enable decodes from registers (the
@@ -638,13 +638,6 @@ module fft_stage_r23 #(
     // the read address g_e stay independent -- an in-block sync read
     // makes Vivado share one address port and mux g_r into the read
     // path, which misses 2 ns)
-    wire [IW-1:0] pf1_rd = pf1_re[g_e], pf1_rd_im = pf1_im[g_e];
-    wire [IW-1:0] pf2_rd = pf2_re[g_e], pf2_rd_im = pf2_im[g_e];
-    wire [IW-1:0] pf3_rd = pf3_re[g_e], pf3_rd_im = pf3_im[g_e];
-    wire [IW-1:0] pf4_rd = pf4_re[g_e], pf4_rd_im = pf4_im[g_e];
-    wire [IW-1:0] pf5_rd = pf5_re[g_e], pf5_rd_im = pf5_im[g_e];
-    wire [IW-1:0] pf6_rd = pf6_re[g_e], pf6_rd_im = pf6_im[g_e];
-    wire [IW-1:0] pf7_rd = pf7_re[g_e], pf7_rd_im = pf7_im[g_e];
 
     // shift-amount select (the shift comb runs at w+8; k8 = the product's
     // model phase for ALL classes -- the y4 AREG is no later now)
@@ -717,10 +710,9 @@ module fft_stage_r23 #(
             tw_h1 <= 0; tw_h2 <= 0; tw_h3 <= 0; tw_h4 <= 0;
             y0_pipe[0] <= 0; y0_pipe[1] <= 0; y0_pipe[2] <= 0;
             y0_pipe[3] <= 0; y0_pipe[4] <= 0; y0_pipe[5] <= 0;
-            y0_pipe[6] <= 0;
+            y0_pipe[6] <= 0; y0_pipe[7] <= 0;
             cls_r <= 0; g_r <= 0; w_pf_r <= 1'b0;
             pf_d_re <= 0; pf_d_im <= 0;
-            out_re <= 0; out_im <= 0;
         end else if (ce) begin
             // ---- L0: capture reads + input + twiddle DOUT ----
             tw_dout <= tw_rom[rom_addr];
@@ -839,20 +831,6 @@ module fft_stage_r23 #(
                     default: begin pf7_re[g_r] <= pf_d_re; pf7_im[g_r] <= pf_d_im; end
                 endcase
             end
-            case (mm)
-                3'd1: begin out_re <= pf7_rd; out_im <= pf7_rd_im; end
-                3'd2: begin out_re <= pf1_rd; out_im <= pf1_rd_im; end
-                3'd3: begin out_re <= pf2_rd; out_im <= pf2_rd_im; end
-                3'd4: begin out_re <= pf3_rd; out_im <= pf3_rd_im; end
-                3'd5: begin out_re <= pf4_rd; out_im <= pf4_rd_im; end
-                3'd6: begin out_re <= pf5_rd; out_im <= pf5_rd_im; end
-                3'd7: begin out_re <= pf6_rd; out_im <= pf6_rd_im; end
-                default: begin
-                    out_re <= y0_pipe[6][IW-1:0];
-                    out_im <= y0_pipe[6][2*IW-1:IW];
-                end
-            endcase
-
             // ---- butterfly ring writes (data = L1 comb, gate k1) ----
             if (d2_a4) begin
                 ringA_s_re[as_addr_w] <= sA_re_c;
@@ -925,11 +903,54 @@ module fft_stage_r23 #(
             y0_pipe[4] <= y0_pipe[3];
             y0_pipe[5] <= y0_pipe[4];
             y0_pipe[6] <= y0_pipe[5];
+            y0_pipe[7] <= y0_pipe[6];
 
             // ---- phase ----
             k <= k_next;
             k1 <= k; k2 <= k1; k3 <= k2; k4 <= k3; k5 <= k4; k6 <= k5;
             k7 <= k6; k8 <= k7; k9 <= k8; k10 <= k9;
+        end
+    end
+
+    // ---- emission: per-class read registers + the member mux ----
+    // Any RAM deeper than 32 needs an output FD stage: qN registers the
+    // LUTRAM read (the write address g_r and the read address g_e then
+    // live on separate primitive ports with only short local routes),
+    // and the member mux runs register-to-register. The emission lands
+    // one cycle later than the async-read version (mm_r is mm delayed
+    // to stay paired with the qN data; y0 uses the next pipe tap).
+    reg [IW-1:0] em1_re, em1_im, em2_re, em2_im, em3_re, em3_im, em4_re, em4_im;
+    reg [IW-1:0] em5_re, em5_im, em6_re, em6_im, em7_re, em7_im;
+    reg [2:0] mm_r;
+    always @(posedge clk) begin
+        if (rst) begin
+            em1_re <= 0; em1_im <= 0; em2_re <= 0; em2_im <= 0;
+            em3_re <= 0; em3_im <= 0; em4_re <= 0; em4_im <= 0;
+            em5_re <= 0; em5_im <= 0; em6_re <= 0; em6_im <= 0;
+            em7_re <= 0; em7_im <= 0;
+            mm_r <= 0; out_re <= 0; out_im <= 0;
+        end else if (ce) begin
+            em1_re <= pf1_re[g_e]; em1_im <= pf1_im[g_e];
+            em2_re <= pf2_re[g_e]; em2_im <= pf2_im[g_e];
+            em3_re <= pf3_re[g_e]; em3_im <= pf3_im[g_e];
+            em4_re <= pf4_re[g_e]; em4_im <= pf4_im[g_e];
+            em5_re <= pf5_re[g_e]; em5_im <= pf5_im[g_e];
+            em6_re <= pf6_re[g_e]; em6_im <= pf6_im[g_e];
+            em7_re <= pf7_re[g_e]; em7_im <= pf7_im[g_e];
+            mm_r <= mm;
+            case (mm_r)
+                3'd1: begin out_re <= em7_re; out_im <= em7_im; end
+                3'd2: begin out_re <= em1_re; out_im <= em1_im; end
+                3'd3: begin out_re <= em2_re; out_im <= em2_im; end
+                3'd4: begin out_re <= em3_re; out_im <= em3_im; end
+                3'd5: begin out_re <= em4_re; out_im <= em4_im; end
+                3'd6: begin out_re <= em5_re; out_im <= em5_im; end
+                3'd7: begin out_re <= em6_re; out_im <= em6_im; end
+                default: begin
+                    out_re <= y0_pipe[7][IW-1:0];
+                    out_im <= y0_pipe[7][2*IW-1:IW];
+                end
+            endcase
         end
     end
 

@@ -61,7 +61,7 @@ for pos in range(T + TAIL):
 KPs = []
 acc = 0
 for j, g in enumerate(GS[:-1]):
-    acc += LATS[j] + H + 2
+    acc += LATS[j] + H + 3
     KPs.append((-acc) % (8 * GS[j + 1]))
 print("KPs:", KPs, " (total H = %d)" % (len(GS) * H + len(GS) - 1))
 
