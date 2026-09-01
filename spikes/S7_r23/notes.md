@@ -557,3 +557,40 @@ Harness files: bringup_core.py (full core), bringup_lpair.py /
 bringup_ltail.py (the isolated r22 tail), tb_core.v (the T1DIFF +
 t1/t2/l0 tap dump), tb_rotcmp.v (the twin-stage compare), tb_lpair.v /
 tb_ltail.v.
+
+## FULL CORE BIT-EXACT (both directions) -- 2025 session 2
+
+Root causes of the wrapper divergence, in order found:
+
+1. **q8_of 32-bit overflow** (rtl/fft_sdf_r23.v): `46341*(1<<17)` =
+   6,074,007,552 overflows Verilog's 32-bit integer -> q8_of(17) =
+   27146 instead of 92682. Fixed with `46341 << (td-16)` for td>=16.
+2. **`.Q8(0)` on all three triple instances**: fft_stage_r23 has no
+   Q8==0 self-compute convention; Q8=0 zeroes every rotator tap (and
+   iverilog only warns on the popcount $error). The Q8=0 garbage also
+   had popcount 7, so the tap check passed by luck. Fixed to
+   `.Q8(q8_of(TWIDDLE_DECIMAL))`.
+3. **Leftover-pair KP trims = +3 each** (KP_L0_TRIM/KP_L1_TRIM = 3,
+   now the wrapper defaults). Empirically calibrated: the r23->r22
+   handoff absorbs one clock per upstream r23 triple, unlike the
+   r23->r23 +9j rule. Deriving it from latency bookkeeping proved
+   unreliable; scan_l0.py (l1 tap vs golden pair-0 stream, 16 trims)
+   found L0T=3 uniquely, then bringup_core L1T scan found 3.
+
+Results (N=8192, NBLK=2, seed 424242, SCALING_PACK=32'h01555555):
+- INV=0: H=43, 16384/16384 bit-exact
+- INV=1: H=43, 16384/16384 bit-exact
+- AXI framing verified: tvalid for exactly 16384 words, tuser at
+  valid#1/#8193, tlast at valid#8192/#16384 (H=43 = golden offset;
+  first data at c=8239, LATENCY=8240 aligns the depth-LATENCY marker
+  shift registers exactly)
+
+Debug infrastructure added: tb_core.v has a live T1DIFF compare
+(standalone G=1024 u_sa vs u_core.t1, plus input INDIFF check), a
+l1 tap (pair-0 output) in taps.hex, and tuser/tlast position dumps.
+scan_l0.py sweeps KP_L0_TRIM against a golden pair-0 reference.
+Key lesson: when comparing hex dumps vs Python golden tuples, mask
+with & 0xFFFF on BOTH sides (raw negative ints never match).
+
+Remaining known limitation: G<=4 first triples (N<=32) still route
+to r22 or need a small-G r23 variant.

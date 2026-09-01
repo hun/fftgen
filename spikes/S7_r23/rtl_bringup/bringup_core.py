@@ -103,11 +103,10 @@ for pos in range(T + TAIL):
     outs.append(cur)
 
 # ---------------- RTL ----------------
-def run(L0T, L1T):
+def run():
     r = subprocess.run(
         ["iverilog", "-g2012", "-o", "core.vvp",
          "-Ptb_core.INV=%d" % int(INVERSE),
-         "-Ptb_core.L0T=%d" % L0T, "-Ptb_core.L1T=%d" % L1T,
          os.path.join(ROOT, "rtl", "fft_stage_r23.v"),
          os.path.join(ROOT, "rtl", "fft_stage_r22.v"),
          os.path.join(ROOT, "rtl", "fft_sdf_r23.v"),
@@ -142,10 +141,8 @@ def run(L0T, L1T):
     return best, rtl
 
 if __name__ == "__main__":
-    L0T = int(os.environ.get("L0T", "0"))
-    L1T = int(os.environ.get("L1T", "0"))
-    (H, ok, tot), rtl = run(L0T, L1T)
-    print(f"core (INV={int(INVERSE)}, NBLK={NBLK}, L0T={L0T}, L1T={L1T}): "
+    (H, ok, tot), rtl = run()
+    print(f"core (INV={int(INVERSE)}, NBLK={NBLK}, wrapper defaults): "
           f"H={H} {ok}/{tot} = {100.0*ok/tot:.2f}%")
     if ok == tot:
         print("FULL CORE MATCHES GOLDEN bit-exactly")

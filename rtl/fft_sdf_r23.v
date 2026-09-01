@@ -35,10 +35,12 @@ module fft_sdf_r23 #(
     parameter TWIDDLE_FILE_T2        = "fft_tw_r23_t2.mem",
     parameter TWIDDLE_FILE_L0        = "fft_tw_r22_l0.mem",
     parameter TWIDDLE_FILE_L1        = "fft_tw_r22_l1.mem",
-    // per-leftover-pair K_PRELOAD trim (the handoff sign was validated
-    // for r23->r23; the r23->r22 boundary is scanned by the sim)
-    parameter integer KP_L0_TRIM     = 0,
-    parameter integer KP_L1_TRIM     = 0,
+    // per-leftover-pair K_PRELOAD trim, empirically calibrated against
+    // the golden (scan_l0.py + bringup_core.py: both pairs need +3 for
+    // N=8192, i.e. one clock per upstream r23 triple -- the r23->r22
+    // handoff convention differs from the r23->r23 one)
+    parameter integer KP_L0_TRIM     = 3,
+    parameter integer KP_L1_TRIM     = 3,
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5
 )(
     input  wire                      clk,
@@ -60,8 +62,13 @@ module fft_sdf_r23 #(
     function integer q8_of;
         input integer td_;
         begin
-            // 46341 = round(sqrt(2)/2 * 2^16)
-            q8_of = (46341 * (1 << td_) + (1 << 15)) >> 16;
+            // 46341 = round(sqrt(2)/2 * 2^16).  Direct 46341*(1<<td)
+            // overflows 32-bit Verilog integer arithmetic for td >= 16,
+            // so shift instead of multiply.
+            if (td_ >= 16)
+                q8_of = 46341 << (td_ - 16);
+            else
+                q8_of = (46341 + (1 << (15 - td_))) >> (16 - td_);
         end
     endfunction
 
@@ -182,7 +189,7 @@ module fft_sdf_r23 #(
         .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
         .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
         .ROM_BASE       (0), .NPTS(8 * (N >> 3)),
-        .INVERSE        (INVERSE), .Q8(0), .K_PRELOAD(16'h0),
+        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(16'h0),
         .TWIDDLE_FILE   (TWIDDLE_FILE_T0)
     ) u_t0 ( .clk(clk), .ce(run), .rst(rst),
         .in_re(in_x_re), .in_im(in_x_im),
@@ -197,7 +204,7 @@ module fft_sdf_r23 #(
         .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
         .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
         .ROM_BASE       (0), .NPTS(8 * (N >> 6)),
-        .INVERSE        (INVERSE), .Q8(0), .K_PRELOAD(KPRE1[15:0]),
+        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(KPRE1[15:0]),
         .TWIDDLE_FILE   (TWIDDLE_FILE_T1)
     ) u_t1 ( .clk(clk), .ce(run), .rst(rst),
         .in_re(t1_re), .in_im(t1_im), .out_re(t2_re), .out_im(t2_im) );
@@ -211,7 +218,7 @@ module fft_sdf_r23 #(
         .TWIDDLE_WIDTH  (TWIDDLE_WIDTH),
         .TWIDDLE_DECIMAL(TWIDDLE_DECIMAL),
         .ROM_BASE       (0), .NPTS(8 * (N >> 9)),
-        .INVERSE        (INVERSE), .Q8(0), .K_PRELOAD(KPRE2[15:0]),
+        .INVERSE        (INVERSE), .Q8(q8_of(TWIDDLE_DECIMAL)), .K_PRELOAD(KPRE2[15:0]),
         .TWIDDLE_FILE   (TWIDDLE_FILE_T2)
     ) u_t2 ( .clk(clk), .ce(run), .rst(rst),
         .in_re(t2_re), .in_im(t2_im), .out_re(l0_re), .out_im(l0_im) );
