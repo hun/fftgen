@@ -326,12 +326,12 @@ module fft_sdf_r23 #(
     // array-element refs reliably for NPAIRL != 4)
     wire signed [INTERN_WIDTH-1:0] dbg_p0 = chain_re[1];
     wire signed [INTERN_WIDTH-1:0] dbg_p0i = chain_im[1];
-    wire signed [INTERN_WIDTH-1:0] dbg_p1 = (NPAIRL > 1) ? chain_re[2] : '0;
-    wire signed [INTERN_WIDTH-1:0] dbg_p1i = (NPAIRL > 1) ? chain_im[2] : '0;
-    wire signed [INTERN_WIDTH-1:0] dbg_p2 = (NPAIRL > 2) ? chain_re[3] : '0;
-    wire signed [INTERN_WIDTH-1:0] dbg_p2i = (NPAIRL > 2) ? chain_im[3] : '0;
-    wire signed [INTERN_WIDTH-1:0] dbg_p3 = (NPAIRL > 3) ? chain_re[4] : '0;
-    wire signed [INTERN_WIDTH-1:0] dbg_p3i = (NPAIRL > 3) ? chain_im[4] : '0;
+    wire signed [INTERN_WIDTH-1:0] dbg_p1 = (NPAIRL > 1) ? chain_re[2] : {{INTERN_WIDTH{1'b0}}};
+    wire signed [INTERN_WIDTH-1:0] dbg_p1i = (NPAIRL > 1) ? chain_im[2] : {{INTERN_WIDTH{1'b0}}};
+    wire signed [INTERN_WIDTH-1:0] dbg_p2 = (NPAIRL > 2) ? chain_re[3] : {{INTERN_WIDTH{1'b0}}};
+    wire signed [INTERN_WIDTH-1:0] dbg_p2i = (NPAIRL > 2) ? chain_im[3] : {{INTERN_WIDTH{1'b0}}};
+    wire signed [INTERN_WIDTH-1:0] dbg_p3 = (NPAIRL > 3) ? chain_re[4] : {{INTERN_WIDTH{1'b0}}};
+    wire signed [INTERN_WIDTH-1:0] dbg_p3i = (NPAIRL > 3) ? chain_im[4] : {{INTERN_WIDTH{1'b0}}};
 
     wire signed [INTERN_WIDTH-1:0] core_re = core_w_re;
     wire signed [INTERN_WIDTH-1:0] core_im = core_w_im;

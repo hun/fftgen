@@ -220,8 +220,7 @@ synth_design -top fft_sdf_r23 \\
     -generic TWIDDLE_FILE_T0=[file normalize [pwd]/fft_tw_r23_t0.mem] \\
     -generic TWIDDLE_FILE_T1=[file normalize [pwd]/fft_tw_r23_t1.mem] \\
     -generic TWIDDLE_FILE_T2=[file normalize [pwd]/fft_tw_r23_t2.mem] \\
-    -generic TWIDDLE_FILE_L0=[file normalize [pwd]/fft_tw_r22_l0.mem] \\
-    -generic TWIDDLE_FILE_L1=[file normalize [pwd]/fft_tw_r22_l1.mem] \\
+    -generic TWIDDLE_FILE_L=[file normalize [pwd]/fft_tw_r22_l.mem] \\
     -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \\
     -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
     -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
@@ -328,16 +327,29 @@ def artifacts_r22(n, outdir, r=1):
 
 
 def artifacts_r23(n, outdir):
-    """Radix-2^3 SDF (S7): 3 r23 triple ROMs (8*G words each, layout
-    word[base_k+g] = T[k*g*8^m]) + one N-sized r22 leftover ROM per
-    pair (the 3*D twiddle slice at [0,3D), ROM_BASE=0). Returns the
-    scaling pack (1 shift per stage) and the internal width."""
+    """Radix-2^3 SDF (S7): the r23 triple ROMs (8*G words each, layout
+    word[base_k+g] = T[k*g*8^m]) + ONE concatenated r22 leftover ROM
+    (pair jj's 3*D_jj slice at the cumulative base -- mirrors the
+    wrapper's TWIDDLE_FILE_L / NTRIP/NPAIRL auto-derivation).
+    Returns the scaling pack (1 shift per stage) and the internal
+    width.  Raises for N with no valid triple count (N=256)."""
     from twiddles import canonical_twiddles
     TW, TD = 18, 17
     nstages = n.bit_length() - 1
+    # NTRIP/NPAIRL exactly as rtl/fft_sdf_r23.v derives them
+    ntrip = 0
+    for t in (3, 2, 1):
+        if nstages >= 3 * t and (nstages - 3 * t) % 2 == 0 and (n >> (3 * t)) >= 8:
+            ntrip = t
+            break
+    if ntrip == 0:
+        raise ValueError(f"N={n}: no valid r23 triple count "
+                         f"(NSTAGES={nstages}; needs the small-G variant)")
+    npairl = (nstages - 3 * ntrip) // 2
     tw = canonical_twiddles(n, TW, TD, inverse=False)
     mask = (1 << TW) - 1
-    # 3 r23 triples: G_m = N >> (3m+3), twiddle stride 8^m
+    # r23 triples: G_m = N >> (3m+3), twiddle stride 8^m (the unused
+    # higher-m ROMs are still written: the TCL passes all three files)
     for m in range(3):
         g = n >> (3 * m + 3)
         layout = [(0, 2), (g, 6), (3 * g, 1), (4 * g, 5),
@@ -350,22 +362,22 @@ def artifacts_r23(n, outdir):
         with open(os.path.join(outdir, f"fft_tw_r23_t{m}.mem"), "w") as f:
             for w in words:
                 f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
-    # r22 leftover pairs: D_jj = N >> (11+2jj), stride 1 << (9+2jj);
-    # ROM is N-sized (NPTS=N), the 3*D slice at [0,3D), rest zero
-    npairl = max(0, (nstages - 9) // 2)
-    for jj in range(max(1, npairl)):
-        d = n >> (11 + 2 * jj)
-        stride = 1 << (9 + 2 * jj)
-        words = [0] * n
-        i = 0
+    # r22 leftover pairs: D_jj = N >> (3*NTRIP+2jj+2), stride
+    # 1 << (3*NTRIP+2jj); one file, pair jj's 3*D slice at the
+    # cumulative base (the RTL reads [ROM_BASE, ROM_BASE+3D))
+    ds = [n >> (3 * ntrip + 2 * jj + 2) for jj in range(npairl)]
+    strides = [1 << (3 * ntrip + 2 * jj) for jj in range(npairl)]
+    words = [0] * sum(3 * d for d in ds)
+    i = 0
+    for jj in range(npairl):
         for which in (1, 2, 3):
-            for g in range(d):
-                re, im = tw[(which * g * stride) % n]
+            for g in range(ds[jj]):
+                re, im = tw[(which * g * strides[jj]) % n]
                 words[i] = ((re & mask) << TW) | (im & mask)
                 i += 1
-        with open(os.path.join(outdir, f"fft_tw_r22_l{jj}.mem"), "w") as f:
-            for w in words:
-                f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
+    with open(os.path.join(outdir, "fft_tw_r22_l.mem"), "w") as f:
+        for w in words:
+            f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
     # every stage shifts 1 (net-zero growth per triple/pair)
     pack = sum(1 << (2 * s) for s in range(nstages))
     return {"pack": pack, "intern": 16, "preload_bits": 0}
@@ -517,7 +529,7 @@ def main():
                          "r22b = the P8 corner-order core (native -> bitrev, "
                          "R=2 only), r22i = the corner-order IFFT "
                          "(bitrev -> native, R=2 only), r23 = the S7 "
-                         "radix-2^3 SDF core (R=1, N>=512, NSTAGES-9 even), "
+                         "radix-2^3 SDF core (R=1, auto NTRIP/NPAIRL), "
                          "all = r2 + r22 + r22b + r22i + r23")
     ap.add_argument("-j", type=int, default=4, help="parallel vivado jobs")
     ap.add_argument("--jobs-dir", default=os.path.join(ROOT, "build", "datasheet"),

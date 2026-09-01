@@ -835,3 +835,25 @@ RESULT: every supported N now bit-exact in BOTH directions:
   (N=4..128, fwd+inv, verilator) also 12/12 bit-exact.
 Remaining: N=256 only (needs the small-G variant; NTRIP has no valid
 value -- documented above).
+
+## Datasheet sweep completed (build/datasheet_r23, 2026-09-01)
+
+src/datasheet_sweep.py r23 support updated for the parameterized
+wrapper: artifacts_r23 now mirrors the RTL NTRIP/NPAIRL derivation
+(NTRIP = the largest t in 1..3 with 3t <= NSTAGES, (NSTAGES-3t) even,
+N>>(3t) >= 8; raises for N=256) and writes ONE concatenated leftover
+ROM (fft_tw_r22_l.mem, per-pair 3*D slice at the cumulative base);
+TCL_R23 passes the single TWIDDLE_FILE_L generic.
+
+Also fixed on the way: the dbg_p* alias wires used SystemVerilog '0
+literals -- Vivado's plain-Verilog parser rejects them (iverilog
+-g2012 accepts); replaced with {INTERN_WIDTH{1'b0}} (N=8192 bringup
+re-verified 100% after).
+
+Sweep (KU5P OOC, 500 MHz, post-synth): N=512..32768 all synthesize,
+WNS -0.195 N-independent, DSP = 4*(NTRIP+NPAIRL) = 16..24, LUT
+3.6-8.7K, BRAM 6.5-152.5 (BRAM grows fast at N>=16384 -- an r23
+memory-cutoff pass is the follow-up). N=256 fails cleanly in
+artifacts ("no valid r23 triple count"). Rows published in
+doc/datasheet.md (new r23 section) with the functional status
+(14/14 bit-exact fwd+inv) and the r22 R=1 comparison.

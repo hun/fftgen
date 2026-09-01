@@ -234,9 +234,54 @@ multiply); both lanes keep their own output reorder.
   2^-log2(N) -- the TX/RX fast-convolution pair (tests/test_rtl_ssr_orders.py).
 
 
+## Radix-2^3 SDF (`r23`): S7
+
+The S7 radix-2³ core (`rtl/fft_sdf_r23.v` + `rtl/fft_stage_r23.v`):
+3-sample-per-pass triples (one 8-point kernel stage does the work of
+three r2 stages) + auto-derived r22 leftover pairs. NTRIP = the largest
+t in 1..3 with `3t <= NSTAGES`, `(NSTAGES-3t)` even and the smallest
+triple `G = N>>(3t) >= 8`; `NPAIRL = (NSTAGES-3t)/2`. DSP count =
+`4 x (NTRIP + NPAIRL)` (one shared complex multiplier per triple and
+per pair):
+
+| N | split (triples+pairs) | DSP | LUTs | FFs | LUTRAM | BRAM36 | WNS(ns) | FEP |
+|---:|:---:|---:|---:|---:|---:|---:|---:|---:|
+| 512 | 1+3 | 16 | 3577 | 4502 | 980 | 6.5 | -0.195 | 8 |
+| 1024 | 2+2 | 16 | 5618 | 6389 | 1630 | 13.5 | -0.195 | 46 |
+| 2048 | 1+4 | 20 | 3872 | 4573 | 782 | 20 | -0.195 | 12 |
+| 4096 | 2+3 | 20 | 5316 | 6472 | 1254 | 29.5 | -0.195 | 8 |
+| 8192 | 3+2 | 20 | 7586 | 8373 | 2128 | 44.5 | -0.195 | 46 |
+| 16384 | 2+4 | 24 | 6350 | 6574 | 1728 | 82 | -0.195 | 84 |
+| 32768 | 3+3 | 24 | 8691 | 8598 | 3042 | 152.5 | -0.195 | 150 |
+
+- **Functionally verified at every row**: bit-exact vs the golden chain
+  in BOTH directions (fwd+inv, 2 blocks each) after the r22 dram/dline
+  width fix -- 14/14 configurations at 100.00%. N=8192 also closed
+  post-route at **+0.028** (the sweep's post-synth WNS is conservative).
+- **WNS -0.195 is N-independent** post-synth (one fixed limiter path
+  class, like the r22 crossbar hop before P7 step 8); FEP grows with N
+  on the BRAM-resident ring/ROM read paths.
+- **DSP vs r22 R=1**: equal at N=512/2048, -4 DSP at N=1024/4096/8192
+  (20 vs 24 at N=8192). The balanced splits (NTRIP=NPAIRL) are where
+  the 3-samples-per-pass saving shows; LUTs cross over too (r23 is
+  LUT-heavier at N<=1024 where the kernel control dominates, lighter
+  from N=8192: 7586 vs 13238).
+- **BRAM36 grows faster than r22** at the largest N (152.5 at N=32768
+  vs the r22 policy's ~31.5 at N=8192) -- the triple-chain LUTRAM rings
+  and the concatenated leftover-pair ROM spill into block RAM under the
+  default memory policy; an r23-specific cutoff pass is the obvious
+  follow-up if the N>=16384 rows matter.
+- **N=256 is unsupported**: NSTAGES=8 admits no valid triple count
+  (t=1 leaves 5 odd leftovers; t=2 needs G=4 < 8). Requires the
+  small-G r23 variant (or routing the small stage through r22), see
+  `spikes/S7_r23/notes.md`.
+
+Repro: `python3 -m src.datasheet_sweep --arch r23 --r1 256 512 1024 2048 4096 8192 16384 32768 --jobs-dir build/datasheet_r23 -j 4`
+(per-config caches in `build/datasheet_r23/N*_R1_r23/result.json`).
+
 ### Reading the table
 
-- **Arch** -- `r2` = plain radix-2 SDF (`log2(N)` stages); `r22` = radix-2² SDF (one multiply per stage pair, P7 production core; re-pins the golden rounding, few-LSB SQNR-equal).
+- **Arch** -- `r2` = plain radix-2 SDF (`log2(N)` stages); `r22` = radix-2² SDF (one multiply per stage pair, P7 production core; re-pins the golden rounding, few-LSB SQNR-equal); `r23` = radix-2³ SDF (S7, 3 samples per pass through an 8-point kernel stage + r22 leftovers, R=1).
 - **LUTs / FFs** -- CLB LUTs / CLB registers (post-synth, before opt_design trimming).
 - **LUTRAM** -- LUTs carrying distributed RAM (delay lines, product FIFOs, crossbar WN table).
 - **DSP** -- `r2` R=1: `4 x (num_stages - 2)` for N >= 8 (P6). `r22` R=1: ~`4 x ceil(stages/2)` with the odd-stage leftover as 0 DSP (shared multiply per pair). SSR: `R` lanes x `4 x (stages(N/R) - 2)` plus crossbar.
