@@ -3,7 +3,7 @@ import os, subprocess, sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 from twiddles import canonical_twiddles
-from golden import _SDFStage
+from golden import _R22DIFStage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, "build")
@@ -35,26 +35,27 @@ with open(os.path.join(BUILD, "fft_tw_r22_lx.mem"), "w") as f:
     for w in words:
         f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
 
-# golden: the two leftover r2 stages, preloaded, fed the same stream
-lat = 7170 + 898 + 114
-los = []
-for s in cfg["s"]:
-    D = N >> (s + 1)
-    tw_slice = [tw[(j << s) % N] for j in range(D)]
-    st = _SDFStage(s, N, 1, 17, tw_slice, dit=False)
-    for _ in range((-lat) % (2 * D)):
-        st.step(0, 0)
-    los.append(st)
-    lat += D + _SDFStage.NLAYERS
+# golden: the leftover r22 PAIR (_R22DIFStage patched to the odd
+# boundary: D = N>>11 resp. N>>13, twiddle stride 2^9 resp. 2^11)
+UP = 7170 + 898 + 114            # upstream golden latency (3 triples)
+lp = _R22DIFStage(4, N, 1, 1, TD if False else 17, tw, False)
+if cfg["s"][0] == 9:             # pair (9,10): D=4, stride 2^9
+    lp.D, lp.base = 4, 512
+else:                            # pair (11,12): D=1, stride 2^11
+    lp.D, lp.base = 1, 2048
+lp.ram = [(0, 0)] * (2 * lp.D)
+lp.sram = [(0, 0)] * lp.D
+lp.dram = [(0, 0)] * lp.D
+lp.dline = [(0, 0)] * lp.D
+lp.pfifo = [(0, 0)] * (2 * lp.D)
 with open(os.path.join(BUILD, "gold_lp.hex"), "w") as f:
     for c in range(20000):
-        q = c - cfg["tail"]
+        q = c                    # the stream index = this pair's own pos base
         v = lines[q] if 0 <= q < len(lines) else ("0000", "0000")
         cur = (int(v[0], 16), int(v[1], 16))
         cur = (cur[0] - (1 << 16) if cur[0] >= (1 << 15) else cur[0],
                cur[1] - (1 << 16) if cur[1] >= (1 << 15) else cur[1])
-        for st in los:
-            cur = st.step(cur[0], cur[1])
+        cur = lp.step(cur, q - UP)
         f.write("%04x %04x\n" % (cur[0] & 0xFFFF, cur[1] & 0xFFFF))
 
 def run(KP):

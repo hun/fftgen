@@ -33,19 +33,36 @@ module tb_core #(parameter INV = 0, L0T = 0, L1T = 0);
         .m_axis_tuser(), .m_axis_tlast()
     );
 
+    // reference: the same G=1024 stage standalone
+    wire signed [15:0] sa_re, sa_im;
+    fft_stage_r23 #(
+        .DEPTH(1024), .WIDTH(16), .SIGMA0(1), .SIGMA1(1), .SIGMA2(1),
+        .TWIDDLE_WIDTH(18), .TWIDDLE_DECIMAL(17),
+        .ROM_BASE(0), .NPTS(8192), .INVERSE(INV),
+        .Q8(92682), .K_PRELOAD(16'h0),
+        .TWIDDLE_FILE("fft_tw_r23_t0.mem")
+    ) u_sa ( .clk(clk), .ce(ce), .rst(rst),
+        .in_re(in_re), .in_im(in_im), .out_re(sa_re), .out_im(sa_im) );
+
     always #5 clk = ~clk;
 
     initial begin
         $readmemh("stim_core.mem", stim);
         fd = $fopen("out.hex", "w");
-        f2 = $fopen("t2.hex", "w");
+        f2 = $fopen("taps.hex", "w");
         repeat (2) @(posedge clk);
         @(negedge clk); rst = 0;
         for (c = 0; c < TCLOCKS; c = c + 1) begin
             {in_im, in_re} = stim[c];
             @(posedge clk); #1;
             $fwrite(fd, "%04h %04h\n", out_re, out_im);
-            $fwrite(f2, "%04h %04h\n", u_core.t1_re, u_core.t1_im);
+            $fwrite(f2, "%04h %04h %04h %04h %04h %04h\n",
+                u_core.t1_re, u_core.t1_im,
+                u_core.t2_re, u_core.t2_im,
+                u_core.l0_re, u_core.l0_im);
+            if (c >= 8000 && (sa_re != u_core.t1_re || sa_im != u_core.t1_im))
+                $display("T1DIFF c=%0d sa=(%d,%d) core=(%d,%d)",
+                    c, sa_re, sa_im, u_core.t1_re, u_core.t1_im);
             if (c >= 11266 && c <= 11272)
                 $display("c=%0d k=%0d bm_r3=%d r1_r3=%d r3_r3=%d c1=(%d,%d) m_r=(%d,%d) tr=(%d,%d)",
                     c, u_core.u_t0.k, u_core.u_t0.bm_r3_re, u_core.u_t0.r1_r3_re,

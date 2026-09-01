@@ -517,3 +517,43 @@ Recommend (a): the r22 pair golden models already exist inside
 R22SDFGoldenModel's structure; extend R23SDFGoldenModel to take a
 triple count and model the tail as r22 pairs, then re-run
 bringup_core expecting bit-exactness.
+
+## Full-core debug state (in progress, harness ready)
+
+bringup_core + tb_core now have a T1DIFF trace: a standalone G=1024
+stage (u_sa) runs next to the core, its output compared live to
+u_core.t1_re. FINDINGS (fixed-q8 build, seed 424242, N=8192):
+
+- The core's t1 matches the standalone (and the golden) for block 0
+  and for the y0/y4/y2/y6 slots of every block.
+- The core's t1 DIFFERS exactly at the d-class output slots
+  (phases k in [3G+10, 7G+9] mod 8G -- i.e. the y1/y5/y3/y7 outputs)
+  of every block >= 1: 8192 diffs, contiguous runs of 4096.
+- The standalone stage with the SAME stimulus is 100% correct.
+
+Isolated checks that PASSED inside the core environment:
+- ringR write contents correct (rr1[i]/rr3[i] == the golden's
+  ringR[i]/ringR[1024+i] for i in 0..7, dumped at c=12290)
+- bm/ringBB reads correct at the block-1 y1 comb
+- r1_r3/r3_r3 reads at SOME combs correct (e.g. 17996/337 =
+  the golden's ringR[3]/ringR[1027]) but at the ringR indices near
+  the window boundary (~1021-1023) the reads show +-1 garbage while
+  the golden has full-scale rot values there.
+
+HYPOTHESIS: the rot unit A's read map (g_a3 = +5) is correct for the
+bulk of the window but wrong at the window edges (the golden's rotA2
+snapshot vs the RTL's 3-deep pipe disagree by one rotation of the
+ring at the [2G,3G) window boundary). The d1 values read for the
+LAST/first few ringR indices come from the wrong block. Fix approach:
+dump the golden's ringR[1018..1023] vs the RTL's rr1[1018..1023] after
+block 1's rot window, derive the exact edge behavior, and adjust the
+g_a3 constant or the R1/R2 window gates (w_rotA_r1/r2) so the edge
+indices match. The y0/y4/y2/y6 paths and both r22 leftover pairs are
+already verified bit-exact (bringup_lpair/bringup_ltail: 11798/11798
+and 11786/11786 with the wrapper's computed KPs 10 and 1 -- the r22
+convention needs NO handoff trim, unlike the r23 stages' +9j rule).
+
+Harness files: bringup_core.py (full core), bringup_lpair.py /
+bringup_ltail.py (the isolated r22 tail), tb_core.v (the T1DIFF +
+t1/t2/l0 tap dump), tb_rotcmp.v (the twin-stage compare), tb_lpair.v /
+tb_ltail.v.

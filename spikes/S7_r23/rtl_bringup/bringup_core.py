@@ -5,7 +5,7 @@ import os, subprocess, sys, random
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 from twiddles import canonical_twiddles
-from golden import _R23DIFStage, _SDFStage
+from golden import _R23DIFStage, _R22DIFStage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, "build")
@@ -23,17 +23,22 @@ LATS = trip_gold + [N >> (s + 1) + 10 for s in range(9, 13)]  # unused form
 TAIL = sum(trip_gold) + 4 * 12 + 40
 
 # ---------------- golden chain ----------------
+# 3 r23 triples + the r22-pair tail (the core's rounding contract)
 sts = [_R23DIFStage(m, N, 1, 1, 1, TD, tw, INVERSE) for m in range(3)]
-los = []
-lat = sum(trip_gold)
-for s in range(9, 13):
-    D = N >> (s + 1)
-    tw_slice = [tw[(j << s) % N] for j in range(D)]
-    st = _SDFStage(s, N, 1, TD, tw_slice, dit=False)
-    for _ in range((-lat) % (2 * D)):
-        st.step(0, 0)
-    los.append(st)
-    lat += D + _SDFStage.NLAYERS
+
+def mkpair(D, base):
+    lp = _R22DIFStage(4, N, 1, 1, TD, tw, INVERSE)
+    lp.D, lp.base = D, base
+    lp.ram = [(0, 0)] * (2 * D)
+    lp.sram = [(0, 0)] * D
+    lp.dram = [(0, 0)] * D
+    lp.dline = [(0, 0)] * D
+    lp.pfifo = [(0, 0)] * (2 * D)
+    return lp
+
+UP3 = sum(trip_gold)
+los = [mkpair(N >> 11, 1 << 9), mkpair(N >> 13, 1 << 11)]
+LO_OFFS = [UP3, UP3 + 3 * (N >> 11) + 1]
 
 rng = random.Random(424242)
 hi = 1 << 15
@@ -93,8 +98,8 @@ for pos in range(T + TAIL):
     for st in sts:
         cur = st.step(cur, pos - up)
         up += st.latency
-    for st in los:
-        cur = st.step(cur[0], cur[1])
+    for j, st in enumerate(los):
+        cur = st.step(cur, pos - LO_OFFS[j])
     outs.append(cur)
 
 # ---------------- RTL ----------------
@@ -119,7 +124,7 @@ def run(L0T, L1T):
             rtl.append(None if 'x' in ln else
                        tuple(int(x, 16) for x in ln.split()))
     best = None
-    for H in range(20, 40):
+    for H in range(20, 70):
         ok = tot = 0
         for c in range(len(rtl)):
             p = c - H
