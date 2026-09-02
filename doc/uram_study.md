@@ -113,6 +113,26 @@ Findings:
    the r22 N=2048 precedent (-0.117 post-synth -> +0.003 post-route with
    the aggressive-explore recipe) makes post-route closure plausible.
 
+## 4b. The small-N boundary: N=2048 R=2 (SSR) is NOT worth it
+
+Measured (xcku5p-ffva676-2-e, fft_ssr_r23 N=2048 SSR=2, USE_URAM=1):
+
+| build | BRAM36 | URAM | WNS | FEP |
+|---|---:|---:|---:|---:|
+| baseline (USE_URAM=0) | 29 | 0 | +0.066 | 0 |
+| rings+pf in URAM | 25 | **64** | -0.010 | 11 |
+
+At this size every ring is shallow (G=128: 128-512 deep x 18b), so each
+array occupies a whole URAM288 at >90% emptiness -- 64 URAMs (16 Mb) to
+free 4 BRAM tiles, plus a small timing regression (the URAM CK->Q arcs
+replacing half-tile BRAM reads). The freed tiles are also only 4 because
+most of the 29 BRAM are per-array RAMB18 half-tiles that Vivado packs
+efficiently at these shapes.
+
+**Rule of thumb (break-even)**: USE_URAM pays when the biggest G-deep
+rings are >= ~4096 deep, i.e. N >= 16384 R=1 / N >= 32768 R=2 (the
+datasheet rows where BRAM36 hits 90-306). Below that, keep USE_URAM=0.
+
 ## 5. Recommendation
 
 - **Shippable knob**: `USE_URAM=1` on the r23 core at **speed grade -2**
