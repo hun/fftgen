@@ -92,7 +92,7 @@ the edit (N=8192 + N=32768 bringup, 100.00%).
 | SG2, all BRAM | 152.5 | 0 | **+0.028** | 0 | post-synth |
 | SG2, rings+pf+ROM in URAM | 84 | 64 | -0.501 | 55 | 16/20 top paths: ring0 URAM cascade CK->Q |
 | SG2, rings+pf URAM, ring0+ROM BRAM | 90 | 64 | -0.154 | 40 | 14/20 top: fabric g_r->ROM path; 6: ringA_s URAM |
-| SG2, +ringA_s BRAM too | (pending) | (pending) | (pending) | | sel2 variant |
+| SG2, +ringA_s BRAM too | 93.5 | 64 | -0.154 | 25 | binding path = the fabric g_r->ROM arc (baseline-critical), NOT a URAM arc |
 
 Findings:
 
@@ -105,18 +105,24 @@ Findings:
 4. **ring0 (the only 4G-deep array) fails as URAM** (4-high cascade
    CK->Q -> the a0_r read register -> butterfly path, -0.501 at SG2);
    the 4096-deep single-URAM rings show no failing paths in the top-20.
-5. With ring0 back in BRAM the gap shrinks to **-0.154 / 40 FEP**: six
-   endpoints from the ringA_s URAM, the rest the fabric g_r -> ROM
-   address path that is already the all-BRAM baseline's worst path
-   (+0.028) -- i.e. mostly URAM-routing congestion, not a URAM arc.
+5. With ring0 back in BRAM the gap shrinks to **-0.154 / 40 FEP**; with
+   ringA_s also in BRAM: **93.5 BRAM + 64 URAM at -0.154 / 25 FEP**, and
+   the worst path is the fabric g_r -> twiddle-ROM address arc -- the
+   SAME path that is the all-BRAM baseline's worst (+0.028). The residual
+   delta is URAM-routing congestion around triple-0, not a URAM read arc;
+   the r22 N=2048 precedent (-0.117 post-synth -> +0.003 post-route with
+   the aggressive-explore recipe) makes post-route closure plausible.
 
 ## 5. Recommendation
 
 - **Shippable knob**: `USE_URAM=1` on the r23 core at **speed grade -2**
-  (or any ~500 MHz-capable URAM part): swaps ~68 BRAM36 for 64 URAM288
-  at N=32768, keeping 500 MHz IF the selective variant (ring0 in BRAM)
-  closes timing -- see the pending row above; otherwise the choice is
-  500 MHz + 152.5 BRAM vs ~455 MHz + 84 BRAM.
+  (or any ~500 MHz-capable URAM part): swaps **~59 BRAM36 for 64 URAM288**
+  at N=32768 (152.5 -> 93.5 BRAM, the twiddle ROMs + ring0 + ringA_s
+  stay BRAM) at a -0.154 post-synth WNS whose binding path is the
+  baseline-critical fabric arc -- post-route effort expected to close
+  500 MHz (verify before shipping), else ~490 MHz.
+- SG1 parts: URAM cannot run 500 MHz (2.088 ns PW limit) -- URAM use
+  there means a <= 455 MHz clock.
 - SG1 parts: URAM is not usable at 500 MHz in this design (hard PW
   limit); only relevant for <= 450 MHz clocks.
 - The same treatment applies to the r2/r22 cores' deep first-stage

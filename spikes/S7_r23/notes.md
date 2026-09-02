@@ -857,3 +857,25 @@ memory-cutoff pass is the follow-up). N=256 fails cleanly in
 artifacts ("no valid r23 triple count"). Rows published in
 doc/datasheet.md (new r23 section) with the functional status
 (14/14 bit-exact fwd+inv) and the r22 R=1 comparison.
+
+## URAM study (doc/uram_study.md) -- rings -> URAM288 at SG2
+
+Target constraint: plenty of URAM, little BRAM. fft_stage_r23 gained
+USE_URAM (0 default): the 11 G-deep rings + pf1..7 map to URAM288;
+ring0 (4G-deep, URAM cascade CK->Q misses the read path), ringA_s
+(last marginal URAM path) and the twiddle ROMs stay BRAM. URAM cannot
+be initialized -> ROMs can never live there.
+
+Measured (N=32768, OOC post-synth, 500 MHz):
+  SG1 all-BRAM        152.5 BRAM   WNS -0.195
+  SG1 +URAM            80 BRAM 64 URAM   -1.554 (ROM URAM CK->Q) + PW
+      violations: URAM288 min period 2.088ns at SG1 -> no 500MHz URAM
+  SG2 all-BRAM        152.5 BRAM   WNS +0.028 (0 FEP)
+  SG2 +URAM (final)   93.5 BRAM 64 URAM   -0.154 (25 FEP); the binding
+      path is the fabric g_r->ROM arc (the all-BRAM baseline's worst
+      too) -- residual = URAM routing congestion; post-route closure
+      plausible (r22 N=2048 precedent -0.117 -> +0.003).
+Net: ~59 BRAM36 freed at N=32768 for 64 URAM288 at SG2. The same
+treatment applies to the r2/r22 deep first-stage rings and the SSR
+reorder buffers (not yet wired). Bringup re-verified bit-exact after
+the RTL edits.
