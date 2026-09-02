@@ -1,0 +1,5 @@
+N=32768 R=2: lane M=16384 NSTAGES=14 NTRIP=2 NPAIRL=4
+frames: golden 2 rtl 3
+frame offset 0: 65536/65536 bins within 4 LSB, worst 1
+compared 65536 bins: worst delta 1 (tol 4), bad 0
+SSR R=2 r23 (N=32768, INV=0) MATCHES GOLDEN (2 frames, 65536 bins)

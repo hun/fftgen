@@ -918,3 +918,5 @@ R/2+1 -- measured worst delta = 1 LSB everywhere):
 The lane models validated against float M-point DFTs (0 bad bins at
 M=512 and M=1024) and the r23 SSR golden against the verified r22 SSR
 golden (<= 2 LSB over all 2048 bins, same input).
+  N=32768 INV=0: 65536/65536 bins, worst 1 LSB -- MATCH. SSR R=2 final:
+  1024/2048/4096/8192/16384 x {fwd,inv} + 32768 fwd = 11/11 MATCH.
