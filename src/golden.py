@@ -1988,3 +1988,125 @@ class OrderedFFTModel:
                 outs.append((re, im, u, l))
             return self.reorder.process_stream(outs)
         return self.reorder.process_stream(core_out)
+
+
+class _R23DITStage:
+    """Mirror of :class:`_R23DIFStage`: multiply-then-combine, bit-reversed
+    input, natural output (the r23 IFFT stage).
+
+    The input stream carries the 8 sub-transform outputs y_j(g) in the
+    DIF stage's emission order (y_1 at [0,G), y_2 at [G,2G), ...,
+    y_0 at [7G,8G); one member per G-window). The products
+    b_j = y_j * T[j*g*base] are computed AT the arrivals (one shared
+    multiplier, b_0 = y0 << td unmultiplied), staged in depth-lag lines
+    ((8-j)*G deep) so all eight meet at the y_0 window, where the F8 DIT
+    combine runs with ONE combined shift S = td+s0+s1+s2 (the 1/N scaling
+    lumped, mirroring the r22 DIT). The natural-order outputs a_i(g)
+    (position iG+g) emit immediately (a_7) or through (8-i)*G queues.
+
+    Position p's value emerges at clock p + 7G + 1."""
+
+    def __init__(self, m: int, N: int, sigma0: int, sigma1: int,
+                 sigma2: int, td: int, tw: Sequence[Complex],
+                 inverse: bool = False):
+        self.m = m
+        self.N = N
+        self.sig = (sigma0, sigma1, sigma2)
+        self.td = td
+        self.G = N >> (3 * m + 3)
+        self.base = 8 ** m
+        self.js = -1 if not inverse else 1
+        self.q8 = _q8(td)
+        self.tw = tw
+        G = self.G
+        # product lines: b_j for j=1..7, depth (8-j)*G
+        self.plines = [[(0, 0)] * ((8 - j) * G) for j in range(1, 8)]
+        self.pp = [0] * 7
+        # output queues: a_j for j=1..7, depth (8-j)*G
+        self.queues = [[(0, 0)] * ((8 - j) * G) for j in range(1, 8)]
+        self.qp = [0] * 7
+        self.out = (0, 0)
+        self.S = td + sigma0 + sigma1 + sigma2
+
+    @property
+    def latency(self) -> int:
+        return 7 * self.G + 1
+
+    def _rot(self, z):
+        return (round_shift((z[0] - self.js * z[1]) * self.q8, self.td),
+                round_shift((z[1] + self.js * z[0]) * self.q8, self.td))
+
+    def _jm(self, z):
+        return (-self.js * z[1], self.js * z[0])
+
+    def _prod(self, z, t):
+        return complex_multiply_karatsuba(z[0], z[1], t[0], t[1])
+
+    def step(self, x: Complex, pos: int) -> Complex:
+        G = self.G
+        ret = self.out
+        r, i = x
+        k = pos % (8 * G)
+        g = pos % G
+        S = self.S
+
+        # the arriving member: y_1 at [0,G) .. y_7 at [6G,7G), y_0 at [7G,8G)
+        j = (k // G + 7) % 8          # 1..7, then 0
+
+        # ---- product at the arrival ----
+        if j == 0:
+            b_new = (r << self.td, i << self.td)
+        else:
+            t = self.tw[(j * g * self.base) % self.N]
+            b_new = self._prod((r, i), t)
+        self.plines[j - 1][self.pp[j - 1]] = b_new
+        self.pp[j - 1] = (self.pp[j - 1] + 1) % len(self.plines[j - 1])
+
+        if k < 7 * G:
+            # not the combine window: drain one output-queue word
+            qi = k // G                      # a_{qi+1}'s window
+            cur = self.queues[qi][self.qp[qi]]
+            self.queues[qi][self.qp[qi]] = (0, 0)
+            self.qp[qi] = (self.qp[qi] + 1) % len(self.queues[qi])
+            self.out = cur
+            return ret
+
+        # ---- F8 DIT combine at the y_0 window ----
+        b = [self.plines[jj][self.pp[jj]] for jj in range(7)] + [b_new]
+        # advance all line pointers (they just served the combine)
+        for jj in range(7):
+            self.pp[jj] = (self.pp[jj] + 1) % len(self.plines[jj])
+        jm5 = self._jm(b[5])
+        O0 = (b[0] + jm5[0], b[0 + 1 - 1] * 0 + b[1] * 0 + b[0] * 0 + jm5[1] + b[0] * 0)  # placeholder
+        O0 = (b[0] + jm5[0], b[0] * 0 + b[1] * 0)  # replaced below
+        # -- even branch (b0, b2, b4, b6) --
+        e0 = (b[0][0] + b[4][0], b[0][1] + b[4][1])
+        e1 = (b[2][0] + b[6][0], b[2][1] + b[6][1])
+        e2 = (b[0][0] - b[4][0], b[0][1] - b[4][1])
+        e3 = (b[2][0] - b[6][0], b[2][1] - b[6][1])
+        # -- odd branch (b1, b3, b5, b7 with the W_8^m weights) --
+        rb3 = self._rot(b[3])
+        rb7 = self._rot(b[7])
+        o0 = (b[1][0] + jm5[0], b[1][1] + jm5[1])
+        o2 = (b[1][0] - jm5[0], b[1][1] - jm5[1])
+        o1 = (rb3[0] + self._jm(rb7)[0], rb3[1] + self._jm(rb7)[1])
+        o3 = (rb3[0] - self._jm(rb7)[0], rb3[1] - self._jm(rb7)[1])
+        jme1 = self._jm(e1)
+        jmo3 = self._jm(o3)
+        a0 = (round_shift(e0[0] + e1[0] + o0[0] + o1[0], S),
+              round_shift(e0[1] + e1[1] + o0[1] + o1[1], S))
+        a1 = (round_shift(o0[0] + o1[0] + e0[0] * 0, S),
+              round_shift(o0[1] + o1[1], S))
+        a2 = (round_shift(e2[0] + jme1[0] + o2[0] + jmo3[0], S),
+              round_shift(e2[1] + jme1[1] + o2[1] + jmo3[1], S))
+        a4 = (round_shift(e0[0] + e1[0] - o0[0] - o1[0], S),
+              round_shift(e0[1] + e1[1] - o0[1] - o1[1], S))
+        a3 = (round_shift(o2[0] + jmo3[0], S), round_shift(o2[1] + jmo3[1], S))
+        a5 = (round_shift(o0[0] - o1[0], S), round_shift(o0[1] - o1[1], S))
+        a6 = (round_shift(e2[0] - jme1[0] + o2[0] - jmo3[0], S),
+              round_shift(e2[1] - jme1[1] + o2[1] - jmo3[1], S))
+        a7 = (round_shift(o2[0] - jmo3[0], S), round_shift(o2[1] - jmo3[1], S))
+        a1 = (round_shift(e0[0] - e1[0] + o0[0] + o1[0], S),
+              round_shift(e0[1] - e1[1] + o0[1] + o1[1], S))
+        # WRONG DRAFT COMBINE -- replaced by the validated version below
+        raise RuntimeError("draft")

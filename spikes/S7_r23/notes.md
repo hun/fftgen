@@ -933,3 +933,41 @@ params.txt/README/synth.tcl (no REORDER_OUT/PIPE_DEPTH generics).
 Verified end to end: N=1024 R=1 bit-exact PASS + Vivado synth MET
 (+0.066, matches the datasheet row); N=1024 R=2 SSR PASS (worst
 delta 1, tol 2); tests/test_export.py 11 passed.
+
+## r23 IFFT (bitrev -> native): the DIT r23 stage -- derivation done
+
+No composition shortcut exists (a DIF core cannot relabel to
+bitrev->natural; the double-FFT identity costs 2x hardware). The r23
+IFFT = a DIT r23 stage, the exact mirror of _R23DIFStage (the same
+class of mirror as fft_stage_r22_dit.v vs the r22 DIF pair).
+
+Derived kernel (the transpose of the DIF kernel, per group g):
+
+  products AT the y_j arrivals (one shared cmul, 7/8 duty --
+  y_1 at [0,G) .. y_7 at [6G,7G), y_0 at [7G,8G) -- the mirror of
+  the DIF emission member windows):
+    b_j = y_j * T[j*g*base]  (j=1..7);  b_0 = y0 << td   (the r22-DIT
+    vline trick: the unmultiplied member shifted to the product scale)
+  staged in depth-lag lines ((8-j)*G deep) so all eight meet at the
+  y_0 window; F8 DIT combine (the direct 8-point kernel, ONE combined
+  shift S = td+s0+s1+s2 -- the 1/N lumped, mirroring the r22 DIT):
+    even branch (b0,b2,b4,b6): e0=b0+b4, e1=b2+b6, e2=b0-b4, e3=b2-b6
+    odd branch (b1,b3,b5,b7): o0=b1+jm(b5), o2=b1-jm(b5),
+      o1=rot(b3)+jm(rot(b7)), o3=rot(b3)-jm(rot(b7))
+    a_0 = e0+e1+o0+o1;  a_4 = e0+e1-o0-o1
+    a_2 = e2+jm(e1)+o2+jm(o3);  a_6 = e2-jm(e1)+o2-jm(o3)
+    a_1 = e0-e1+o0+o1;  a_5 = e0-e1-o0-o1   (the even/odd 4-pt DFTs of
+    the W_8^m-weighted odd inputs; W_4 = jm, W_8^{1,3} = rot, W_8^2 = jm
+    -- the same _rot/_jm forms as the DIF stage, signs per js)
+  outputs: a_7 immediate, a_1..a_6 through (8-i)*G queues (the natural
+  order emission, delayed 7G -- the stage latency 7G+1).
+
+Validation plan (next session):
+1. round trip: _R23DIFStage -> _R23DITStage recovers the input
+   (a few LSB of S-shift rounding) -- validates the transpose + the
+   schedule alignment (the DIF emission windows = the DIT arrivals).
+2. float: the DIT chain output vs the float IDFT * 2^S.
+3. RTL fft_stage_r23_dit.v (the mirror of fft_stage_r23.v's rings/
+   phase chain) + fft_sdf_r23_dit.v + the H-scan bringup.
+The round trip needs NO float reference and catches sign/order errors
+in minutes -- do it first.
