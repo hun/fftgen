@@ -242,42 +242,64 @@ three r2 stages) + auto-derived r22 leftover pairs. NTRIP = the largest
 t in 1..3 with `3t <= NSTAGES`, `(NSTAGES-3t)` even and the smallest
 triple `G = N>>(3t) >= 8`; `NPAIRL = (NSTAGES-3t)/2`. DSP count =
 `4 x (NTRIP + NPAIRL)` (one shared complex multiplier per triple and
-per pair):
+per pair); R=2 adds 4 DSPs for the crossbar (2 lanes x M-point engines
++ `fft_cross`, the P8 corner order native -> bitreversed -- the r23
+lanes emit bit-reversed natively, so NO lane reorder buffers).
 
-| N | split (triples+pairs) | DSP | LUTs | FFs | LUTRAM | BRAM36 | WNS(ns) | FEP |
+Swept on **xcku5p-ffva676-2-e** (speed grade -2; the URAM288 min-period
+limit makes URAM unusable at 500 MHz on -1, see doc/uram_study.md),
+OOC synthesis @ 500 MHz, 16-bit samples / 18-bit twiddles, 1 shift per
+stage:
+
+### R=1
+
+| N | split (T+P) | DSP | LUTs | FFs | LUTRAM | BRAM36 | WNS(ns) | FEP |
 |---:|:---:|---:|---:|---:|---:|---:|---:|---:|
-| 512 | 1+3 | 16 | 3577 | 4502 | 980 | 6.5 | -0.195 | 8 |
-| 1024 | 2+2 | 16 | 5618 | 6389 | 1630 | 13.5 | -0.195 | 46 |
-| 2048 | 1+4 | 20 | 3872 | 4573 | 782 | 20 | -0.195 | 12 |
-| 4096 | 2+3 | 20 | 5316 | 6472 | 1254 | 29.5 | -0.195 | 8 |
-| 8192 | 3+2 | 20 | 7586 | 8373 | 2128 | 44.5 | -0.195 | 46 |
-| 16384 | 2+4 | 24 | 6350 | 6574 | 1728 | 82 | -0.195 | 84 |
-| 32768 | 3+3 | 24 | 8691 | 8598 | 3042 | 152.5 | -0.195 | 150 |
+| 512 | 1+3 | 16 | 3513 | 4460 | 932 | 7 | +0.073 | 0 |
+| 1024 | 2+2 | 16 | 5598 | 6321 | 1602 | 14.5 | +0.066 | 0 |
+| 2048 | 1+4 | 20 | 3870 | 4573 | 782 | 20 | +0.073 | 0 |
+| 4096 | 2+3 | 20 | 5252 | 6432 | 1206 | 30 | +0.073 | 0 |
+| 8192 | 3+2 | 20 | 7553 | 8305 | 2100 | 45.5 | +0.066 | 0 |
+| 16384 | 2+4 | 24 | 6351 | 6574 | 1728 | 82 | +0.073 | 0 |
+| 32768 | 3+3 | 24 | 8629 | 8556 | 2994 | 153 | +0.028 | 0 |
 
-- **Functionally verified at every row**: bit-exact vs the golden chain
-  in BOTH directions (fwd+inv, 2 blocks each) after the r22 dram/dline
-  width fix -- 14/14 configurations at 100.00%. N=8192 also closed
-  post-route at **+0.028** (the sweep's post-synth WNS is conservative).
-- **WNS -0.195 is N-independent** post-synth (one fixed limiter path
-  class, like the r22 crossbar hop before P7 step 8); FEP grows with N
-  on the BRAM-resident ring/ROM read paths.
-- **DSP vs r22 R=1**: equal at N=512/2048, -4 DSP at N=1024/4096/8192
-  (20 vs 24 at N=8192). The balanced splits (NTRIP=NPAIRL) are where
-  the 3-samples-per-pass saving shows; LUTs cross over too (r23 is
-  LUT-heavier at N<=1024 where the kernel control dominates, lighter
-  from N=8192: 7586 vs 13238).
-- **BRAM36 grows faster than r22** at the largest N (152.5 at N=32768
-  vs the r22 policy's ~31.5 at N=8192) -- the triple-chain LUTRAM rings
-  and the concatenated leftover-pair ROM spill into block RAM under the
-  default memory policy; an r23-specific cutoff pass is the obvious
-  follow-up if the N>=16384 rows matter.
-- **N=256 is unsupported**: NSTAGES=8 admits no valid triple count
-  (t=1 leaves 5 odd leftovers; t=2 needs G=4 < 8). Requires the
-  small-G r23 variant (or routing the small stage through r22), see
-  `spikes/S7_r23/notes.md`.
+**Every R=1 row MEETS 500 MHz** (0 failing endpoints). Functionally
+bit-exact vs the golden chain in both directions at every row.
 
-Repro: `python3 -m src.datasheet_sweep --arch r23 --r1 256 512 1024 2048 4096 8192 16384 32768 --jobs-dir build/datasheet_r23 -j 4`
-(per-config caches in `build/datasheet_r23/N*_R1_r23/result.json`).
+### R=2 (SSR, 2 samples/clock)
+
+| N | lane M | DSP | LUTs | FFs | LUTRAM | BRAM36 | WNS(ns) | FEP |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 256 | 128 | 28 | 5653 | 7982 | 1059 | 14 | +0.066 | 0 |
+| 1024 | 512 | 36 | 7461 | 9308 | 1871 | 14 | +0.073 | 0 |
+| 2048 | 1024 | 36 | 11754 | 13052 | 3180 | 29 | +0.066 | 0 |
+| 4096 | 2048 | 44 | 8585 | 9575 | 1477 | 40 | +0.073 | 0 |
+| 8192 | 4096 | 44 | 11961 | 13325 | 2198 | 60 | +0.073 | 0 |
+| 16384 | 8192 | 44 | 17390 | 17126 | 3731 | 91 | -0.087 | 12 |
+| 32768 | 16384 | 52 | 17151 | 13815 | 2404 | 164 | -0.517 | 58 |
+| 65536 | 32768 | 52 | 28196 | 17485 | 3987 | 306 | -0.240 | 52 |
+
+**R=2 meets 500 MHz through N=8192**; N=16384 misses by 0.087 ns (12
+endpoints), N=32768 by 0.517. Functionally bit-exact (within the SSR
+R/2+1-LSB tolerance, measured worst delta 1 LSB) vs
+SSRGoldenModel(arch="r23") at every verified size: N=1024..32768 fwd+inv,
+65536 fwd (`spikes/S7_r23/rtl_bringup/bringup_ssr23.py`). N=512 R=2 is
+unsupported (lane M=256 = the small-G limitation, same as R=1 N=256).
+
+Notes:
+- DSP = 4*(NTRIP+NPAIRL) per lane + 4 for the crossbar; the corner
+  order saves the reorder buffers entirely (vs the r22 native->native
+  SSR, which carries 2M x 2W ping-pong BRAMs per lane).
+- BRAM36 grows steeply at the largest N (306 at 65536 R=2, 153 at
+  32768 R=1) -- the triple-chain LUTRAM rings spill into block RAM
+  under the default policy; the URAM knob (`USE_URAM`, see
+  doc/uram_study.md) moves the big rings to URAM288 at SG2 (~59 BRAM36
+  freed at N=32768 R=1) and is the follow-up for these rows.
+- N=256 R=1 is unsupported (no valid triple count; the small-G r23
+  variant is the documented extension).
+
+Repro: `FFT_PART=xcku5p-ffva676-2-e python3 -m src.datasheet_sweep --arch r23 --r1 256 512 1024 2048 4096 8192 16384 32768 65536 --jobs-dir build/datasheet_r23 -j 3`
+(per-config caches in `build/datasheet_r23/N*_R{1,2}_r23/result.json`).
 
 ### Reading the table
 

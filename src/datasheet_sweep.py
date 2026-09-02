@@ -231,6 +231,40 @@ report_utilization -file util.txt
 report_timing_summary -delay_type max -max_paths 5 -file timing.txt
 """
 
+TCL_R23_SSR = """\
+set part    [lindex $argv 0]
+set npts    [lindex $argv 1]
+set ssr     [lindex $argv 2]
+set pack    [lindex $argv 3]
+set intern  [lindex $argv 4]
+create_project -in_memory -part $part
+add_files -fileset sources_1 [list \\
+    @RTL@/fft_ssr_r23.v \\
+    @RTL@/fft_sdf_r23.v \\
+    @RTL@/fft_stage_r23.v \\
+    @RTL@/fft_stage_r22.v \\
+    @RTL@/fft_cross.v ]
+set_property top fft_ssr_r23 [current_fileset]
+set wn_abs  [file normalize [file join [pwd] fft_wn.mem]]
+set t0_abs  [file normalize [file join [pwd] fft_tw_r23_t0.mem]]
+set t1_abs  [file normalize [file join [pwd] fft_tw_r23_t1.mem]]
+set t2_abs  [file normalize [file join [pwd] fft_tw_r23_t2.mem]]
+set l_abs   [file normalize [file join [pwd] fft_tw_r22_l.mem]]
+synth_design -top fft_ssr_r23 \\
+    -generic NUM_POINTS=$npts -generic SSR=$ssr \\
+    -generic WN_FILE=$wn_abs \\
+    -generic LANE_TW_T0=$t0_abs -generic LANE_TW_T1=$t1_abs \\
+    -generic LANE_TW_T2=$t2_abs -generic LANE_TW_L=$l_abs \\
+    -generic SAMPLE_WIDTH=16 -generic SAMPLE_DECIMAL=0 \\
+    -generic OUTPUT_WIDTH=16 -generic OUTPUT_DECIMAL=0 \\
+    -generic TWIDDLE_WIDTH=18 -generic TWIDDLE_DECIMAL=17 \\
+    -generic SCALING_PACK=$pack -generic INTERN_WIDTH=$intern \\
+    -generic INVERSE=0
+create_clock -period @NS@ -name clk [get_ports clk]
+report_utilization -file util.txt
+report_timing_summary -delay_type max -max_paths 5 -file timing.txt
+"""
+
 UTIL_ROWS = ["CLB LUTs", "CLB Registers", "LUT as Memory",
              "Block RAM Tile", "URAM", "DSPs"]
 
@@ -326,28 +360,85 @@ def artifacts_r22(n, outdir, r=1):
         return {"pack": pack, "intern": intern, "preload_bits": 0, "lane": lane}
 
 
-def artifacts_r23(n, outdir):
-    """Radix-2^3 SDF (S7): the r23 triple ROMs (8*G words each, layout
-    word[base_k+g] = T[k*g*8^m]) + ONE concatenated r22 leftover ROM
-    (pair jj's 3*D_jj slice at the cumulative base -- mirrors the
-    wrapper's TWIDDLE_FILE_L / NTRIP/NPAIRL auto-derivation).
-    Returns the scaling pack (1 shift per stage) and the internal
-    width.  Raises for N with no valid triple count (N=256)."""
-    from twiddles import canonical_twiddles
-    TW, TD = 18, 17
+def _r23_supported(n):
+    """NTRIP exactly as rtl/fft_sdf_r23.v derives it (0 = unsupported)."""
     nstages = n.bit_length() - 1
-    # NTRIP/NPAIRL exactly as rtl/fft_sdf_r23.v derives them
-    ntrip = 0
     for t in (3, 2, 1):
         if nstages >= 3 * t and (nstages - 3 * t) % 2 == 0 and (n >> (3 * t)) >= 8:
-            ntrip = t
-            break
+            return t
+    return 0
+
+
+def _r23_lane_roms(m, tw, mask, outdir):
+    """Write the M-point r23 lane ROMs: the 3 triple ROMs (8*G words,
+    word[base_k+g] = T_M[k*g*8^mm]) + ONE concatenated r22 leftover ROM
+    (pair jj's 3*D_jj slice at the cumulative base). The LANE is an
+    M-point core: the table MUST be the M-point one (at R=2, W_M =
+    W_N^2 -- the N-point table halves the rotation rate)."""
+    TW = 18
+    nstages = m.bit_length() - 1
+    ntrip = _r23_supported(m)
+    if ntrip == 0:
+        raise ValueError(f"M={m}: no valid r23 triple count "
+                         f"(NSTAGES={nstages}; needs the small-G variant)")
+    npairl = (nstages - 3 * ntrip) // 2
+    for mm in range(3):
+        g = m >> (3 * mm + 3)
+        layout = [(0, 2), (g, 6), (3 * g, 1), (4 * g, 5),
+                  (5 * g, 3), (6 * g, 7), (7 * g, 4)]
+        words = [0] * (8 * g)
+        for b, k in layout:
+            for gg in range(g):
+                re, im = tw[(k * gg * (1 << (3 * mm))) % m]
+                words[b + gg] = ((re & mask) << TW) | (im & mask)
+        with open(os.path.join(outdir, f"fft_tw_r23_t{mm}.mem"), "w") as f:
+            for w in words:
+                f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
+    ds = [m >> (3 * ntrip + 2 * jj + 2) for jj in range(npairl)]
+    strides = [1 << (3 * ntrip + 2 * jj) for jj in range(npairl)]
+    words = [0] * sum(3 * d for d in ds)
+    i = 0
+    for jj in range(npairl):
+        for which in (1, 2, 3):
+            for g in range(ds[jj]):
+                re, im = tw[(which * g * strides[jj]) % m]
+                words[i] = ((re & mask) << TW) | (im & mask)
+                i += 1
+    with open(os.path.join(outdir, "fft_tw_r22_l.mem"), "w") as f:
+        for w in words:
+            f.write("%05x\n" % (w & ((1 << (2 * TW)) - 1)))
+
+
+def artifacts_r23(n, outdir, r=1):
+    """Radix-2^3 SDF (S7). R=1: the r23 triple ROMs + ONE concatenated
+    r22 leftover ROM (the wrapper's TWIDDLE_FILE_L / NTRIP/NPAIRL
+    auto-derivation). R=2: 2 x M-point lanes (M = N/2) -- the lane ROMs
+    from the M-POINT table + the crossbar WN ROM from the N-point table
+    (W_N^{r*p}, row r = [r*M, (r+1)*M)). Returns the LANE scaling pack
+    (1 shift per stage) and the internal width. Raises for N with no
+    valid triple count (N=256 R=1; N=512 R=2, lane M=256)."""
+    from twiddles import canonical_twiddles
+    TW, TD = 18, 17
+    mask = (1 << TW) - 1
+    if r == 2:
+        m = n // 2
+        twm = canonical_twiddles(m, TW, TD, inverse=False)
+        _r23_lane_roms(m, twm, mask, outdir)
+        tw = canonical_twiddles(n, TW, TD, inverse=False)
+        with open(os.path.join(outdir, "fft_wn.mem"), "w") as f:
+            for rr in range(r):
+                for p in range(m):
+                    re, im = tw[(rr * p) % n]
+                    f.write("%05x\n" % (((re & mask) << TW) | (im & mask)))
+        pack = sum(1 << (2 * s) for s in range(m.bit_length() - 1))
+        return {"pack": pack, "intern": 16, "preload_bits": 0}
+    nstages = n.bit_length() - 1
+    ntrip = _r23_supported(n)
     if ntrip == 0:
         raise ValueError(f"N={n}: no valid r23 triple count "
                          f"(NSTAGES={nstages}; needs the small-G variant)")
     npairl = (nstages - 3 * ntrip) // 2
     tw = canonical_twiddles(n, TW, TD, inverse=False)
-    mask = (1 << TW) - 1
     # r23 triples: G_m = N >> (3m+3), twiddle stride 8^m (the unused
     # higher-m ROMs are still written: the TCL passes all three files)
     for m in range(3):
@@ -438,7 +529,7 @@ def run_one(args):
     gen = {}
     try:
         if arch == "r23":
-            gen = artifacts_r23(n, outdir)
+            gen = artifacts_r23(n, outdir, r=r)
         elif arch == "r22i":
             gen = artifacts_r22i(n, outdir)
         elif arch in ("r22", "r22b"):
@@ -476,12 +567,21 @@ def run_one(args):
             if arch == "r22b":
                 cmd.append("0")       # REORDER_OUT=0: P8 corner order
     elif arch == "r23":
-        tcl = TCL_R23.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
-        tcl_path = os.path.join(outdir, "synth.tcl")
-        open(tcl_path, "w").write(tcl)
-        cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
-               "-source", "synth.tcl", "-tclargs", PART, str(n),
-               str(gen["pack"]), str(gen["intern"])]
+        if r == 2:
+            tcl = TCL_R23_SSR.replace("@RTL@", os.path.join(ROOT, "rtl")).replace(
+                "@NS@", str(CLK_NS))
+            tcl_path = os.path.join(outdir, "synth.tcl")
+            open(tcl_path, "w").write(tcl)
+            cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
+                   "-source", "synth.tcl", "-tclargs", PART, str(n),
+                   str(r), str(gen["pack"]), str(gen["intern"])]
+        else:
+            tcl = TCL_R23.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
+            tcl_path = os.path.join(outdir, "synth.tcl")
+            open(tcl_path, "w").write(tcl)
+            cmd = [VIVADO, "-mode", "batch", "-nojournal", "-nolog",
+                   "-source", "synth.tcl", "-tclargs", PART, str(n),
+                   str(gen["pack"]), str(gen["intern"])]
     else:
         tcl = TCL_R2.replace("@RTL@", os.path.join(ROOT, "rtl")).replace("@NS@", str(CLK_NS))
         tcl_path = os.path.join(outdir, "synth.tcl")
@@ -551,6 +651,8 @@ def main():
             configs.append((n, 1, "r22"))
         if "r23" in archs:
             configs.append((n, 1, "r23"))
+            if _r23_supported(n // 2):
+                configs.append((n, 2, "r23"))
     for n in args.r2:
         if "r2" in archs:
             configs.append((n, 2, "r2"))
