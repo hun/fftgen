@@ -63,7 +63,12 @@ module fft_stage_r23 #(
     parameter integer NPTS            = 128,   // N (full canonical table)
     parameter integer INVERSE         = 0,
     parameter integer Q8              = 92682, // round(sqrt2/2 * 2^TD)
-    parameter MEM_STYLE               = "block",
+    parameter MEM_STYLE               = "block",  // (legacy, unused)
+    parameter integer USE_URAM        = 0,     // 1: the big rings + tw ROM
+                                               //    map to URAM288 instead
+                                               //    of BRAM (same 1-cycle
+                                               //    registered-read contract;
+                                               //    doc/uram_study.md)
     parameter [15:0] K_PRELOAD        = 16'h0,
     parameter TWIDDLE_FILE            = "fft_twiddles_r23.mem"
 )(
@@ -129,54 +134,101 @@ module fft_stage_r23 #(
     end
     // synthesis translate_on
 
+    // URAM option: the rings and the twiddle ROM all use the 1-cycle
+    // registered-read (DOUT) contract, so BRAM and URAM288 are
+    // behaviorally interchangeable here (S1 spike: ram_style="ultra"
+    // maps the same codings; doc/uram_study.md). USE_URAM=1 hints
+    // "ultra" on the big arrays AND on the auto product-FIFO rings
+    // (which Vivado otherwise maps to BRAM at large G).
+    localparam RING_STYLE = (USE_URAM != 0) ? "ultra" : "block";
+    localparam PF_STYLE   = (USE_URAM != 0) ? "ultra" : "auto";
+    // ring0 exception: the only 4G-deep array (a 4-high URAM cascade at
+    // N=32768) -- its clock-to-out misses the read -> a0_r -> butterfly
+    // path (WNS -0.501 / 55 FEP at SG2 N=32768; the G-deep single-URAM
+    // rings are fine). Stays in BRAM; ~16 BRAM36 at N=32768.
+    localparam RING0_STYLE = "block";
+    // ringA_s exception (USE_URAM=1): its 2G-deep URAM read was among
+    // the last failing paths at SG2 N=32768 (-0.154 / 40 FEP); keeping
+    // it in BRAM leaves only fabric g_r->ROM paths at the edge.
+    localparam RINGS_STYLE = "block";
+    // the twiddle ROM stays in BRAM/LUTRAM always: URAM288 cannot be
+    // initialized (no INIT support), so $readmemh ROMs cannot live
+    // there. (URAM clock-to-out would also break the ROM's 1-cycle
+    // DOUT -> DSP-BREG contract: WNS -1.55 at N=32768 SG1 -- see
+    // doc/uram_study.md)
+    localparam TW_STYLE   = "block";
+
     // ---------------- memories (distributed, async read) --------------
     // ring0 holds raw inputs (IW); every other ring holds CB-wide
     // internal values (the auto schedule keeps them inside CB:
     // |rot(dA)| <= sqrt2 * 2^W < 2^(W+1) = CB range, notes.md).
-    (* ram_style = "block" *)
+    (* ram_style = RING0_STYLE *)
     reg signed [IW-1:0] ring0_re   [0:4*G-1];
+    (* ram_style = RING0_STYLE *)
     reg signed [IW-1:0] ring0_im   [0:4*G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RINGS_STYLE *)
     reg signed [CB-1:0] ringA_s_re [0:2*G-1];
+    (* ram_style = RINGS_STYLE *)
     reg signed [CB-1:0] ringA_s_im [0:2*G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] ringA_d0_re [0:G-1];
     reg signed [CB-1:0] ringA_d0_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] ringA_d1_re [0:G-1];
     reg signed [CB-1:0] ringA_d1_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] ringB_p_re [0:G-1];
     reg signed [CB-1:0] ringB_p_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] ringB_q_re [0:G-1];
     reg signed [CB-1:0] ringB_q_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] ringB_q1_re [0:G-1];
     reg signed [CB-1:0] ringB_q1_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] rbbm_re [0:G-1];
     reg signed [CB-1:0] rbbm_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] rbbp_re [0:G-1];
     reg signed [CB-1:0] rbbp_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] rr1_re [0:G-1];
     reg signed [CB-1:0] rr1_im [0:G-1];
-    (* ram_style = "block" *)
+    (* ram_style = RING_STYLE *)
     reg signed [CB-1:0] rr3_re [0:G-1];
     reg signed [CB-1:0] rr3_im [0:G-1];
     // one G-deep LUTRAM per class (the single 8G-deep array needed the
     // cls_base adder in front of a 128:1 chunk-select read mux and
     // missed 2 ns; per-class arrays are addressed by the raw group and
     // selected by the 3-bit member)
-    reg signed [IW-1:0] pf1_re [0:G-1]; reg signed [IW-1:0] pf1_im [0:G-1];  // y2
-    reg signed [IW-1:0] pf2_re [0:G-1]; reg signed [IW-1:0] pf2_im [0:G-1];  // y6
-    reg signed [IW-1:0] pf3_re [0:G-1]; reg signed [IW-1:0] pf3_im [0:G-1];  // y1
-    reg signed [IW-1:0] pf4_re [0:G-1]; reg signed [IW-1:0] pf4_im [0:G-1];  // y5
-    reg signed [IW-1:0] pf5_re [0:G-1]; reg signed [IW-1:0] pf5_im [0:G-1];  // y3
-    reg signed [IW-1:0] pf6_re [0:G-1]; reg signed [IW-1:0] pf6_im [0:G-1];  // y7
-    reg signed [IW-1:0] pf7_re [0:G-1]; reg signed [IW-1:0] pf7_im [0:G-1];  // y4
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf1_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf1_im [0:G-1];  // y2
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf2_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf2_im [0:G-1];  // y6
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf3_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf3_im [0:G-1];  // y1
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf4_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf4_im [0:G-1];  // y5
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf5_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf5_im [0:G-1];  // y3
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf6_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf6_im [0:G-1];  // y7
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf7_re [0:G-1];
+    (* ram_style = PF_STYLE *)
+    reg signed [IW-1:0] pf7_im [0:G-1];  // y4
     integer _i;
     initial begin
         for (_i = 0; _i < 4*G; _i = _i + 1) begin
@@ -258,7 +310,7 @@ module fft_stage_r23 #(
 
     // ---------------- twiddle ROM (BRAM, registered read) -------------
     localparam integer ROMW = (NPTS > 1) ? $clog2(NPTS) : 1;
-    (* ram_style = "block" *)
+    (* ram_style = TW_STYLE *)
     reg signed [TW*2-1:0] tw_rom [0:NPTS-1];
     initial $readmemh(TWIDDLE_FILE, tw_rom);
     wire [KW-1:0] k_next = k + {{(KW-1){1'b0}}, 1'b1};

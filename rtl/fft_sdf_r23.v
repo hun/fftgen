@@ -40,6 +40,7 @@ module fft_sdf_r23 #(
     // auto default (= NTRIP) should hold for every N
     parameter integer KP_L0_TRIM     = -1,   // -1 = auto (= NTRIP)
     parameter integer KP_L1_TRIM     = -1,
+    parameter integer USE_URAM       = 0,     // 1: triple rings/ROMs -> URAM
     parameter integer INTERN_WIDTH   = SAMPLE_WIDTH + 5
 )(
     input  wire                      clk,
@@ -238,6 +239,7 @@ module fft_sdf_r23 #(
         .INVERSE        (INVERSE),
         .Q8             (q8_of(TWIDDLE_DECIMAL)),
         .K_PRELOAD      (16'h0),
+        .USE_URAM       (USE_URAM),
         .TWIDDLE_FILE   (TWIDDLE_FILE_T0)
     ) u_t0 ( .clk(clk), .ce(run), .rst(rst),
         .in_re(in_x_re), .in_im(in_x_im),
@@ -259,6 +261,7 @@ module fft_sdf_r23 #(
                 .INVERSE        (INVERSE),
                 .Q8             (q8_of(TWIDDLE_DECIMAL)),
                 .K_PRELOAD      (KPRE),
+                .USE_URAM       (USE_URAM),
                 .TWIDDLE_FILE   (TWIDDLE_FILE_T1)
             ) u_t1 ( .clk(clk), .ce(run), .rst(rst),
                 .in_re(t1_re), .in_im(t1_im),
@@ -280,6 +283,7 @@ module fft_sdf_r23 #(
                 .INVERSE        (INVERSE),
                 .Q8             (q8_of(TWIDDLE_DECIMAL)),
                 .K_PRELOAD      (KPRE),
+                .USE_URAM       (USE_URAM),
                 .TWIDDLE_FILE   (TWIDDLE_FILE_T2)
             ) u_t2 ( .clk(clk), .ce(run), .rst(rst),
                 .in_re(t2_re), .in_im(t2_im),

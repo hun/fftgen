@@ -57,7 +57,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 SPIKE_R22 = os.path.join(ROOT, "spikes", "S5_r22")
 
 VIVADO = os.environ.get("VIVADO_BIN", "/tools/Xilinx/2026.1/Vivado/bin/vivado")
-PART = "xcku5p-ffva676-1-e"
+PART = os.environ.get("FFT_PART", "xcku5p-ffva676-1-e")
 CLK_NS = 2.0
 
 # ---------------------------------------------------------------------------
