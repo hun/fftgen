@@ -871,6 +871,155 @@ class _R23DIFStage:
         self.out = cur
         return ret
 
+
+class _R23DITStage:
+    """One radix-2^3 DIT stage: the exact mirror of :class:`_R23DIFStage`
+    (multiply-then-combine).  Part of the r23 IFFT work (bit-reversed
+    input, natural output).
+
+    Input stream contract (matches the DIF stage's output stream): the
+    member at stream phase i*G+g carries Y_{bitrev3(i)}(g), the sample g
+    of sub-transform bitrev3(i) -- the DIF chain emits sub-transforms in
+    bitrev member order.  The stage computes the transposed kernel
+
+        a_{m''}(g) = (1/8) * sum_j omega^{-j*m''} * T[j*g*base]^-1 * Y_j(g)
+
+    i.e. the FORWARD synthesis (omega = e^{-j pi/4} forms: js=-1) with
+    the forward twiddle table; instantiating it with inverse=True / the
+    conjugated table gives the IFFT-chain DIT stage (same schedule).
+
+    Schedule (period 8G, G = N/8^{m+1}, window w = k//G, group g = k%G):
+
+      window w:      member = DFT-input BR[w] (BR = bitrev3); product
+                     c_j = Y_j * tw[j*g*base] computed at the arrival
+                     (c_0 = Y_0 << td unmultiplied; ONE shared cmul,
+                     7/8 duty -- the mirror of the DIF's slots)
+      depth-lag      c_j staged (7-bitrev3(j))*G deep so all eight meet
+      lines:         at window 7
+      window 7:      F8 DIT combine -- 3-layer synthesis, ONE lumped
+                     shift S = td+s0+s1+s2 (+extra) at the 8 outputs:
+                       e_j = c_j+c_{j+4}, f_j = c_j-c_{j+4}   (j=0..3)
+                       f1' = rot(f_1), f2' = jm(f_2),
+                       f3' = jm(rot(f_3))          (the mirror of the
+                                                    DIF's rot pipes)
+                       w0 = e0+e2+e1+e3        w4 = e0+e2-e1-e3
+                       w2 = e0-e2+jm(e1-e3)    w6 = e0-e2-jm(e1-e3)
+                       w1 = f0'+f2'+f1'+f3'    w5 = f0'+f2'-f1'-f3'
+                       w3 = f0'-f2'+jm(f1'-f3')
+                       w7 = f0'-f2'-jm(f1'-f3')
+      emission:      natural order -- w_0 immediate (out register),
+                     w_{m''} (m''=1..7) through an m''*G queue;
+                     latency 7G+1 (position p emerges at clock p+7G+1).
+
+    Ring indexing is (clock mod depth) throughout: every write/read pair
+    is separated by exactly the structure depth, so one shared index is
+    always phase-correct (no separate read/write pointers).
+
+    Round-trip identity: _R23DIFStage(sigmas=0, tw_inv, js=+1) followed
+    by _R23DITStage(sigmas=0, tw_fwd, js=-1, shift_extra=3) recovers the
+    DIF stage's input stream (a few LSB of product/rot rounding).
+    """
+
+    BR = (0, 4, 2, 6, 1, 5, 3, 7)      # bitrev3: window w carries input BR[w]
+
+    def __init__(self, m: int, N: int, sigma0: int, sigma1: int,
+                 sigma2: int, td: int, tw: Sequence[Complex],
+                 inverse: bool = False, shift_extra: int = 0):
+        self.m = m
+        self.N = N
+        self.sig = (sigma0, sigma1, sigma2)
+        self.td = td
+        self.G = N >> (3 * m + 3)
+        self.base = 8 ** m
+        self.js = -1 if not inverse else 1
+        self.q8 = _q8(td)
+        self.tw = tw
+        self.shift_extra = shift_extra
+        G = self.G
+        # product lines c_0..c_6 (c_7 is consumed fresh at the combine);
+        # the member carrying c_j arrives at window bitrev3(j), so the
+        # line depth (distance to the combine at window 7) is (7-j')*G
+        # with j' = bitrev3(j) = self.BR[j]
+        self.lines = [[(0, 0)] * ((7 - self.BR[j]) * G) for j in range(7)]
+        # output queues w_1..w_7, depth m''*G (w_0 immediate)
+        self.queues = [[(0, 0)] * (mp * G) for mp in range(1, 8)]
+        self.out = (0, 0)
+        self.S = td + sigma0 + sigma1 + sigma2 + shift_extra
+
+    @property
+    def latency(self) -> int:
+        return 7 * self.G + 1
+
+    def _rot(self, z):
+        return (round_shift((z[0] - self.js * z[1]) * self.q8, self.td),
+                round_shift((z[1] + self.js * z[0]) * self.q8, self.td))
+
+    def _jm(self, z):                      # js*j*z
+        return (-self.js * z[1], self.js * z[0])
+
+    def step(self, x: Complex, pos: int) -> Complex:
+        G = self.G
+        ret = self.out
+        r, i = x
+        k = pos % (8 * G)
+        g = pos % G
+        w = k // G
+        S = self.S
+
+        # ---- product at the arrival: window w carries DFT-input BR[w] ----
+        j = self.BR[w]
+        if j == 0:
+            c_new = (r << self.td, i << self.td)
+        else:
+            tr, ti = self.tw[(j * g * self.base) % self.N]
+            c_new = complex_multiply_karatsuba(r, i, tr, ti)
+        if j != 7:
+            lj = self.lines[j]
+            lj[pos % len(lj)] = c_new
+
+        if w < 7:
+            # drain the output queue for w_{w+1} (written (w+1)*G ago)
+            q = self.queues[w]
+            cur = q[pos % len(q)]
+        else:
+            # ---- F8 DIT combine at the y_0 window ----
+            c = [lj[pos % len(lj)] for lj in self.lines]
+            c.append(c_new)
+            e = [(c[jj][0] + c[jj + 4][0], c[jj][1] + c[jj + 4][1])
+                 for jj in range(4)]
+            f = [(c[jj][0] - c[jj + 4][0], c[jj][1] - c[jj + 4][1])
+                 for jj in range(4)]
+            f1r = self._rot(f[1])
+            f3r = self._rot(f[3])
+            fp = [f[0], f1r, self._jm(f[2]), self._jm(f3r)]
+            A = (e[0][0] + e[2][0], e[0][1] + e[2][1])
+            B = (e[0][0] - e[2][0], e[0][1] - e[2][1])
+            C = (e[1][0] + e[3][0], e[1][1] + e[3][1])
+            D = (e[1][0] - e[3][0], e[1][1] - e[3][1])
+            E = (fp[0][0] + fp[2][0], fp[0][1] + fp[2][1])
+            F = (fp[0][0] - fp[2][0], fp[0][1] - fp[2][1])
+            Gm = (fp[1][0] + fp[3][0], fp[1][1] + fp[3][1])
+            H = (fp[1][0] - fp[3][0], fp[1][1] - fp[3][1])
+            jmD = self._jm(D)
+            jmH = self._jm(H)
+            w0 = (round_shift(A[0] + C[0], S), round_shift(A[1] + C[1], S))
+            w1 = (round_shift(E[0] + Gm[0], S), round_shift(E[1] + Gm[1], S))
+            w2 = (round_shift(B[0] + jmD[0], S), round_shift(B[1] + jmD[1], S))
+            w3 = (round_shift(F[0] + jmH[0], S), round_shift(F[1] + jmH[1], S))
+            w4 = (round_shift(A[0] - C[0], S), round_shift(A[1] - C[1], S))
+            w5 = (round_shift(E[0] - Gm[0], S), round_shift(E[1] - Gm[1], S))
+            w6 = (round_shift(B[0] - jmD[0], S), round_shift(B[1] - jmD[1], S))
+            w7 = (round_shift(F[0] - jmH[0], S), round_shift(F[1] - jmH[1], S))
+            for mp, val in ((1, w1), (2, w2), (3, w3), (4, w4),
+                            (5, w5), (6, w6), (7, w7)):
+                qq = self.queues[mp - 1]
+                qq[pos % len(qq)] = val
+            cur = w0
+
+        self.out = cur
+        return ret
+
+
 class R23SDFGoldenModel:
     """Cycle-accurate streaming model of the R2^3 DIF pipeline (S7).
 
@@ -990,6 +1139,98 @@ class R23SDFGoldenModel:
                 for k, (re, im) in enumerate(q):
                     idx = f * N + k
                     outs.append((re, im) + tuple(markers[idx]))
+            else:
+                outs.extend(q)
+        return outs
+
+    def process_stream_simple(self, samples):
+        return self.process_stream(samples)
+
+
+class R23SDFGoldenModelDit:
+    """Cycle-accurate streaming model of the R2^3 DIT pipeline (S8):
+    bit-reversed input, natural output -- the r23 IFFT core.
+
+    Mirror of :class:`R23SDFGoldenModel`: the pipeline runs the layer
+    decomposition in REVERSE order (finest first).  The n mod 3 plain
+    radix-2 leftover DIT stages run FIRST (self-clocked, phase-preloaded
+    like the DIF model's leftovers), then one :class:`_R23DITStage` per
+    merged triple, m = m_max-1 .. 0, pos-offset bookkeeping exactly like
+    the DIF chain.  Shift schedule: layer L in processing order uses
+    cfg.shifts[L] (one shift per r2 layer, three per r23 triple), the
+    same pipeline-order convention as the validated r22 DIT chain.
+
+    Twiddles: the chain DIT is the same-direction IFFT decomposition
+    (NOT the DIF-inverting transpose), so every product uses the
+    inverse table with positive indices (tw_inv[j*g*base] / the r2
+    slices tw_inv[j*N/2^(s'+1)]) and the omega_+ rot/jm forms
+    (inverse=True throughout).
+    """
+
+    def __init__(self, cfg: FFTConfig):
+        if cfg.ssr != 1:
+            raise NotImplementedError("R23 model supports ssr=1 only")
+        if not cfg.is_dit or cfg.input_order != "bitreversed" \
+                or cfg.output_order != "native":
+            raise NotImplementedError(
+                "R23 DIT model covers bitreversed->native only")
+        self.cfg = cfg
+        N = cfg.num_points
+        self.N = N
+        n = cfg.num_stages
+        td = cfg.twiddle_decimal
+        tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
+        m_max = n // 3
+        r = n - 3 * m_max
+        # plain radix-2 DIT leftovers, finest first (s' = 0..r-1)
+        self.r2 = []
+        for s in range(r):
+            D = 1 << s
+            sl = [tw[(j * (N >> (s + 1))) % N] for j in range(D)]
+            st = _SDFStage(s, N, cfg.shifts[s], td, sl, dit=True)
+            lat = sum(x.D + _SDFStage.NLAYERS for x in self.r2)
+            for _ in range((-lat) % (2 * D)):
+                st.step(0, 0)
+            self.r2.append(st)
+        # r23 DIT triples, m descending (finest first)
+        self.stages = []
+        for j in range(m_max):
+            m = m_max - 1 - j
+            k = r + 3 * j
+            self.stages.append(_R23DITStage(
+                m, N, cfg.shifts[k], cfg.shifts[k + 1], cfg.shifts[k + 2],
+                td, tw, cfg.inverse))
+        self.latency = sum(st.D + _SDFStage.NLAYERS for st in self.r2) \
+            + sum(st.latency for st in self.stages)
+
+    def process_stream(self, samples, markers=None):
+        """Bit-reversed input stream -> natural-order output."""
+        N = self.N
+        raw = []
+        T = len(samples)
+        for pos in range(T + self.latency):
+            src = samples[pos] if pos < T else (0, 0)
+            cur = (src[0], src[1])
+            up = 0
+            for st in self.r2:
+                cur = st.step(cur[0], cur[1])
+                up += st.D + _SDFStage.NLAYERS
+            for st in self.stages:
+                cur = st.step(cur, pos - up)
+                up += st.latency
+            raw.append(cur)
+        raw = raw[self.latency:]
+        assert len(raw) == T
+        outs = []
+        for f in range(len(raw) // N):
+            frame = raw[f * N:(f + 1) * N]
+            q = [quantize_output(re, im, self.cfg.sample_decimal,
+                                 self.cfg.output_width,
+                                 self.cfg.output_decimal)
+                 for re, im in frame]
+            if markers is not None:
+                for kk, (re, im) in enumerate(q):
+                    outs.append((re, im) + tuple(markers[f * N + kk]))
             else:
                 outs.extend(q)
         return outs

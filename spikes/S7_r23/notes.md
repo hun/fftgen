@@ -971,3 +971,48 @@ Validation plan (next session):
    phase chain) + fft_sdf_r23_dit.v + the H-scan bringup.
 The round trip needs NO float reference and catches sign/order errors
 in minutes -- do it first.
+
+## r23 DIT golden: IMPLEMENTED + VALIDATED (S8 session 2)
+
+`_R23DITStage` (src/golden.py) -- the exact mirror of `_R23DIFStage`:
+  - products AT the member arrivals (window w carries DFT-input
+    bitrev3(w); product c_j = Y_j * tw[j*g*base], c_0 = Y_0 << td),
+    one shared cmul, 7/8 duty
+  - depth-lag lines, depth (7 - bitrev3(j))*G for c_j  <-- NOT (7-j)*G,
+    that was the one schedule bug (lines 1/3 misaligned slots)
+  - F8 DIT combine at window 7: e/f split, f1'=rot(f1), f2'=jm(f2),
+    f3'=jm(rot(f3)), two DFT-4 syntheses, ONE lumped shift
+    S = td+s0+s1+s2 (+shift_extra) at the 8 outputs
+  - emission: w_0 immediate, w_m'' through m''*G queues -> natural
+    order; latency 7G+1
+  - ring indexing = (clock mod depth) throughout -- every write/read
+    pair is separated by exactly the structure depth
+
+Validation 1 -- round trip (spikes/S7_r23/dit_roundtrip.py):
+  DIF(sig=0, tw_inv, js=+1) -> DIT(sig=0, tw_fwd, js=-1, shift_extra=3)
+  recovers the DIF input stream <=1 LSB for (N,m) = 512/0, 1024/0,
+  4096/0, 4096/1, 8192/1, 32768/2, 65536/3, 65536/4.
+
+Validation 2 -- float IDFT (spikes/S7_r23/dit_chain_float.py):
+  `R23SDFGoldenModelDit` (the full IFFT chain: r n%3 radix-2 DIT
+  leftovers first, phase-preloaded, then the r23 triples m descending;
+  shifts = cfg.shifts[layer in processing order]) vs the float IDFT:
+  worst delta < 1 LSB for N = 512, 1024, 2048, 4096, 8192
+  (covers r = 0, 1, 2).
+
+Gotchas hit:
+  - the canonical twiddle table is Q(w-1) -- test params must satisfy
+    decimal = width-1 (17/18); (16,16) saturates the whole table
+  - chain DIT != DIF-inverting transpose: the chain products use the
+    INVERSE table positive-index (tw_inv[j*g*base], js=+1); only the
+    round-trip inverter uses tw_fwd + js=-1
+  - r2-DIT leftover s' twiddle slice = tw_inv[j*N/2^(s'+1)],
+    j < 2^s' (complex +j entries for s' >= 1, unlike the DIF's
+    tw_inv[j<<s] slices)
+
+Next: RTL fft_stage_r23_dit.v (the ring/phase mirror of
+fft_stage_r23.v), fft_sdf_r23_dit.v, H-scan bringup, then SSR R=2
+composition with the crossbar (the DIT core emits natural order, so
+the SSR corner order flips to native->bitrev-in / natural-out... i.e.
+the SSR IFFT keeps bitrev spectrum in, natural samples out with NO
+input reorder).
