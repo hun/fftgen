@@ -920,3 +920,16 @@ M=512 and M=1024) and the r23 SSR golden against the verified r22 SSR
 golden (<= 2 LSB over all 2048 bins, same input).
   N=32768 INV=0: 65536/65536 bins, worst 1 LSB -- MATCH. SSR R=2 final:
   1024/2048/4096/8192/16384 x {fwd,inv} + 32768 fwd = 11/11 MATCH.
+
+## export_core.py: r23 support
+
+--stage-mode r23 (R=1 and SSR R=2). The export tree carries the 4 ROM
+files (fft_tw_r23_t{0,1,2}.mem + fft_tw_r22_l.mem), a generated
+fft_core.v (R=1, module fft_top -- tb_fft_sdf.cpp reusable verbatim),
+the baked fft_ssr_r23.v (SSR; no lane wrapper -- the r23 lanes are
+whole cores), INTERN_WIDTH pinned to the verified 16, no
+FFTGEN_PRELOADS (KPRE localparams, like r22), and the r23 branches in
+params.txt/README/synth.tcl (no REORDER_OUT/PIPE_DEPTH generics).
+Verified end to end: N=1024 R=1 bit-exact PASS + Vivado synth MET
+(+0.066, matches the datasheet row); N=1024 R=2 SSR PASS (worst
+delta 1, tol 2); tests/test_export.py 11 passed.

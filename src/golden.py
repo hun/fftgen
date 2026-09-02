@@ -1125,6 +1125,23 @@ class R23ChainGoldenModel:
             u, l = self._mkq.popleft()
         return v, vre, vim, u, l
 
+    def process_stream(self, samples, markers=None):
+        """Flat streaming rows (re, im, tuser, tlast), quantized to the
+        cfg's output contract -- the exported-tree expected.txt format."""
+        T = len(samples)
+        rows = []
+        for pos in range(T + self.latency):
+            src = samples[pos] if pos < T else (0, 0)
+            u, l = (markers[pos] if markers and pos < T else (0, 0))
+            v, a, b, uu, ll = self.tick(True, src[0], src[1], u, l)
+            if v:
+                q = quantize_output(a, b, self.cfg.sample_decimal,
+                                    self.cfg.output_width,
+                                    self.cfg.output_decimal)
+                rows.append((q[0], q[1], uu, ll))
+        assert len(rows) == T, (len(rows), T)
+        return rows
+
 
 # ----------------------------------------------------------------------
 # P7: cycle-accurate streaming DIT R2² model (mirror topology)
