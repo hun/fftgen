@@ -945,6 +945,12 @@ class _R23DITStage:
         self.queues = [[(0, 0)] * (mp * G) for mp in range(1, 8)]
         self.out = (0, 0)
         self.S = td + sigma0 + sigma1 + sigma2 + shift_extra
+        # free-running position counter: the line/queue slot index = the
+        # call count mod depth (the RTL mirrors this with free-running
+        # per-depth pointers -- NOT k mod depth: depths like 3G/5G/7G do
+        # not divide the 8G counter period, so k-based slots would
+        # diverge across periods)
+        self.pc = 0
 
     @property
     def latency(self) -> int:
@@ -965,6 +971,8 @@ class _R23DITStage:
         g = pos % G
         w = k // G
         S = self.S
+        pc = self.pc
+        self.pc += 1
 
         # ---- product at the arrival: window w carries DFT-input BR[w] ----
         j = self.BR[w]
@@ -975,15 +983,15 @@ class _R23DITStage:
             c_new = complex_multiply_karatsuba(r, i, tr, ti)
         if j != 7:
             lj = self.lines[j]
-            lj[pos % len(lj)] = c_new
+            lj[pc % len(lj)] = c_new
 
         if w < 7:
             # drain the output queue for w_{w+1} (written (w+1)*G ago)
             q = self.queues[w]
-            cur = q[pos % len(q)]
+            cur = q[pc % len(q)]
         else:
             # ---- F8 DIT combine at the y_0 window ----
-            c = [lj[pos % len(lj)] for lj in self.lines]
+            c = [lj[pc % len(lj)] for lj in self.lines]
             c.append(c_new)
             e = [(c[jj][0] + c[jj + 4][0], c[jj][1] + c[jj + 4][1])
                  for jj in range(4)]
@@ -1013,7 +1021,7 @@ class _R23DITStage:
             for mp, val in ((1, w1), (2, w2), (3, w3), (4, w4),
                             (5, w5), (6, w6), (7, w7)):
                 qq = self.queues[mp - 1]
-                qq[pos % len(qq)] = val
+                qq[pc % len(qq)] = val
             cur = w0
 
         self.out = cur

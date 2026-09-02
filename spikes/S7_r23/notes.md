@@ -1016,3 +1016,29 @@ composition with the crossbar (the DIT core emits natural order, so
 the SSR corner order flips to native->bitrev-in / natural-out... i.e.
 the SSR IFFT keeps bitrev spectrum in, natural samples out with NO
 input reorder).
+
+## r23 DIT RTL: fft_stage_r23_dit.v BIT-EXACT (S8 session 2)
+
+rtl/fft_stage_r23_dit.v -- the r22-DIT-style bring-up design (async
+distributed ROM/lines/queues, combinational product + combine, ONE
+output register). Bit-exact vs golden._R23DITStage on the DIF->DIT
+round-trip stream, delta 0, for (N,m) = 1024/0, 4096/0, 4096/1,
+8192/1, 32768/2, 65536/3 (spikes/S7_r23/rtl_dit/bringup_dit.py).
+
+Key RTL facts:
+  - ROM layout (window-ordered, 7G words/triple): word
+    ROM_BASE + (w-1)*G + g = T[bitrev3(w)*g*8^m], w = 1..7. The tb
+    sigmas are (1,1,1) so S = TD+3 matches the golden's shift_extra=3
+    round-trip calibration.
+  - Line/queue addresses are FREE-RUNNING per-depth counters (clock
+    count mod m*G), NOT k mod depth: depths 3G/5G/6G/7G do not divide
+    the 8G k period, so k-based slots diverge across periods. The
+    golden was changed to index by its call count the same way (self.pc).
+  - Pointers reset to 0 and stay aligned by construction (independent
+    of K_PRELOAD -- the scan only tunes the k window phase).
+Bugs hit: out_im wired to w0_q (real part twice); g_p declared 8 bits
+(g >= 256 wrapped the twiddle address at G=512); SV size casts.
+
+Next: fft_sdf_r23_dit.v wrapper (r2 DIT leftovers via fft_sdf.v
+TOPOLOGY=1 + the triples, K_PRELOAD H-scan per stage), chain bringup
+vs R23SDFGoldenModelDit, then SSR R=2 composition + export_core.
