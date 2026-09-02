@@ -47,7 +47,7 @@ from typing import List, Optional, Sequence, Tuple
 import math
 
 from config import FFTConfig, SSR_CORNER_ORDERS
-from golden import SDFGoldenModel, R22SDFGoldenModel, ReorderModel, _bitrev
+from golden import SDFGoldenModel, R22SDFGoldenModel, R23ChainGoldenModel, ReorderModel, _bitrev
 from twiddles import canonical_twiddles
 from quant import round_shift, quantize_output
 
@@ -75,7 +75,14 @@ class _SSRLane:
         # pipeline than the golden stage); None for plain radix-2
         self._extra_q: Optional[deque] = None
         self._extra = 0
-        if arch == "r22":
+        if arch == "r23":
+            self.core = R23ChainGoldenModel(core_cfg)
+            # the chain model is already RTL-cycle-aligned (its delta
+            # delay folds the RTL pipeline depth; valid starts at
+            # transform(0) like the RTL's tuser-checked mvalid)
+            self._extra = 0
+            self._extra_q = None
+        elif arch == "r22":
             self.core = R22SDFGoldenModel(core_cfg)
             # RTL r22 core latency (verified, rtl/fft_sdf_r22.v):
             #   sum(3*D + 9) per pair + 11 (odd-n leftover, D + NLAYERS)
@@ -100,11 +107,15 @@ class _SSRLane:
         ring = m_cfg.num_points if reorder_out else 0
         if arch == "r22":
             self.latency = self.core.latency + ring + max(0, self._extra)
+        elif arch == "r23":
+            self.latency = self.core.latency
         else:
             self.latency = self.core.latency + ring
 
     def tick(self, enabled: bool, re: int, im: int, u: int, l: int):
         v1, re, im, uu, ll = self.core.tick(enabled, re, im, u, l)
+        if self.arch == "r23":
+            return v1, re, im, uu, ll
         if self.arch == "r22" and self._extra > 0:
             # delay core valid+data to match RTL pipeline (3D+9 vs 3D+1)
             assert self._extra_q is not None
@@ -140,7 +151,7 @@ class SSRGoldenModel:
                     f"{sorted(SSR_CORNER_ORDERS)}; got ssr={cfg.ssr} "
                     f"{cfg.input_order} -> {cfg.output_order} "
                     f"inverse={cfg.inverse} arch={arch!r}")
-        if arch not in ("r2", "r22"):
+        if arch not in ("r2", "r22", "r23"):
             raise ValueError(f"arch must be 'r2' or 'r22', got {arch!r}")
         R = cfg.ssr
         M = cfg.num_points // R
@@ -189,7 +200,9 @@ class SSRGoldenModel:
             ln.core.reset()
             if ln.reorder is not None:
                 ln.reorder.reset()
-            if ln.arch == "r22" and ln._extra > 0:
+            if ln.arch == "r23":
+                ln._extra_q = None
+            elif ln.arch == "r22" and ln._extra > 0:
                 ln._extra_q = deque()
                 for _ in range(ln._extra):
                     ln._extra_q.append((False, 0, 0, 0, 0))
@@ -219,7 +232,7 @@ class SSRGoldenModel:
         # lanes: the r22 model lane carries the RTL's extra pipeline
         # depth in _extra; the crossbar phase convention (p counts from
         # the first lane-valid word) then lags the data by one word
-        p_off = 1 if self.arch == "r22" else 0
+        p_off = 1 if self.arch in ("r22", "r23") else 0
         p_seq = (self._cycles - self.lanes[0].latency - p_off) % M
         # P8: with the lane reorders off the lanes present A_r[p] with p
         # already in bitrev_M order, so the SEQUENTIAL counter must be
@@ -415,7 +428,9 @@ class SSRCornerInverseModel:
             ln.core.reset()
             if ln.reorder is not None:
                 ln.reorder.reset()
-            if ln.arch == "r22" and ln._extra > 0:
+            if ln.arch == "r23":
+                ln._extra_q = None
+            elif ln.arch == "r22" and ln._extra > 0:
                 ln._extra_q = deque()
                 for _ in range(ln._extra):
                     ln._extra_q.append((False, 0, 0, 0, 0))

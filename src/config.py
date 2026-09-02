@@ -15,7 +15,7 @@ VALID_ORDERS = ("native", "bitreversed")
 #         stage pair; re-pins the golden rounding points vs "r2"
 #         (1-2 LSB, identical SQNR -- see spikes/S5_r22/notes.md).
 #         v1 scope: DIF, native->bitreversed, R=1 (the verified subset).
-VALID_STAGE_MODES = ("r2", "r22")
+VALID_STAGE_MODES = ("r2", "r22", "r23")
 
 # P8 -- SSR corner orders (doc/plan_p8_ssr_orders.md). The SSR crossbar
 # emits X[qM+p] block-contiguous, i.e. native, by construction; a bitrev_N
@@ -36,6 +36,15 @@ SSR_CORNER_ORDERS = {
     #                                   first + per-lane input reorder); the
     #                                   BOTH flat emission conventions: slot e
     #                                   carries index bitrev_N(e) in and x[e] out
+    ("r23", 2, "native", "bitreversed", False),   # S7: the r23 core emits
+    #                                   bit-reversed natively (DIF), so the
+    #                                   corner order needs NO lane reorder
+    #                                   buffers at R=2 (bitrev_2 identity);
+    #                                   rtl/fft_ssr_r23.v
+    ("r23", 2, "native", "bitreversed", True),    # S7 IFFT: the DIF lanes
+    #                                   keep the native->bitrev contract with
+    #                                   conjugated twiddles (no DIT mirror
+    #                                   needed, unlike r22i)
 }
 
 

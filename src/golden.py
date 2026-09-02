@@ -998,6 +998,134 @@ class R23SDFGoldenModel:
         return self.process_stream(samples)
 
 
+class R23ChainGoldenModel:
+    """Bit-exact streaming model of the SHIPPED r23 decomposition.
+
+    NTRIP r23 triples + NPAIRL r22 leftover pairs -- exactly what
+    rtl/fft_sdf_r23.v synthesizes (the r22-pair leftover rounding is
+    what the RTL implements; :class:`R23SDFGoldenModel` above models
+    the r2-leftover variant used by the S7 tolerance tests, whose
+    intermediate roundings differ from the r22-pair form).
+
+    tick() interface parity with R22SDFGoldenModel. The lane's valid
+    stream starts at transform(0) (matches the RTL: the wrapper's
+    tuser lands on the first mvalid word -- checked empirically,
+    spikes/S7_r23/rtl_bringup). Used as the SSR lane engine
+    (golden_ssr._SSRLane arch="r23").
+    """
+
+    def __init__(self, cfg: FFTConfig):
+        if cfg.ssr != 1:
+            raise NotImplementedError("R23 chain model supports ssr=1 only")
+        if cfg.is_dit or cfg.input_order != "native" \
+                or cfg.output_order != "bitreversed":
+            raise NotImplementedError(
+                "R23 chain model covers native->bitreversed only")
+        self.cfg = cfg
+        N = cfg.num_points
+        self.N = N
+        n = cfg.num_stages
+        td = cfg.twiddle_decimal
+        tw = canonical_twiddles(N, cfg.twiddle_width, td, cfg.inverse)
+        # NTRIP/NPAIRL exactly as rtl/fft_sdf_r23.v derives them
+        ntrip = 0
+        for t in (3, 2, 1):
+            if n >= 3 * t and (n - 3 * t) % 2 == 0 and (N >> (3 * t)) >= 8:
+                ntrip = t
+                break
+        if ntrip == 0:
+            raise NotImplementedError(
+                f"N={N}: no valid r23 triple count (NSTAGES={n})")
+        npairl = (n - 3 * ntrip) // 2
+        self.ntrip, self.npairl = ntrip, npairl
+        self.stages = []
+        for m in range(ntrip):
+            self.stages.append(_R23DIFStage(
+                m, N, cfg.shifts[3 * m], cfg.shifts[3 * m + 1],
+                cfg.shifts[3 * m + 2], td, tw, cfg.inverse))
+        # r22 leftover pairs (D_jj = N >> (3*NTRIP+2jj+2), stride
+        # 1 << (3*NTRIP+2jj)) -- the bringup_core patching
+        self.los = []
+        for jj in range(npairl):
+            D = N >> (3 * ntrip + 2 * jj + 2)
+            lp = _R22DIFStage(4, N, cfg.shifts[3 * ntrip + 2 * jj],
+                              cfg.shifts[3 * ntrip + 2 * jj + 1],
+                              td, tw, cfg.inverse)
+            lp.D, lp.base = D, 1 << (3 * ntrip + 2 * jj)
+            lp.ram = [(0, 0)] * (2 * D)
+            lp.sram = [(0, 0)] * D
+            lp.dram = [(0, 0)] * D
+            lp.dline = [(0, 0)] * D
+            lp.pfifo = [(0, 0)] * (2 * D)
+            self.los.append(lp)
+        # latencies (bringup_core conventions)
+        self.lo_offs = []
+        acc = sum(st.latency for st in self.stages)   # sum(7g+2)
+        self.gold_lat = acc
+        for lp in self.los:
+            self.lo_offs.append(acc)
+            acc += 3 * lp.D + 1
+        self.gold_lat = acc                            # sum(3D+1) added
+        self.rtl_lat = sum(7 * (N >> (3 * m + 3)) + 12
+                           for m in range(ntrip)) \
+            + sum(3 * (N >> (3 * ntrip + 2 * jj + 2)) + 9
+                  for jj in range(npairl)) + 1
+        # the lane output stream = the chain stream delayed by delta
+        # (= rtl_lat - gold_lat): chain_out[pos] = transform(pos - gold_lat),
+        # the RTL emits transform(pos') at output tick pos' + rtl_lat.
+        # The chain values pass through INTERN_WIDTH-wide registers in
+        # the RTL -- wrap to the same width (spectral peaks can exceed
+        # 16 bits; the R=1 bringup's & 0xFFFF comparison masked this).
+        self.intern_width = getattr(cfg, "intern_width", 16) or 16
+        self.delta = self.rtl_lat - self.gold_lat
+        self.latency = self.rtl_lat
+        self._outq = deque()      # (value, pos)
+        self._mkq = deque()       # markers, rtl_lat deep
+        self._cycles = 0
+
+    def reset(self):
+        import copy
+        tw = canonical_twiddles(self.N, self.cfg.twiddle_width,
+                                self.cfg.twiddle_decimal, self.cfg.inverse)
+        self.stages = [copy.deepcopy(st) for st in self.stages]
+        self.los = [copy.deepcopy(lp) for lp in self.los]
+        self._outq = deque()
+        self._mkq = deque()
+        self._cycles = 0
+
+    def tick(self, enabled: bool, re: int = 0, im: int = 0,
+             tuser: int = 0, tlast: int = 0):
+        """One clock (interface parity with R22SDFGoldenModel). Returns
+        (valid, re, im, tuser, tlast); the valid stream starts at
+        transform(0)."""
+        if not enabled:
+            return False, 0, 0, 0, 0
+        pos = self._cycles
+        cur = (re, im)
+        up = 0
+        for st in self.stages:
+            cur = st.step(cur, pos - up)
+            up += st.latency
+        for jj, lp in enumerate(self.los):
+            cur = lp.step(cur, pos - self.lo_offs[jj])
+        self._cycles += 1
+        self._outq.append((cur, pos))
+        self._mkq.append((tuser, tlast))
+        # pop the entry leaving the delta delay line
+        v, vre, vim, pos0 = False, 0, 0, -1
+        if len(self._outq) > self.delta:
+            (vre, vim), pos0 = self._outq.popleft()
+            w = (1 << self.intern_width) - 1
+            vre &= w; vim &= w
+            if vre & (1 << (self.intern_width - 1)): vre -= 1 << self.intern_width
+            if vim & (1 << (self.intern_width - 1)): vim -= 1 << self.intern_width
+            v = pos0 >= self.gold_lat
+        u, l = (0, 0)
+        if len(self._mkq) > self.rtl_lat:
+            u, l = self._mkq.popleft()
+        return v, vre, vim, u, l
+
+
 # ----------------------------------------------------------------------
 # P7: cycle-accurate streaming DIT R2² model (mirror topology)
 # ----------------------------------------------------------------------

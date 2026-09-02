@@ -879,3 +879,42 @@ Net: ~59 BRAM36 freed at N=32768 for 64 URAM288 at SG2. The same
 treatment applies to the r2/r22 deep first-stage rings and the SSR
 reorder buffers (not yet wired). Bringup re-verified bit-exact after
 the RTL edits.
+
+## SSR R=2 (fft_ssr_r23) -- bit-exact vs SSRGoldenModel(arch="r23")
+
+Architecture: 2 lanes x M-point fft_sdf_r23 + fft_cross(EMIT_BREV=1).
+The r23 core natively emits bit-reversed (DIF), so the SSR runs the P8
+corner order (native -> bitreversed) with NO lane reorder buffers --
+cheaper than the r22 SSR (which needs them for native->native) and
+identical to the r22b corner at zero extra cost.
+
+TWO real bugs found and fixed on the way:
+1. fft_sdf_r23's mvalid/marker taps were one clock early relative to
+   the data -- and, worse, the TRUE data latency = LATENCY + (NTRIP-1):
+   every CHAINED r23 triple (m >= 1) costs one clock more than its
+   7G+12 stage sum (measured via the H-scan alignment on all 7 verified
+   configs: the delta = NTRIP-1 exactly). The wrapper now computes
+   DLY = LATENCY + (NTRIP-1) and taps mvalid/mk_user/mk_last at DLY.
+   Before the fix the SSR crossbar's bin counter counted a leading
+   fill word and every bin shifted by one.
+2. The SSR lane ROMs must be baked from the M-POINT twiddle table
+   (the lanes are M-point cores; using the N-point table halves the
+   rotation rate = W_M vs W_N). The crossbar WN ROM correctly stays on
+   the N-point table (W_N^{r*p}).
+
+golden_ssr.py: _SSRLane arch="r23" (lane = R23ChainGoldenModel, the
+bit-exact shipped-decomposition chain added to golden.py -- the r22-
+pair leftover rounding is what the RTL implements); SSRGoldenModel
+p_off=1 for r23; config.py: VALID_STAGE_MODES += r23, SSR_CORNER_ORDERS
++= (r23, 2, native, bitreversed, {False, True}) -- the IFFT keeps the
+SAME contract with conjugated twiddles (no DIT mirror needed, unlike
+r22i).
+
+Verified (bringup_ssr23.py, frame-aligned vs the golden, SSR tolerance
+R/2+1 -- measured worst delta = 1 LSB everywhere):
+  N=1024/2048/4096/8192/16384 x {INV=0, INV=1} = 10/10 MATCH
+  (N=512 R=2 needs the M=256 lane = the unsupported small-G size;
+   N=32768 R=2 running)
+The lane models validated against float M-point DFTs (0 bad bins at
+M=512 and M=1024) and the r23 SSR golden against the verified r22 SSR
+golden (<= 2 LSB over all 2048 bins, same input).

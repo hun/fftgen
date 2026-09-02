@@ -185,7 +185,15 @@ module fft_sdf_r23 #(
 
     localparam integer CORE_LAT = trip_lat_total(NTRIP);
     localparam integer LATENCY = CORE_LAT + lpair_lat_total(NPAIRL) + 1;
-    localparam integer CNT_W   = $clog2(LATENCY + 1);
+    // The measured data latency is LATENCY + (NTRIP-1): every CHAINED
+    // r23 triple (m >= 1) costs one clock more than its 7G+12 stage
+    // sum (measured via the H-scan data alignment on all verified
+    // configs: d(LATENCY) = 0/+1/0/+1/+2/+1/+2 = NTRIP-1 for
+    // N=512..32768). mvalid and the marker taps must use this, or the
+    // SSR crossbar's bin counter counts a leading fill word and every
+    // bin shifts by one.
+    localparam integer DLY = LATENCY + (NTRIP - 1);
+    localparam integer CNT_W   = $clog2(DLY + 2);
 
     wire run = ce && s_axis_tvalid;
 
@@ -196,27 +204,28 @@ module fft_sdf_r23 #(
             cnt <= {CNT_W{1'b0}};
             out_valid_r <= 1'b0;
         end else if (run) begin
-            if (cnt != LATENCY[CNT_W-1:0]) cnt <= cnt + 1'b1;
-            if (cnt == LATENCY[CNT_W-1:0] - 1'b1) out_valid_r <= 1'b1;
+            if (cnt != DLY[CNT_W-1:0]) cnt <= cnt + 1'b1;
+            // mvalid starts exactly at transform(0): see DLY above
+            if (cnt == DLY[CNT_W-1:0]) out_valid_r <= 1'b1;
         end
     end
     assign m_axis_tvalid = out_valid_r && run;
 
-    reg mk_user [0:LATENCY-1];
-    reg mk_last [0:LATENCY-1];
+    reg mk_user [0:DLY];
+    reg mk_last [0:DLY];
     integer k;
     always @(posedge clk) begin
         if (run) begin
             mk_user[0] <= s_axis_tuser;
             mk_last[0] <= s_axis_tlast;
-            for (k = 1; k < LATENCY; k = k + 1) begin
+            for (k = 1; k <= DLY; k = k + 1) begin
                 mk_user[k] <= mk_user[k-1];
                 mk_last[k] <= mk_last[k-1];
             end
         end
     end
-    assign m_axis_tuser = mk_user[LATENCY-1];
-    assign m_axis_tlast = mk_last[LATENCY-1];
+    assign m_axis_tuser = mk_user[DLY];
+    assign m_axis_tlast = mk_last[DLY];
 
     // ---------------- stage chain ----------------
     wire signed [INTERN_WIDTH-1:0] in_x_re, in_x_im;
