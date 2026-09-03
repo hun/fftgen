@@ -189,7 +189,7 @@ module fft_stage_r23_dit #(
     // every memory address in the stage derives from k
     reg [KW-1:0] k;
     wire [2:0]  w3 = k[GWL +: 3];                    // window index
-    wire [31:0] g_p = (GWL > 0) ? k[GWL-1:0] : 32'd0; // group phase (k mod G)
+    wire [31:0] g_p = k % G;                          // group phase (k mod G)
     wire phase7 = (w3 == 3'd7);
 
     // round-half-up arithmetic right shift (the golden's round_shift)
@@ -236,7 +236,7 @@ module fft_stage_r23_dit #(
     // ---------------- twiddle ROM (window-ordered slices) -------------
     localparam integer ROMW = (NPTS > 1) ? $clog2(NPTS) : 1;
     (* ram_style = "distributed" *)
-    reg signed [TW*2-1:0] tw_rom [0:7*G-1];
+    reg signed [TW*2-1:0] tw_rom [0:NPTS-1];   // shared file, ROM_BASE slice
     initial $readmemh(TWIDDLE_FILE, tw_rom);
     // addr = ROM_BASE + (w-1)*G + g for w >= 1 (w = 0 never multiplies;
     // its addr is clamped in-range and the result is unused)

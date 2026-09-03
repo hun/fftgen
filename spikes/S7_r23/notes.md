@@ -1042,3 +1042,29 @@ Bugs hit: out_im wired to w0_q (real part twice); g_p declared 8 bits
 Next: fft_sdf_r23_dit.v wrapper (r2 DIT leftovers via fft_sdf.v
 TOPOLOGY=1 + the triples, K_PRELOAD H-scan per stage), chain bringup
 vs R23SDFGoldenModelDit, then SSR R=2 composition + export_core.
+
+## fft_sdf_r23_dit.v wrapper: first bring-up (S8 session 2, partial)
+
+rtl/fft_sdf_r23_dit.v: r2 DIT leftovers (fft_sdf.v fft_stage TOPOLOGY=1)
++ the r23 DIT triples, shared twiddle file (leftover slices at
+2^s-1+j = T[j*N/2^(s+1)]; triples window-ordered at TBASE_j), the
+valid/marker sideband, KP auto = -up mod 8G with KP_T0/T1/T2 overrides.
+
+Status: N=2048 (R=2) PASS delta 0; N=1024 (R=1) PASS with KP_T0=+1
+(the auto KP is off by one -- the r2 DIT stage's effective latency looks
+like D+11, not D+10, OR the s'=0 handoff phase differs; unresolved);
+N=512 (R=0, the G=1-lead triple chain) FAILS at every KP_T0 -- the
+G=1 triple's alignment (or the LAT bookkeeping for G=1: KW=3, A1W=1)
+is the open bug.
+
+Fixes landed along the way: the stage ROM must be NPTS-sized (ROM_BASE
+offsets into the shared file); the twiddle file padded to NPTS words;
+SCALING_PACK = 01 per layer ((2^(2NS)-1)/3, NOT all-ones = 3/layer --
+that made QW < IW and X'd the outputs); PWP_PRE = WARM+2D (the RTL's
+pr_r = PWP_PRE - DEPTH underflows at WARM=0, D=1); the s'=1 leftover's
+PIPE_PRE/I/C/WPTR/PWP/RADDR preloads passed from the golden's post-warm
+state (R2B_* parameters; the internal WARM formula covers only the FSM
+phase). iverilog needs -s tb (the fft_sdf top must not elaborate).
+
+Next: fix the N=512 (G=1 triple) alignment; resolve the R=1 latency
+off-by-one; then SSR composition + export_core --stage-mode r23-dit.
