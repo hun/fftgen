@@ -35,10 +35,6 @@ module fft_sdf_r23_dit #(
     parameter integer INVERSE         = 1,
     parameter TWIDDLE_FILE            = "fft_tw_r23_dit.mem",
     parameter integer Q8              = 92682,
-    // per-triple K_PRELOAD override (-1 = auto); the bring-up scan
-    parameter integer KP_T0           = -1,
-    parameter integer KP_T1           = -1,
-    parameter integer KP_T2           = -1,
     // the second r2 leftover's (s'=1) post-warm state overrides: the
     // bring-up generator reads them from the golden's phase preload
     // (the internal WARM formula covers the FSM phase but not the
@@ -241,11 +237,7 @@ module fft_sdf_r23_dit #(
         // ---- r23 DIT triples, m descending (finest first) ----
         for (g = 0; g < MMAX; g = g + 1) begin : trips
             localparam integer GJ  = trip_G(g);
-            localparam integer KP  = (g == 0) ?
-                ((KP_T0 < 0) ? trip_kp(0, 0) : KP_T0) :
-                (g == 1) ?
-                ((KP_T1 < 0) ? trip_kp(1, 0) : KP_T1) :
-                ((KP_T2 < 0) ? trip_kp(2, 0) : KP_T2);
+            localparam integer KP  = trip_kp(g, 0);
             localparam [5:0] SH0 = (SCALING_PACK >> (2*(R+3*g))) & 3;
             localparam [5:0] SH1 = (SCALING_PACK >> (2*(R+3*g+1))) & 3;
             localparam [5:0] SH2 = (SCALING_PACK >> (2*(R+3*g+2))) & 3;

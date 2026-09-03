@@ -1068,3 +1068,23 @@ phase). iverilog needs -s tb (the fft_sdf top must not elaborate).
 
 Next: fix the N=512 (G=1 triple) alignment; resolve the R=1 latency
 off-by-one; then SSR composition + export_core --stage-mode r23-dit.
+
+## fft_sdf_r23_dit chain: BIT-EXACT for N=512..16384 (S8 session 3)
+
+All chains PASS delta 0 vs R23SDFGoldenModelDit with the AUTO K_PRELOAD
+(no trims): N=512 (R=0), 1024 (R=1), 2048 (R=2), 4096 (R=0, 4 triples),
+8192 (R=1), 16384 (R=2). 32768/65536 running in the background.
+
+The two "open items" were both bring-up-harness artifacts, not RTL bugs:
+  1. the compare window: the RTL's registered output sampled after the
+     edge at clock c = the value the golden COMPUTED at pos c = the
+     golden's RETURN at pos c+1 -- the frame-0 dump window is
+     [LAT-1, LAT-1+N), not [LAT, ...).
+  2. the wrapper's KP selection fell through for g >= 2 (all triples
+     beyond the third got trip_kp(2)) -- N=4096's 4th triple ran with
+     the wrong phase. Now KP = trip_kp(g, 0) for every g; the KP_T0/1/2
+     overrides are gone (the auto was always correct once the window
+     was right; the earlier "trims" were two bugs cancelling).
+Also: stage-by-stage compares must build explicit tuples (list != tuple
+is always True in Python -- the N=4096 stage-3 "pass" was vacuous until
+fixed, which is what exposed the real KP fallthrough).

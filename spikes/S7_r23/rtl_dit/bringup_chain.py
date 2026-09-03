@@ -111,7 +111,6 @@ module tb;
         .TWIDDLE_WIDTH({TW}), .TWIDDLE_DECIMAL({TD}),
         .SCALING_PACK(64'h{((1 << (2 * NS)) - 1) // 3:x}),
         .INVERSE(1), .TWIDDLE_FILE("{twf}"), .Q8({q8_of(TD)}),
-        .KP_T0({kp0}), .KP_T1({kp1}), .KP_T2({kp2}),
         .R2B_I(16'h{r2b['i']:x}), .R2B_C(1'h{r2b['c']}),
         .R2B_WPTR(16'h{r2b['wptr']:x}), .R2B_PWP(16'h{r2b['pwp']:x}),
         .R2B_RADDR(16'h{r2b['raddr']:x}), .R2B_PIPE(9'h{r2b['pipe']:x})
@@ -130,7 +129,7 @@ module tb;
         for (c = 0; c < TOTAL + LAT + 4; c = c + 1) begin
             @(posedge clk);
             #1;
-            if (c >= LAT)
+            if (c >= LAT - 1)
                 $fwrite(fd, "%h %h\\n", ore, oim);
             @(negedge clk);
         end
